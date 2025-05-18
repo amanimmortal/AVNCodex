@@ -56,35 +56,25 @@ logger = setup_logging()
 
 # --- Database Functions ---
 def initialize_database(db_path):
-    """Initializes the SQLite database and creates tables if they don't exist."""
+    """Initializes the SQLite database and creates the 'games' table if it doesn't exist."""
+    # Ensure db directory exists
     db_dir = os.path.dirname(db_path)
-    if db_dir and not os.path.exists(db_dir):
+    if db_dir and not os.path.exists(db_dir): # Check if db_dir is not empty (for relative paths in root)
         try:
             os.makedirs(db_dir, exist_ok=True)
+            # Logger might not be fully set up if this is called before setup_logging
+            # or if setup_logging itself had issues. Print for robustness.
             print(f"Database directory created: {db_dir}") 
         except OSError as e:
             print(f"Critical error: Could not create database directory {db_dir}. Error: {e}")
-            return
+            # If the directory cannot be created, connecting to the DB will likely fail or use a wrong path.
+            # Consider raising an exception or exiting if this is a hard requirement.
+            return # Stop further processing in this function if dir creation fails
     
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-
-        # Enable Foreign Key support if not enabled by default (good practice for SQLite)
-        cursor.execute("PRAGMA foreign_keys = ON;")
-
-        # Create users table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                is_admin BOOLEAN DEFAULT 0, -- SQLite uses 0 for FALSE, 1 for TRUE
-                created_at TEXT NOT NULL
-            )
-        """)
-
         # Update games table schema
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS games (
@@ -270,18 +260,35 @@ def get_setting(db_path: str, key: str, default_value: str = None) -> str:
         if conn:
             conn.close()
 
-def set_setting(db_path: str, key: str, value: str) -> bool:
-    """Saves or updates a setting in the app_settings table."""
+def set_setting(db_path: str, key: str, value: str, user_id: Optional[int] = None) -> bool:
+    """
+    Saves or updates a setting for a specific user.
+    If user_id is None, it attempts to save a global setting (owned by primary admin).
+    """
+    target_user_id = user_id
+    if user_id is None: # Indicates a request for a global setting
+        if key == 'update_schedule_hours_global': # Only certain keys are treated as global
+            target_user_id = get_primary_admin_user_id(db_path)
+        else:
+            logger.error(f"set_setting called with user_id=None for non-global key '{key}'. Operation aborted.")
+            return False
+
+
+    if target_user_id is None:
+        logger.error(f"Cannot determine target user ID for setting '{key}'. Operation aborted.")
+        return False
+
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO app_settings (setting_key, setting_value) VALUES (?, ?)", (key, value))
+        cursor.execute("INSERT OR REPLACE INTO app_settings (user_id, setting_key, setting_value) VALUES (?, ?, ?)", 
+                       (target_user_id, key, value))
         conn.commit()
-        logger.info(f"Setting '{key}' saved with value: '{value}'")
+        logger.info(f"Setting '{key}' for user {target_user_id} saved with value: '{value}'")
         return True
     except sqlite3.Error as e:
-        logger.error(f"Database error setting '{key}' to '{value}': {e}")
+        logger.error(f"Database error setting '{key}' for user {target_user_id} to '{value}': {e}")
         return False
     finally:
         if conn:

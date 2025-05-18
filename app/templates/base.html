@@ -9,9 +9,15 @@
 <body>
     <div class="top-bar">
         <a href="{{ url_for('index') }}">AVN Codex</a>
-        <a href="{{ url_for('search') }}">Search</a>
-        <a href="{{ url_for('settings_route') }}">Settings</a>
-        {# Add other global navigation links here if needed #}
+        <a href="{{ url_for('search') }}">Search Games</a>
+        {% if g.user %}
+            <span>Logged in as: {{ g.user.username }}</span>
+            <a href="{{ url_for('settings_route') }}">Settings</a>
+            <a href="{{ url_for('logout_route') }}">Logout</a>
+        {% else %}
+            <a href="{{ url_for('login_route') }}">Login</a>
+            <a href="{{ url_for('register_route') }}">Register</a>
+        {% endif %}
     </div>
 
     <div class="container-fluid">
@@ -27,7 +33,10 @@
                 <ul>
                     <li><a href="{{ url_for('index') }}">My Monitored Games</a></li>
                     <li><a href="{{ url_for('search') }}">Search & Add New Game</a></li>
+                    {% if g.user %}
                     <li><a href="{{ url_for('settings_route') }}">Settings</a></li>
+                    {% endif %}
+                    {# User management link for admin could go here later #}
                 </ul>
                 {# Further sidebar content like filters can be added here or in child templates #}
             {% endblock %}
@@ -36,5 +45,6 @@
 
     {# Global scripts can go here if needed #}
     {% block page_scripts %}{% endblock %}
+    {% block scripts %}{% endblock %} {# Ensure this block exists if child templates like index.html use it #}
 </body>
 </html> 
