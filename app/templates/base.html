@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AVN Codex{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="top-bar">
+        <a href="{{ url_for('index') }}">AVN Codex</a>
+        <a href="{{ url_for('search') }}">Search</a>
+        <a href="{{ url_for('settings_route') }}">Settings</a>
+        {# Add other global navigation links here if needed #}
+    </div>
+
+    <div class="container-fluid">
+        <div class="main-content">
+            {% block main_content %}
+            {# Content from child templates will go here #}
+            {% endblock %}
+        </div>
+        
+        <aside class="sidebar">
+            {% block sidebar %}
+                <h3>Menu</h3>
+                <ul>
+                    <li><a href="{{ url_for('index') }}">My Monitored Games</a></li>
+                    <li><a href="{{ url_for('search') }}">Search & Add New Game</a></li>
+                    <li><a href="{{ url_for('settings_route') }}">Settings</a></li>
+                </ul>
+                {# Further sidebar content like filters can be added here or in child templates #}
+            {% endblock %}
+        </aside>
+    </div>
+
+    {# Global scripts can go here if needed #}
+    {% block page_scripts %}{% endblock %}
+</body>
+</html> 

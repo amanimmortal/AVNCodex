@@ -1,0 +1,357 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    background-color: #1e1e1e; /* Dark background */
+    color: #d4d4d4; /* Light text */
+}
+
+.top-bar {
+    background-color: #c51a4a; /* F95Zone red-pink */
+    padding: 10px 20px;
+    color: white;
+    font-size: 1.2em;
+    font-weight: bold;
+}
+
+.top-bar a {
+    color: white;
+    text-decoration: none;
+    margin-right: 15px;
+}
+
+.container-fluid {
+    display: flex;
+    padding: 15px;
+    max-width: 1400px; /* Standard max-width, can be adjusted */
+    margin: 0 auto; /* Centers the container */
+}
+
+.main-content {
+    flex: 3; /* Takes up more space */
+    padding-right: 15px;
+}
+
+.sidebar {
+    flex: 1; /* Takes up less space */
+    background-color: #252526; /* Slightly lighter dark for sidebar */
+    padding: 15px;
+    border-radius: 4px;
+    height: fit-content; /* So it doesn't stretch full page if content is short */
+    margin-top: 50px; /* Approximate push down - adjust as needed. Corresponds to h2 + some margin */
+}
+
+.sidebar h3, .sidebar h4 { /* Apply to h4 as well for Filters & Sort */
+    color: #d4d4d4;
+    border-bottom: 1px solid #444;
+    padding-bottom: 8px;
+    margin-top: 0;
+}
+
+.sidebar ul {
+    list-style: none;
+    padding: 0;
+}
+
+.sidebar ul li a {
+    color: #cccccc;
+    text-decoration: none;
+    display: block;
+    padding: 8px 0;
+}
+
+.sidebar ul li a:hover {
+    color: #ffffff;
+}
+
+/* Filter form alignment */
+#filter-sort-form .mb-3 {
+    display: flex;
+    align-items: center; /* Vertically align label and input */
+    margin-bottom: 0.75rem; /* Keep some bottom margin */
+}
+
+#filter-sort-form .form-label {
+    flex-basis: 100px; /* Give labels a fixed basis width */
+    flex-shrink: 0; /* Prevent labels from shrinking */
+    margin-bottom: 0; /* Remove default bootstrap margin if any */
+    margin-right: 10px; /* Space between label and input */
+    text-align: left; /* Ensure labels are left-aligned if they weren't */
+}
+
+#filter-sort-form .form-control,
+#filter-sort-form .form-select {
+    flex-grow: 1; /* Allow input/select to take remaining space */
+}
+
+.card {
+    background-color: #2a2a2e; /* Darker card background */
+    border: 1px solid #333333;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    /* padding: 15px; -- Padding will be handled by inner elements or card-body-content */
+    display: flex; /* Still flex, but for banner + body */
+    flex-direction: column;
+}
+
+.card-banner-area {
+    width: 100%;
+    margin-bottom: 10px; /* Space between banner and details */
+}
+
+.card-image-banner {
+    width: 100%;
+    height: auto; /* Maintain aspect ratio */
+    max-height: 120px; /* Adjusted max-height, can be tuned. 113px is specific but this gives some flexibility */
+    object-fit: cover; /* Cover the area, might crop if aspect ratio of image is very different */
+    border-radius: 3px 3px 0 0; /* Round top corners if card has rounded corners */
+    display: block; /* Remove extra space below image */
+}
+
+.card-image-banner-placeholder {
+    width: 100%;
+    height: 113px; /* Fixed height for placeholder, matching target */
+    background-color: #3a3a3e;
+    color: #777;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.9em;
+    border-radius: 3px 3px 0 0;
+    padding: 5px;
+    box-sizing: border-box;
+}
+
+.card-body-content {
+    padding: 0 15px 15px 15px; /* Add padding here that was removed from .card */
+}
+
+.card-details {
+    /* flex-grow: 1; -- No longer in a flex row with an image */
+    margin-bottom: 10px; /* Space before user content/actions */
+}
+
+.card-details h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.3em;
+}
+
+.card-details h3 a {
+    color: #5294e2; /* Link color similar to image */
+    text-decoration: none;
+}
+
+.card-details h3 a:hover {
+    text-decoration: underline;
+}
+
+.card-details p {
+    margin: 4px 0;
+    font-size: 0.9em;
+    color: #b0b0b0; /* Lighter gray for details */
+}
+
+.card-actions {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: row; /* Arrange items in a row */
+    align-items: center;  /* Vertically align items in the middle */
+    /* justify-content: flex-start; Default, items will be side-by-side from left */
+}
+
+/* Style for the forms within card-actions to ensure they don't cause wrapping issues */
+.card-actions form {
+    margin: 0;
+    padding: 0;
+    margin-left: 5px; /* Add a small gap between buttons */
+}
+
+.card-actions a.btn,
+.card-actions form button.btn {
+    white-space: nowrap; /* Prevent button text from wrapping */
+}
+
+.card-actions .delete-form {
+    margin-left: auto; /* Pushes this form to the far right */
+}
+
+.card-actions .form-group {
+    margin-bottom: 8px;
+    width: 100%;
+}
+
+.card-actions label {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 0.85em;
+}
+
+.card-actions textarea,
+.card-actions input[type="number"] {
+    width: 100%;
+    padding: 6px;
+    border-radius: 3px;
+    border: 1px solid #444;
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    box-sizing: border-box;
+}
+
+.card-actions input[type="number"] {
+    width: 70px; /* Smaller width for rating */
+}
+
+.btn {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.9em;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    color: white;
+}
+.btn-primary:hover { background-color: #0056b3; }
+
+.btn-success {
+    background-color: #28a745;
+    color: white;
+}
+.btn-success:hover { background-color: #1e7e34; }
+
+.btn-danger {
+    background-color: #dc3545; /* Standard Bootstrap danger red */
+    color: white;
+}
+.btn-danger:hover { background-color: #c82333; /* Darker red on hover */ }
+
+.add-button {
+    /* This class might be redundant if .btn and .btn-success are used */
+    /* For now, keep it if search.html specifically uses it */
+    padding: 8px 12px; 
+    background-color: #28a745; 
+    color: white; 
+    text-decoration: none; 
+    border-radius: 4px;
+    font-size: 0.9em;
+    align-self: center; /* From previous styles, adjust if needed for flex */
+    border: none;
+    cursor: pointer;
+}
+
+.search-form {
+    margin-bottom: 20px;
+    background-color: #252526;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.search-form input[type='text'] {
+    padding: 10px;
+    width: 300px;
+    border-radius: 4px;
+    border: 1px solid #444;
+    margin-right: 10px;
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+}
+
+.search-form button {
+    padding: 10px 15px;
+    background-color: #c51a4a; /* Theme color */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.flash-messages {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 15px;
+}
+.flash-messages li {
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    color: #fff;
+}
+.flash-messages .success { background-color: #28a745; }
+.flash-messages .error { background-color: #dc3545; }
+.flash-messages .warning { background-color: #ffc107; color: #333 }
+
+.notifications-section {
+    background-color: #2a2a2e;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    border: 1px solid #333;
+}
+.notifications-section h2 {
+    margin-top: 0;
+    color: #c51a4a;
+}
+.notification-item {
+    border-bottom: 1px solid #444;
+    padding: 10px 0;
+}
+.notification-item:last-child {
+    border-bottom: none;
+}
+
+.played-games-list h2 {
+    color: #d4d4d4;
+}
+
+/* Utility for small text/metadata */
+.text-muted {
+    color: #888 !important;
+    font-size: 0.85em;
+}
+
+.game-status-tag {
+    display: inline-block;
+    padding: 3px 7px;
+    font-size: 0.8em;
+    border-radius: 3px;
+    margin-left: 8px;
+    font-weight: bold;
+}
+
+.status-completed {
+    background-color: #4CAF50; /* Green */
+    color: white;
+}
+
+.status-ongoing {
+    background-color: #2196F3; /* Blue */
+    color: white;
+}
+
+.status-unknown {
+    background-color: #777;
+    color: white;
+}
+
+.status-on_hold {
+    background-color: #ff9800; /* Orange */
+    color: white;
+}
+
+.status-abandoned {
+    background-color: #f44336; /* Red */
+    color: white;
+}
+
+.edit-form-container {
+    background-color: #2a2a2e; /* Same as card background */
+    padding: 20px; /* A bit more padding */
+    border-radius: 4px;
+    border: 1px solid #333; /* Consistent border */
+    margin-bottom: 20px; /* Space below */
+} 

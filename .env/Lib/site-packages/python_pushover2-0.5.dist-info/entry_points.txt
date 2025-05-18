@@ -1,0 +1,3 @@
+[console_scripts]
+pushover = cli:main
+
