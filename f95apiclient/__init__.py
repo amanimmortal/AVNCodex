@@ -499,20 +499,28 @@ class F95ApiClient:
                 self.logger.debug(f"RSS title parsed: Name='{game_data.get('name', 'N/A')}', Version='{game_data.get('version', 'N/A')}' from '{title}'")
 
                 game_data['url'] = item.get("link")
-                game_data['author'] = item.get("author", "Unknown Author")
+                author_raw = item.get("author", "N/A") # Get raw author, default to N/A
+                
+                # Clean the author string
+                author_cleaned = "N/A" # Default to N/A
+                if author_raw and author_raw != "N/A":
+                    # Use regex to remove <rss@f95> tag, ignoring case and allowing for surrounding whitespace
+                    author_cleaned = re.sub(r'\s*<rss@f95>\s*', '', author_raw, flags=re.IGNORECASE).strip()
+                
+                game_data['author'] = author_cleaned if author_cleaned else "N/A" # Ensure it's N/A if empty after strip
+                
                 # F95Zone RSS uses 'published' for the date
                 game_data['rss_pub_date'] = item.get("published") # Format: 'Sat, 18 May 2024 10:00:00 GMT'
 
-                # Extract image URL from description HTML
-                description_html = item.get("description", "")
-                img_match = re.search(r'<img[^>]+src="([^"]+)"', description_html)
-                if img_match:
-                    game_data['image_url'] = img_match.group(1)
-                    self.logger.debug(f"Image URL extracted from description: {game_data['image_url']}")
-                else:
-                    game_data['image_url'] = None
-                    self.logger.debug("No image URL found in description.")
+                # Extract image URL from description HTML using regex
+                image_url_rss = None
+                if item.get("description", ""):
+                    img_match = re.search(r'<img[^>]+src="([^"]+)"', item.get("description", ""))
+                    if img_match:
+                        image_url_rss = img_match.group(1)
                 
+                game_data['image_url_rss'] = image_url_rss # Can be None
+
                 # Ensure essential fields are present
                 if game_data.get('name') and game_data.get('url'):
                     parsed_items_data.append(game_data)
