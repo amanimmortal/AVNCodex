@@ -56,25 +56,35 @@ logger = setup_logging()
 
 # --- Database Functions ---
 def initialize_database(db_path):
-    """Initializes the SQLite database and creates the 'games' table if it doesn't exist."""
-    # Ensure db directory exists
+    """Initializes the SQLite database and creates tables if they don't exist."""
     db_dir = os.path.dirname(db_path)
-    if db_dir and not os.path.exists(db_dir): # Check if db_dir is not empty (for relative paths in root)
+    if db_dir and not os.path.exists(db_dir):
         try:
             os.makedirs(db_dir, exist_ok=True)
-            # Logger might not be fully set up if this is called before setup_logging
-            # or if setup_logging itself had issues. Print for robustness.
             print(f"Database directory created: {db_dir}") 
         except OSError as e:
             print(f"Critical error: Could not create database directory {db_dir}. Error: {e}")
-            # If the directory cannot be created, connecting to the DB will likely fail or use a wrong path.
-            # Consider raising an exception or exiting if this is a hard requirement.
-            return # Stop further processing in this function if dir creation fails
+            return
     
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
+
+        # Enable Foreign Key support if not enabled by default (good practice for SQLite)
+        cursor.execute("PRAGMA foreign_keys = ON;")
+
+        # Create users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                is_admin BOOLEAN DEFAULT 0, -- SQLite uses 0 for FALSE, 1 for TRUE
+                created_at TEXT NOT NULL
+            )
+        """)
+
         # Update games table schema
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS games (
@@ -772,9 +782,10 @@ def delete_game_from_my_list(db_path: str, played_game_id: int) -> tuple[bool, s
 
 def mark_game_as_acknowledged(db_path: str, played_game_id: int) -> tuple[bool, str, Optional[dict]]:
     """
-    Updates the user_acknowledged_version, _rss_pub_date, and _completion_status
-    for a game in the user's played list to match the current state in the 'games' table.
-    Returns success status, message, and a dict of the acknowledged (current) game details on success.
+    Marks a game associated with a user_played_games entry as acknowledged by the user.
+    Updates the user_acknowledged_version, _rss_pub_date, and _completed_status
+    in the user_played_games table to the current values from the games table for that game.
+    This is used to hide update indicators in the UI until a new update arrives.
     """
     logger.info(f"Attempting to mark updates as acknowledged for played game ID: {played_game_id}.")
     conn = None
@@ -805,7 +816,7 @@ def mark_game_as_acknowledged(db_path: str, played_game_id: int) -> tuple[bool, 
             UPDATE user_played_games
             SET user_acknowledged_version = ?,
                 user_acknowledged_rss_pub_date = ?,
-                user_acknowledged_completion_status = ?
+                user_acknowledged_completed_status = ?
             WHERE id = ?
         """, (current_version, current_rss_pub_date, current_completed_status, played_game_id))
         
@@ -941,7 +952,7 @@ def check_for_my_updates(db_path: str) -> list[dict]:
                 g.completed_status AS current_completed_status,
                 upg.last_notified_version,
                 upg.last_notified_rss_pub_date,
-                upg.last_notified_completion_status
+                upg.last_notified_completed_status
             FROM user_played_games upg
             JOIN games g ON upg.game_id = g.id
             WHERE upg.notify_for_updates = TRUE
@@ -976,17 +987,17 @@ def check_for_my_updates(db_path: str) -> list[dict]:
 
             # Check for completion status change to COMPLETED
             # Only notify if previous status was known (not None/empty) and was not 'COMPLETED' already
-            if (game['last_notified_completion_status'] is not None and
-                game['last_notified_completion_status'] != '' and
+            if (game['last_notified_completed_status'] is not None and
+                game['last_notified_completed_status'] != '' and
                 game['current_completed_status'] == 'COMPLETED' and
-                game['last_notified_completion_status'] != 'COMPLETED'):
+                game['last_notified_completed_status'] != 'COMPLETED'):
                 notification_reasons.append("Game has been marked as COMPLETED!")
                 is_newly_completed = True
             
             # Future: Check for other status changes (ON_HOLD, ABANDONED)
-            # elif game['current_completed_status'] == 'ON_HOLD' and game['last_notified_completion_status'] != 'ON_HOLD':
+            # elif game['current_completed_status'] == 'ON_HOLD' and game['last_notified_completed_status'] != 'ON_HOLD':
             #     notification_reasons.append("Game status changed to ON HOLD.")
-            # elif game['current_completed_status'] == 'ABANDONED' and game['last_notified_completion_status'] != 'ABANDONED':
+            # elif game['current_completed_status'] == 'ABANDONED' and game['last_notified_completed_status'] != 'ABANDONED':
             #     notification_reasons.append("Game status changed to ABANDONED.")
 
             if notification_reasons:
@@ -1001,7 +1012,7 @@ def check_for_my_updates(db_path: str) -> list[dict]:
                     # Fields needed to update the user_played_games table after notification
                     'new_notified_version': game['current_version'], 
                     'new_notified_rss_pub_date': game['current_rss_pub_date'],
-                    'new_notified_completion_status': game['current_completed_status']
+                    'new_notified_completed_status': game['current_completed_status']
                 })
         
         logger.info(f"Found {len(notifications)} potential notifications.")
@@ -1029,7 +1040,7 @@ def update_last_notified_status(db_path: str, played_game_id: int, version: str,
             UPDATE user_played_games 
             SET last_notified_version = ?, 
                 last_notified_rss_pub_date = ?, 
-                last_notified_completion_status = ?
+                last_notified_completed_status = ?
             WHERE id = ?
         """, (version, rss_pub_date, completed_status, played_game_id))
         conn.commit()
@@ -1137,7 +1148,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
     
     try:
         cursor.execute("""
-            SELECT g.id, g.name, g.version, g.rss_pub_date, g.completion_status, g.f95_url as url, upg.id as user_played_game_id
+            SELECT g.id, g.name, g.version, g.rss_pub_date, g.completed_status, g.f95_url as url, upg.id as user_played_game_id
             FROM games g
             JOIN user_played_games upg ON g.id = upg.game_id
             WHERE upg.id = ?
@@ -1152,7 +1163,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
         current_name = game_data['name']
         current_version = game_data['version']
         current_rss_pub_date_str = game_data['rss_pub_date']
-        current_status = game_data['completion_status']
+        current_status = game_data['completed_status']
         game_url = game_data['url']
         
         original_name_for_notification = current_name # Store before potential update
@@ -1301,7 +1312,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
         
         if new_status_determined and new_status_determined != original_status_for_notification: # Compare with original status
             try:
-                cursor.execute("UPDATE games SET completion_status = ?, last_updated_in_db = ?, last_seen_on_rss = ? WHERE id = ?", 
+                cursor.execute("UPDATE games SET completed_status = ?, last_updated_in_db = ?, last_seen_on_rss = ? WHERE id = ?", 
                                (new_status_determined, datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), game_id))
                 conn.commit()
                 logger.info(f"SCHEDULER/SYNC: Status for '{current_name}' (ID: {game_id}) changed from '{original_status_for_notification}' to '{new_status_determined}'.")
@@ -1446,7 +1457,7 @@ if __name__ == "__main__":
                                             notif['played_game_id'], 
                                             notif['new_notified_version'], 
                                             notif['new_notified_rss_pub_date'], 
-                                            notif['new_notified_completion_status'])
+                                            notif['new_notified_completed_status'])
             logger.info("--- FINISHED PROCESSING NOTIFICATIONS ---")
         else:
             logger.info("No new updates or notifications for your played games.")

@@ -159,6 +159,8 @@
 {{ super() }} {# Include scripts from base if any #}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const pushoverConfigMissing = {{ pushover_config_missing|tojson }};
+
         document.querySelectorAll('.sync-btn').forEach(button => {
             button.closest('form').addEventListener('submit', function() {
                 const btn = this.querySelector('.sync-btn');
@@ -167,6 +169,12 @@
                 btn.disabled = true;
             });
         });
+
+        if (pushoverConfigMissing) {
+            if (window.confirm("Pushover notification details are not configured. Would you like to go to the settings page to add them?")) {
+                window.location.href = "{{ url_for('settings_route') }}";
+            }
+        }
     });
 </script>
 {% endblock %} 

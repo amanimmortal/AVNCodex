@@ -515,11 +515,12 @@ class F95ApiClient:
                 # Extract image URL from description HTML using regex
                 image_url_rss = None
                 if item.get("description", ""):
-                    img_match = re.search(r'<img[^>]+src="([^"]+)"', item.get("description", ""))
+                    # More robust regex for src attribute, using hex escapes for quotes to avoid SyntaxError
+                    img_match = re.search(r'<img[^>]+src\s*=\s*[\x22\x27]([^\x22\x27]+)[\x22\x27]', item.get("description", ""), re.IGNORECASE)
                     if img_match:
                         image_url_rss = img_match.group(1)
                 
-                game_data['image_url_rss'] = image_url_rss # Can be None
+                game_data['image_url'] = image_url_rss # Changed key from image_url_rss to image_url
 
                 # Ensure essential fields are present
                 if game_data.get('name') and game_data.get('url'):

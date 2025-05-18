@@ -148,6 +148,11 @@ def index():
     )
     notifications = check_for_my_updates(DB_PATH) # This identifies notifications
 
+    # Check for Pushover configuration
+    pushover_user_key = get_setting(DB_PATH, 'pushover_user_key')
+    pushover_api_key = get_setting(DB_PATH, 'pushover_api_key')
+    pushover_config_missing = not (pushover_user_key and pushover_api_key)
+
     # For now, notifications will re-appear until we have a mechanism to "clear" them
     # and call update_last_notified_status.
     
@@ -165,7 +170,8 @@ def index():
     return render_template('index.html', 
                            played_games=played_games, 
                            notifications=notifications,
-                           current_filters=current_filters)
+                           current_filters=current_filters,
+                           pushover_config_missing=pushover_config_missing)
 
 # Placeholder for other routes to be added later:
 @flask_app.route('/search', methods=['GET', 'POST'])
