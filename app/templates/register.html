@@ -13,18 +13,18 @@
             </ul>
         {% endif %}
     {% endwith %}
-    <form method="POST" action="{{ url_for('register_route') }}">
-        <div class="mb-3">
-            <label for="username" class="form-label">Username</label>
-            <input type="text" id="username" name="username" class="form-control" required value="{{ request.form.username }}">
+    <form method="POST" action="{{ url_for('register_route') }}" class="styled-form">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required value="{{ request.form.username }}">
         </div>
-        <div class="mb-3">
-            <label for="password" class="form-label">Password</label>
-            <input type="password" id="password" name="password" class="form-control" required>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required>
         </div>
-        <div class="mb-3">
-            <label for="password_confirm" class="form-label">Confirm Password</label>
-            <input type="password" id="password_confirm" name="password_confirm" class="form-control" required>
+        <div class="form-group">
+            <label for="password_confirm">Confirm Password</label>
+            <input type="password" id="password_confirm" name="password_confirm" required>
         </div>
         <button type="submit" class="btn btn-primary">Register</button>
     </form>

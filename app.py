@@ -29,8 +29,11 @@ from app.main import (
     set_setting, # Added for settings page
     # We'll need more functions from app.main later:
     # search_games_for_user, 
+    get_primary_admin_user_id, # Added for fetching primary admin ID
+    get_all_users_details, # Added for admin user listing
     scheduled_games_update_check, # Import the new scheduled task function
     check_single_game_update_and_status, # Added for manual sync
+    get_user_played_game_urls, # Added for checking existing games in search
 )
 
 # APScheduler imports
@@ -128,17 +131,34 @@ def get_user_count():
         if conn:
             conn.close()
             
+def update_user_password(user_id, new_password_hash):
+    """Updates the user's password_hash in the database."""
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (new_password_hash, user_id)
+        )
+        conn.commit()
+        flask_app.logger.info(f"Password updated for user_id {user_id}.")
+        return True
+    except sqlite3.Error as e:
+        flask_app.logger.error(f"Database error updating password for user_id {user_id}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def create_initial_admin_user_if_none_exists():
     """Creates a default admin user if no users exist in the database."""
     if get_user_count() == 0:
         default_admin_username = "admin"
-        default_admin_password = "password" # CHANGE THIS IN PRODUCTION!
+        default_admin_password = "admin" # CHANGE THIS IN PRODUCTION!
         flask_app.logger.info("No users found in the database. Creating default admin user...")
         if create_user(default_admin_username, default_admin_password, is_admin=True):
             flask_app.logger.info(f"Default admin user '{default_admin_username}' created with password '{default_admin_password}'. PLEASE CHANGE THE PASSWORD IMMEDIATELY.")
         else:
             flask_app.logger.error("Failed to create default admin user.")
-
 
 # Decorator for routes that require login
 def login_required(f):
@@ -252,16 +272,25 @@ def start_or_reschedule_scheduler(app_instance):
     global scheduler 
     with app_instance.app_context():
         # Read the GLOBAL update schedule. Admins set this.
-        # We need a way to get global settings, perhaps user_id=None or a specific admin_user_id.
-        # For now, let's assume get_setting can fetch a global setting if user_id is not provided, 
-        # or we fetch it associated with the first admin user.
-        # The setting 'update_schedule_hours_global' is set by an admin in the settings_route.
-        current_schedule_hours_str = get_setting(DB_PATH, 'update_schedule_hours_global', default_value='24', user_id=None) 
+        # This setting is stored under the primary admin's user_id.
+        primary_admin_id = get_primary_admin_user_id(DB_PATH)
+        current_schedule_hours_str = '24' # Default if no admin or setting found
+
+        if primary_admin_id is not None:
+            schedule_val = get_setting(DB_PATH, 'update_schedule_hours_global', default_value='24', user_id=primary_admin_id)
+            if schedule_val is not None:
+                 current_schedule_hours_str = schedule_val
+        else:
+            flask_app.logger.warning("Scheduler: No primary admin found, using default schedule of 24 hours.")
         
         try:
-            update_hours = int(current_schedule_hours_str)
-            if update_hours <= 0: # -1 or 0 means manual, so don't schedule
-                flask_app.logger.info(f"Scheduler: Update interval is {update_hours} hours (Manual). Job will be removed if exists.")
+            update_value = int(current_schedule_hours_str) # Keep variable name generic, it might be hours or our special -5
+
+            if update_value == -5: # Special case for 5 minutes testing
+                flask_app.logger.info(f"Scheduler: Update interval is 5 minutes (Testing).")
+                trigger_args = {'minutes': 5}
+            elif update_value <= 0: # Manual or disabled (e.g. -1 or 0)
+                flask_app.logger.info(f"Scheduler: Update interval is {update_value} (Manual/Disabled). Job will be removed if exists.")
                 try:
                     if scheduler.get_job(scheduler_job_id):
                         scheduler.remove_job(scheduler_job_id)
@@ -269,10 +298,11 @@ def start_or_reschedule_scheduler(app_instance):
                 except JobLookupError:
                     flask_app.logger.info(f"Scheduler: Job '{scheduler_job_id}' not found, nothing to remove for manual schedule.")
                 if scheduler.running:
-                     # If scheduler is running but no jobs, it can be left running or paused/stopped.
-                     # For simplicity, leave it running; it won't consume resources without jobs.
-                     pass # flask_app.logger.info("Scheduler running but no jobs scheduled.")
-                return # Do not proceed to add or start if manual
+                    pass 
+                return # Do not proceed to add or start if manual/disabled
+            else: # Positive value, interpret as hours
+                flask_app.logger.info(f"Scheduler: Update interval is {update_value} hours.")
+                trigger_args = {'hours': update_value}
 
         except ValueError:
             flask_app.logger.error(f"Scheduler: Could not parse update_schedule_hours: '{current_schedule_hours_str}'. Scheduler not started/updated.")
@@ -292,17 +322,17 @@ def start_or_reschedule_scheduler(app_instance):
         try:
             existing_job = scheduler.get_job(scheduler_job_id)
             if existing_job:
-                scheduler.reschedule_job(scheduler_job_id, trigger=IntervalTrigger(hours=update_hours))
-                flask_app.logger.info(f"Scheduler: Rescheduled job '{scheduler_job_id}' to run every {update_hours} hours.")
+                scheduler.reschedule_job(scheduler_job_id, trigger=IntervalTrigger(**trigger_args))
+                flask_app.logger.info(f"Scheduler: Rescheduled job '{scheduler_job_id}' with new interval.")
             else:
                 scheduler.add_job(
                     func=run_scheduled_update_job,
-                    trigger=IntervalTrigger(hours=update_hours),
+                    trigger=IntervalTrigger(**trigger_args),
                     id=scheduler_job_id,
                     name='F95Zone Game Update Check',
                     replace_existing=True # Should be redundant if we check get_job first, but safe
                 )
-                flask_app.logger.info(f"Scheduler: Added job '{scheduler_job_id}' to run every {update_hours} hours.")
+                flask_app.logger.info(f"Scheduler: Added job '{scheduler_job_id}' with new interval.")
         except Exception as e:
             flask_app.logger.error(f"Scheduler: Error adding/rescheduling job '{scheduler_job_id}': {e}", exc_info=True)
 
@@ -324,16 +354,16 @@ def index():
 
     played_games = get_my_played_games(
         DB_PATH,
-        user_id=g.user.id, # Pass user_id
+        user_id=g.user['id'], # Pass user_id
         name_filter=name_filter,
         min_rating_filter=min_rating_filter,
         sort_by=sort_by,
         sort_order=sort_order
     )
-    notifications = check_for_my_updates(DB_PATH, user_id=g.user.id) # Pass user_id
+    notifications = check_for_my_updates(DB_PATH, user_id=g.user['id']) # Pass user_id
 
-    pushover_user_key = get_setting(DB_PATH, 'pushover_user_key', user_id=g.user.id) # Pass user_id
-    pushover_api_key = get_setting(DB_PATH, 'pushover_api_key', user_id=g.user.id) # Pass user_id
+    pushover_user_key = get_setting(DB_PATH, 'pushover_user_key', user_id=g.user['id']) # Pass user_id
+    pushover_api_key = get_setting(DB_PATH, 'pushover_api_key', user_id=g.user['id']) # Pass user_id
     pushover_config_missing = not (pushover_user_key and pushover_api_key)
 
     current_filters = {
@@ -359,15 +389,24 @@ def search():
     if request.method == 'POST':
         search_term = request.form.get('search_term', '').strip()
         search_attempted = True # A POST request means a search was attempted
+        
+        user_played_urls = set()
+        if g.user:
+            user_played_urls = get_user_played_game_urls(DB_PATH, g.user['id'])
+
         if search_term:
-            api_results = f95_client.get_latest_game_data_from_rss(search_term=search_term, limit=30)
+            api_results_raw = f95_client.get_latest_game_data_from_rss(search_term=search_term, limit=30)
             
-            if api_results is None: # This now signifies a complete failure in the client
+            if api_results_raw is None: # This now signifies a complete failure in the client
                 flash('Search failed: Could not retrieve data from F95Zone after multiple attempts. Proxies might be failing or the site is down. Please try again later.', 'error')
                 results = None # Explicitly set to None to indicate failure to the template
             else:
-                results = api_results # This could be an empty list (no results) or list of games
-                if not results: # Explicitly check if api_results was an empty list
+                results = []
+                for game_data in api_results_raw:
+                    game_data['is_already_in_list'] = game_data.get('url') in user_played_urls
+                    results.append(game_data)
+
+                if not results: # Explicitly check if api_results was an empty list after processing
                     flash('No games found matching your search criteria.', 'info') # Use info or warning
         else:
             flash('Please enter a search term.', 'warning')
@@ -407,7 +446,7 @@ def add_game_to_user_list():
 
             success, message = add_game_to_my_list(
                 db_path=DB_PATH, 
-                user_id=g.user.id, # Pass user_id
+                user_id=g.user['id'], # Pass user_id
                 client=f95_client, 
                 f95_url=f95_url,
                 name_override=game_name,
@@ -434,7 +473,7 @@ def add_game_to_user_list():
 @flask_app.route('/delete_game/<int:played_game_id>', methods=['POST'])
 @login_required
 def delete_game_route(played_game_id):
-    success, message = delete_game_from_my_list(DB_PATH, user_id=g.user.id, played_game_id=played_game_id) # Pass user_id
+    success, message = delete_game_from_my_list(DB_PATH, user_id=g.user['id'], played_game_id=played_game_id) # Pass user_id
     if success:
         flash(message, 'success')
     else:
@@ -444,12 +483,12 @@ def delete_game_route(played_game_id):
 @flask_app.route('/acknowledge_update/<int:played_game_id>', methods=['POST'])
 @login_required
 def acknowledge_update_route(played_game_id):
-    success, message, acknowledged_details = mark_game_as_acknowledged(DB_PATH, user_id=g.user.id, played_game_id=played_game_id) # Pass user_id
+    success, message, acknowledged_details = mark_game_as_acknowledged(DB_PATH, user_id=g.user['id'], played_game_id=played_game_id) # Pass user_id
     if success and acknowledged_details:
         flash(message, 'success')
         update_last_notified_status(
             db_path=DB_PATH,
-            user_id=g.user.id, # Pass user_id
+            user_id=g.user['id'], # Pass user_id
             played_game_id=played_game_id,
             version=acknowledged_details["version"],
             rss_pub_date=acknowledged_details["rss_pub_date"],
@@ -462,7 +501,7 @@ def acknowledge_update_route(played_game_id):
 @flask_app.route('/edit_details/<int:played_game_id>', methods=['GET', 'POST'])
 @login_required
 def edit_details_route(played_game_id):
-    game_details = get_my_played_game_details(DB_PATH, user_id=g.user.id, played_game_id=played_game_id) # Pass user_id
+    game_details = get_my_played_game_details(DB_PATH, user_id=g.user['id'], played_game_id=played_game_id) # Pass user_id
     if not game_details:
         flash('Game not found in your list.', 'error')
         return redirect(url_for('index'))
@@ -489,7 +528,7 @@ def edit_details_route(played_game_id):
 
         update_result = update_my_played_game_details(
             db_path=DB_PATH,
-            user_id=g.user.id, # Pass user_id
+            user_id=g.user['id'], # Pass user_id
             played_game_id=played_game_id,
             user_notes=user_notes,
             user_rating=user_rating,
@@ -507,10 +546,10 @@ def edit_details_route(played_game_id):
 @flask_app.route('/manual_sync/<int:played_game_id>', methods=['POST'])
 @login_required
 def manual_sync_route(played_game_id):
-    flask_app.logger.info(f"Manual sync requested by user {g.user.id} for played_game_id: {played_game_id}")
+    flask_app.logger.info(f"Manual sync requested by user {g.user['id']} for played_game_id: {played_game_id}")
     game_name_for_flash = "Selected Game"
     try:
-        game_details_before_sync = get_my_played_game_details(DB_PATH, user_id=g.user.id, played_game_id=played_game_id) # Pass user_id
+        game_details_before_sync = get_my_played_game_details(DB_PATH, user_id=g.user['id'], played_game_id=played_game_id) # Pass user_id
         if game_details_before_sync:
             game_name_for_flash = game_details_before_sync.get('name', game_name_for_flash)
 
@@ -518,11 +557,11 @@ def manual_sync_route(played_game_id):
         # However, its internal calls to get/set settings related to notifications might need user_id if those become user-specific settings.
         # For now, assuming it primarily updates game details and user_played_games based on played_game_id.
         # We will need to review check_single_game_update_and_status in app/main.py to ensure it correctly handles user context if it reads global settings for notifications.
-        check_single_game_update_and_status(DB_PATH, f95_client, played_game_row_id=played_game_id, user_id=g.user.id) # Pass user_id
+        check_single_game_update_and_status(DB_PATH, f95_client, played_game_row_id=played_game_id, user_id=g.user['id']) # Pass user_id
         
         flash(f"Manual sync initiated for '{game_name_for_flash}'. Check notifications for any updates.", 'success')
     except Exception as e:
-        flask_app.logger.error(f"Error during manual sync for user {g.user.id}, played_game_id {played_game_id}: {e}", exc_info=True)
+        flask_app.logger.error(f"Error during manual sync for user {g.user['id']}, played_game_id {played_game_id}: {e}", exc_info=True)
         flash(f"Manual sync failed for '{game_name_for_flash}'. Error: {str(e)[:100]}", 'error') 
     return redirect(url_for('index'))
 
@@ -530,40 +569,30 @@ def manual_sync_route(played_game_id):
 @login_required
 def settings_route():
     if request.method == 'POST':
+        # Handle global update schedule change (admin only)
         update_schedule_hours_str = request.form.get('update_schedule_hours')
         if update_schedule_hours_str is not None: 
-            try:
-                new_schedule_hours = int(update_schedule_hours_str)
-                # User-specific setting for update_schedule_hours
-                if set_setting(DB_PATH, 'update_schedule_hours', str(new_schedule_hours), user_id=g.user.id): # Pass user_id
-                    flask_app.logger.info(f"User {g.user.id} settings changed: Triggering scheduler update with new interval: {new_schedule_hours} hours.")
-                    # The scheduler itself is global, but its behavior (e.g., which users to check) will need to be user-aware.
-                    # start_or_reschedule_scheduler may need to be re-evaluated. For now, it reads a global setting.
-                    # For multi-user, the scheduler should iterate all users or be user-specific.
-                    # This particular setting (update_schedule_hours) might remain global or become a per-user override of a global default.
-                    # For now, assuming set_setting saves it per user, but start_or_reschedule_scheduler uses a global one.
-                    # This part needs further refinement for per-user scheduling preferences.
-                    # For now, let's assume update_schedule_hours is a global setting for the scheduler, not user-specific for scheduling trigger.
-                    # So, we might read the global one for start_or_reschedule_scheduler
-                    # OR only allow an admin to set this.
-                    # For now, an admin can set it, and it will affect all users.
-                    if g.user.is_admin:
-                         if set_setting(DB_PATH, 'update_schedule_hours_global', str(new_schedule_hours), user_id=g.user.id): # Save as a global setting, associated with admin for audit
-                            start_or_reschedule_scheduler(flask_app) # This function needs to read 'update_schedule_hours_global'
-                         else:
-                            flash('Failed to save global update schedule (admin only).', 'error')
+            flask_app.logger.info(f"User {g.user['username']} (ID: {g.user['id']}) attempting to set schedule. Admin status: {g.user['is_admin']} (Type: {type(g.user['is_admin'])})") # DEBUGGING
+            if g.user and g.user['is_admin']:
+                try:
+                    new_schedule_hours = int(update_schedule_hours_str)
+                    if set_setting(DB_PATH, 'update_schedule_hours_global', str(new_schedule_hours), user_id=g.user['id']):
+                        flask_app.logger.info(f"Admin user {g.user['id']} changed global update schedule to: {new_schedule_hours} hours.")
+                        start_or_reschedule_scheduler(flask_app) 
                     else:
-                        flash('Update schedule can only be set by an admin.', 'warning') # Non-admins cannot change global schedule
+                        flash('Failed to save global update schedule.', 'error')
+                except ValueError:
+                    flash('Invalid schedule value provided. Must be a number.', 'error')
+            else:
+                # Non-admin user attempted to change schedule, flash warning.
+                # Only flash if a value was actually submitted for this field.
+                flash('Update schedule can only be set by an admin.', 'warning')
 
-                else:
-                    flash('Failed to save update schedule setting for user.', 'error')
-            except ValueError:
-                flash('Invalid schedule value provided. Must be a number.', 'error')
-
+        # Handle user-specific settings (Pushover, notification toggles)
         pushover_user_key = request.form.get('pushover_user_key', '')
         pushover_api_key = request.form.get('pushover_api_key', '')
-        set_setting(DB_PATH, 'pushover_user_key', pushover_user_key, user_id=g.user.id) # Pass user_id
-        set_setting(DB_PATH, 'pushover_api_key', pushover_api_key, user_id=g.user.id) # Pass user_id
+        set_setting(DB_PATH, 'pushover_user_key', pushover_user_key, user_id=g.user['id']) # Pass user_id
+        set_setting(DB_PATH, 'pushover_api_key', pushover_api_key, user_id=g.user['id']) # Pass user_id
 
         notify_settings_keys = [
             'notify_on_game_add', 'notify_on_game_delete', 'notify_on_game_update',
@@ -572,27 +601,37 @@ def settings_route():
         ]
         for key in notify_settings_keys:
             value = request.form.get(key) == 'on'
-            set_setting(DB_PATH, key, str(value), user_id=g.user.id) # Pass user_id
+            set_setting(DB_PATH, key, str(value), user_id=g.user['id']) # Pass user_id
 
         flash('Settings saved successfully!', 'success') 
         return redirect(url_for('settings_route'))
 
     # GET request - Fetch all settings for the current user
     current_settings = {
-        # For update_schedule_hours, we show the user's preference if they are admin, or a global default
-        # This logic needs refinement. For now, show a user-specific value if it exists, or global.
-        'update_schedule_hours': get_setting(DB_PATH, 'update_schedule_hours_global', default_value='24', user_id=None), # Reading global, not specific user for display
-        'pushover_user_key': get_setting(DB_PATH, 'pushover_user_key', '', user_id=g.user.id),
-        'pushover_api_key': get_setting(DB_PATH, 'pushover_api_key', '', user_id=g.user.id),
-        'notify_on_game_add': get_setting(DB_PATH, 'notify_on_game_add', 'True', user_id=g.user.id) == 'True',
-        'notify_on_game_delete': get_setting(DB_PATH, 'notify_on_game_delete', 'True', user_id=g.user.id) == 'True',
-        'notify_on_game_update': get_setting(DB_PATH, 'notify_on_game_update', 'True', user_id=g.user.id) == 'True',
-        'notify_on_status_change_completed': get_setting(DB_PATH, 'notify_on_status_change_completed', 'True', user_id=g.user.id) == 'True',
-        'notify_on_status_change_abandoned': get_setting(DB_PATH, 'notify_on_status_change_abandoned', 'True', user_id=g.user.id) == 'True',
-        'notify_on_status_change_on_hold': get_setting(DB_PATH, 'notify_on_status_change_on_hold', 'True', user_id=g.user.id) == 'True'
+        # For update_schedule_hours, we show the global schedule value.
+        # Only admins can change it, but all users see the current effective schedule.
+        'update_schedule_hours': '24', # Default
+        'pushover_user_key': get_setting(DB_PATH, 'pushover_user_key', '', user_id=g.user['id']),
+        'pushover_api_key': get_setting(DB_PATH, 'pushover_api_key', '', user_id=g.user['id']),
+        'notify_on_game_add': get_setting(DB_PATH, 'notify_on_game_add', 'True', user_id=g.user['id']) == 'True',
+        'notify_on_game_delete': get_setting(DB_PATH, 'notify_on_game_delete', 'True', user_id=g.user['id']) == 'True',
+        'notify_on_game_update': get_setting(DB_PATH, 'notify_on_game_update', 'True', user_id=g.user['id']) == 'True',
+        'notify_on_status_change_completed': get_setting(DB_PATH, 'notify_on_status_change_completed', 'True', user_id=g.user['id']) == 'True',
+        'notify_on_status_change_abandoned': get_setting(DB_PATH, 'notify_on_status_change_abandoned', 'True', user_id=g.user['id']) == 'True',
+        'notify_on_status_change_on_hold': get_setting(DB_PATH, 'notify_on_status_change_on_hold', 'True', user_id=g.user['id']) == 'True'
     }
     
+    primary_admin_id_for_schedule = get_primary_admin_user_id(DB_PATH)
+    if primary_admin_id_for_schedule is not None:
+        global_schedule_val = get_setting(DB_PATH, 'update_schedule_hours_global', default_value='24', user_id=primary_admin_id_for_schedule)
+        if global_schedule_val is not None:
+            current_settings['update_schedule_hours'] = global_schedule_val
+    else:
+        # If no admin, implies fresh setup, keep default or log warning
+        flask_app.logger.warning("Settings page: No primary admin found for global schedule display, showing default.")
+
     schedule_options = [
+        {'value': '-5', 'label': 'Every 5 Minutes (Testing)'},
         {'value': '-1', 'label': 'Manual Only'}, 
         {'value': '1', 'label': 'Every Hour'},
         {'value': '3', 'label': 'Every 3 Hours'},
@@ -602,10 +641,57 @@ def settings_route():
         {'value': '48', 'label': 'Every 48 Hours'}
     ]
     # Only admin can see/edit schedule options for global scheduler
-    can_edit_schedule = g.user.is_admin 
+    can_edit_schedule = g.user['is_admin'] if g.user else False # Changed to dictionary access and added g.user check
 
     return render_template('settings.html', current_settings=current_settings, schedule_options=schedule_options, can_edit_schedule=can_edit_schedule)
 
+@flask_app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password_route():
+    if request.method == 'POST':
+        current_password = request.form['current_password']
+        new_password = request.form['new_password']
+        confirm_new_password = request.form['confirm_new_password']
+
+        error = None
+        if not current_password:
+            error = 'Current password is required.'
+        elif not new_password:
+            error = 'New password is required.'
+        elif new_password != confirm_new_password:
+            error = 'New passwords do not match.'
+        # Add more password complexity rules here if desired, e.g., minimum length
+        elif len(new_password) < 8:
+            error = 'New password must be at least 8 characters long.'
+
+        if error is None:
+            # Check current password
+            if not check_password_hash(g.user['password_hash'], current_password):
+                error = 'Incorrect current password.'
+            else:
+                # Update password
+                new_password_hash_val = generate_password_hash(new_password)
+                if update_user_password(g.user['id'], new_password_hash_val):
+                    flash('Your password has been updated successfully!', 'success')
+                    # Optionally, log the user out and redirect to login, or just stay on the page/redirect to settings
+                    return redirect(url_for('settings_route')) 
+                else:
+                    error = 'Failed to update password due to a server error. Please try again.'
+        
+        if error:
+            flash(error, 'error')
+
+    return render_template('change_password.html')
+
+@flask_app.route('/admin/users')
+@login_required
+def admin_users_route():
+    if not g.user or not g.user['is_admin']:
+        flash('You do not have permission to access this page.', 'error')
+        return redirect(url_for('index'))
+    
+    users = get_all_users_details(DB_PATH)
+    return render_template('admin_users.html', users=users)
 
 # @flask_app.route('/update_played_game/<int:played_game_id>', methods=['GET', 'POST'])
 

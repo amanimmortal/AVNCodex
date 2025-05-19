@@ -11,12 +11,28 @@ body {
     color: white;
     font-size: 1.2em;
     font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .top-bar a {
     color: white;
     text-decoration: none;
     margin-right: 15px;
+}
+
+/* Ensure direct child divs of top-bar don't add extra margins if not needed */
+.top-bar > div {
+    /* No specific styles needed here unless there's a margin conflict */
+}
+
+.top-bar .user-actions a:last-child {
+    margin-right: 0; /* Remove margin from the last link in user-actions */
+}
+
+.top-bar span { /* For 'Logged in as: username' text */
+    margin-right: 10px;
 }
 
 .container-fluid {
@@ -354,4 +370,45 @@ body {
     border-radius: 4px;
     border: 1px solid #333; /* Consistent border */
     margin-bottom: 20px; /* Space below */
+}
+
+/* Styled Forms for Login, Register, Change Password */
+.styled-form {
+    max-width: 500px; /* Or your preferred max width for these forms */
+    margin: 20px auto; /* Center the form on the page */
+    padding: 20px;
+    background-color: #252526; /* Consistent with sidebar */
+    border-radius: 4px;
+}
+
+.styled-form .form-group {
+    display: flex;
+    align-items: center; /* Align label and input vertically */
+    margin-bottom: 15px; /* Space between form groups */
+}
+
+.styled-form .form-group label {
+    flex-basis: 150px; /* Fixed width for labels */
+    flex-shrink: 0;
+    margin-right: 15px; /* Space between label and input */
+    text-align: right;
+    color: #d4d4d4;
+}
+
+.styled-form .form-group input[type="text"],
+.styled-form .form-group input[type="password"],
+.styled-form .form-group input[type="email"] { /* Add other input types if needed */
+    flex-grow: 1; /* Input takes remaining space */
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #444;
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+}
+
+.styled-form button.btn {
+    display: block; 
+    margin-top: 10px; /* Add some space above the button */
+    margin-left: 165px; /* Align with inputs (150px label + 15px margin) */
 } 

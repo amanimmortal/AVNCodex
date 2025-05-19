@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timezone, timedelta # Ensure all are imported
 from dotenv import load_dotenv
 from f95apiclient import F95ApiClient # Assuming f95apiclient is in PYTHONPATH or installed
-from typing import Optional # Added
+from typing import Optional, Set # Added Set
 import re # Added for regex in get_first_significant_word
 from pushover import Client as PushoverClient # Added for Pushover
 
@@ -62,19 +62,30 @@ def initialize_database(db_path):
     if db_dir and not os.path.exists(db_dir): # Check if db_dir is not empty (for relative paths in root)
         try:
             os.makedirs(db_dir, exist_ok=True)
-            # Logger might not be fully set up if this is called before setup_logging
-            # or if setup_logging itself had issues. Print for robustness.
             print(f"Database directory created: {db_dir}") 
         except OSError as e:
             print(f"Critical error: Could not create database directory {db_dir}. Error: {e}")
-            # If the directory cannot be created, connecting to the DB will likely fail or use a wrong path.
-            # Consider raising an exception or exiting if this is a hard requirement.
-            return # Stop further processing in this function if dir creation fails
+            return
     
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
+
+        # Enable foreign key support
+        cursor.execute("PRAGMA foreign_keys = ON;")
+
+        # Create users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                is_admin BOOLEAN DEFAULT FALSE,
+                created_at TEXT NOT NULL
+            )
+        """)
+        
         # Update games table schema
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS games (
@@ -93,7 +104,6 @@ def initialize_database(db_path):
             )
         """)
         
-        # Check if last_checked_at column exists, add if not (for existing databases)
         cursor.execute("PRAGMA table_info(games)")
         columns = [column[1] for column in cursor.fetchall()]
         if 'last_checked_at' not in columns:
@@ -104,52 +114,98 @@ def initialize_database(db_path):
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_played_games (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
                 game_id INTEGER NOT NULL,
                 user_notes TEXT,
                 user_rating REAL, -- e.g., 0.0 to 5.0
                 notify_for_updates BOOLEAN DEFAULT TRUE,
                 date_added_to_played_list TEXT NOT NULL,
-                last_notified_version TEXT, -- Store version for which notification was last sent
-                last_notified_rss_pub_date TEXT, -- Store RSS pub date for which notification was last sent
-                last_notified_completion_status TEXT, -- Store completion status for which notification was last sent
-                user_acknowledged_version TEXT, -- Store version acknowledged by user
-                user_acknowledged_rss_pub_date TEXT, -- Store RSS pub date acknowledged by user
-                user_acknowledged_completion_status TEXT, -- Store completion status acknowledged by user
-                FOREIGN KEY(game_id) REFERENCES games(id),
-                UNIQUE(game_id) -- Assuming a user adds a game to their played list only once
+                last_notified_version TEXT, 
+                last_notified_rss_pub_date TEXT, 
+                last_notified_completion_status TEXT, 
+                user_acknowledged_version TEXT, 
+                user_acknowledged_rss_pub_date TEXT, 
+                user_acknowledged_completion_status TEXT, 
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(game_id) REFERENCES games(id) ON DELETE CASCADE,
+                UNIQUE(user_id, game_id)
             )
         """)
         
         # Create app_settings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS app_settings (
-                setting_key TEXT PRIMARY KEY,
-                setting_value TEXT
+                user_id INTEGER NOT NULL,
+                setting_key TEXT NOT NULL,
+                setting_value TEXT,
+                PRIMARY KEY (user_id, setting_key),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         """)
-        # Optionally, pre-populate with default settings if they don't exist
-        # Example: Set a default update schedule if not already set
-        cursor.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)", 
-                       ('update_schedule_hours', '24')) # Default to 24 hours
-        
-        # Add Pushover related settings with defaults
-        default_pushover_settings = {
-            'pushover_user_key': '',
-            'pushover_api_key': '',
-            'notify_on_game_add': 'True',
-            'notify_on_game_delete': 'True',
-            'notify_on_game_update': 'True',
-            'notify_on_status_change_completed': 'True',
-            'notify_on_status_change_abandoned': 'True',
-            'notify_on_status_change_on_hold': 'True'
-        }
-        for key, value in default_pushover_settings.items():
-            cursor.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)", (key, value))
         
         conn.commit()
         logger.info(f"Database initialized successfully at {db_path}")
     except sqlite3.Error as e:
         logger.error(f"Database error during initialization: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_primary_admin_user_id(db_path: str) -> Optional[int]:
+    """Retrieves the ID of the first admin user (lowest ID)."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        # Assuming is_admin is 1 for True (standard for SQLite boolean)
+        cursor.execute("SELECT id FROM users WHERE is_admin = 1 ORDER BY id ASC LIMIT 1")
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+        # Log if no admin found, as this might be unexpected in some contexts
+        logger.info("No primary admin user ID found (is_admin=1).")
+        return None
+    except sqlite3.Error as e:
+        logger.error(f"Database error getting primary admin user ID: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def get_all_user_ids(db_path: str) -> list[int]:
+    """Retrieves a list of all user IDs."""
+    conn = None
+    user_ids = []
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users ORDER BY id ASC")
+        rows = cursor.fetchall()
+        user_ids = [row[0] for row in rows]
+        return user_ids
+    except sqlite3.Error as e:
+        logger.error(f"Database error getting all user IDs: {e}")
+        return [] # Return empty list on error
+    finally:
+        if conn:
+            conn.close()
+
+def get_all_users_details(db_path: str) -> list[dict]:
+    """Retrieves details (id, username, is_admin, created_at) for all users."""
+    conn = None
+    users_details = []
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row # To access columns by name
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, is_admin, created_at FROM users ORDER BY username ASC")
+        rows = cursor.fetchall()
+        for row in rows:
+            users_details.append(dict(row))
+        return users_details
+    except sqlite3.Error as e:
+        logger.error(f"Database error getting all users details: {e}")
+        return [] # Return empty list on error
     finally:
         if conn:
             conn.close()
@@ -242,19 +298,44 @@ def process_rss_feed(db_path, client):
             conn.close()
 
 # --- Settings Functions ---
-def get_setting(db_path: str, key: str, default_value: str = None) -> str:
-    """Retrieves a setting value from the app_settings table."""
+def get_setting(db_path: str, key: str, default_value: Optional[str] = None, user_id: Optional[int] = None) -> Optional[str]:
+    """
+    Retrieves a setting value from the app_settings table for a specific user.
+    If user_id is None, it implies a non-user-specific context or an error.
+    For global settings like 'update_schedule_hours_global', user_id for the primary admin should be provided by the caller.
+    """
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT setting_value FROM app_settings WHERE setting_key = ?", (key,))
+        if user_id is not None:
+            cursor.execute("SELECT setting_value FROM app_settings WHERE user_id = ? AND setting_key = ?", (user_id, key))
+        else:
+            # This case should ideally be handled by the caller by providing the primary admin's user_id for global settings.
+            # If user_id is None, we are trying to fetch a setting not tied to a specific user.
+            # This might be valid for settings that are truly global and not under any user_id,
+            # but current schema has user_id in PK.
+            # For 'update_schedule_hours_global', the caller (app.py) should resolve the primary admin ID.
+            logger.warning(f"get_setting called for key '{key}' with user_id=None. This might not yield expected results for user-specific settings or global settings stored under an admin.")
+            # Attempt to fetch if there's a setting with a NULL user_id (though schema doesn't directly support this for PK user_id)
+            # Or, this branch could be removed if all settings are strictly user_id-bound or global-admin-bound.
+            # For now, let it try to find a match for the key alone if user_id is None, though this is unlikely with current schema.
+            # A better approach for global settings: caller gets primary admin ID and passes it.
+            # If we assume global settings are stored with primary_admin_id, then caller MUST provide it.
+            # If user_id is None here, it implies the caller didn't specify, so return default.
+            logger.debug(f"get_setting for '{key}' with user_id=None, will return default_value if not found through other means (e.g. primary admin passed by caller).")
+            # The query below would fail if user_id is part of PK and NOT NULL.
+            # cursor.execute("SELECT setting_value FROM app_settings WHERE setting_key = ? AND user_id IS NULL", (key,))
+            # Given current design (global settings stored under primary admin), user_id should always be provided.
+            return default_value
+
+
         row = cursor.fetchone()
         if row:
             return row[0]
         return default_value
     except sqlite3.Error as e:
-        logger.error(f"Database error getting setting '{key}': {e}")
+        logger.error(f"Database error getting setting '{key}' for user_id '{user_id}': {e}")
         return default_value
     finally:
         if conn:
@@ -295,13 +376,13 @@ def set_setting(db_path: str, key: str, value: str, user_id: Optional[int] = Non
             conn.close()
 
 # --- Pushover Notification Function ---
-def send_pushover_notification(db_path: str, title: str, message: str, priority: int = 0, url: Optional[str] = None, url_title: Optional[str] = None):
-    """Sends a notification via Pushover if configured."""
-    user_key = get_setting(db_path, 'pushover_user_key')
-    api_key = get_setting(db_path, 'pushover_api_key')
+def send_pushover_notification(db_path: str, user_id: int, title: str, message: str, priority: int = 0, url: Optional[str] = None, url_title: Optional[str] = None):
+    """Sends a notification via Pushover if configured for the given user."""
+    user_key = get_setting(db_path, 'pushover_user_key', user_id=user_id)
+    api_key = get_setting(db_path, 'pushover_api_key', user_id=user_id)
 
     if not user_key or not api_key:
-        logger.info("Pushover user_key or api_key not configured. Skipping notification.")
+        logger.info(f"Pushover user_key or api_key not configured for user_id {user_id}. Skipping notification '{title}'.")
         return
 
     try:
@@ -332,6 +413,7 @@ def search_games_for_user(client: F95ApiClient, search_term: str, limit: int = 1
         return []
 
 def add_game_to_my_list(db_path: str,
+                        user_id: int, # Added user_id
                         client: F95ApiClient,
                         f95_url: str,
                         name_override: str = None,
@@ -381,7 +463,7 @@ def add_game_to_my_list(db_path: str,
     # This requires fetching the game's current status when adding it to the list.
     current_game_status = "UNKNOWN" # Default if not found or error
 
-    logger.info(f"Attempting to add game to user list: {name_to_use} ({f95_url})")
+    logger.info(f"Attempting to add game to user list for user_id {user_id}: {name_to_use} ({f95_url})")
     conn = None
     try:
         conn = sqlite3.connect(db_path)
@@ -498,31 +580,32 @@ def add_game_to_my_list(db_path: str,
             try:
                 cursor.execute("""
                     INSERT INTO user_played_games (
-                        game_id, user_notes, user_rating, notify_for_updates, date_added_to_played_list,
+                        user_id, game_id, user_notes, user_rating, notify_for_updates, date_added_to_played_list,
                         last_notified_version, last_notified_rss_pub_date, last_notified_completion_status,
                         user_acknowledged_version, user_acknowledged_rss_pub_date, user_acknowledged_completion_status
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (game_id_in_db, user_notes, user_rating, notify, current_timestamp,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (user_id, game_id_in_db, user_notes, user_rating, notify, current_timestamp,
                       current_game_version, current_game_rss_pub_date, current_game_completed_status, # Initialize last_notified_*
                       current_game_version, current_game_rss_pub_date, current_game_completed_status  # Initialize user_acknowledged_*
                       ))
                 conn.commit()
-                logger.info(f"Game ID {game_id_in_db} ('{name_to_use}') added to user_played_games. Initial acknowledged state set.")
+                logger.info(f"Game ID {game_id_in_db} ('{name_to_use}') added to user_played_games for user_id {user_id}. Initial acknowledged state set.")
                 
                 # Send Pushover notification for game add
-                if get_setting(db_path, 'notify_on_game_add', 'False') == 'True':
+                if get_setting(db_path, 'notify_on_game_add', 'False', user_id=user_id) == 'True': # Pass user_id
                     send_pushover_notification(
                         db_path,
+                        user_id=user_id, # Pass user_id
                         title=f"Game Added: {name_to_use}",
-                        message=f"'{name_to_use}' was added to your monitored list.\nStatus: {current_game_completed_status}, Version: {current_game_version}",
+                        message=f"'{name_to_use}' was added to your monitored list.\\nStatus: {current_game_completed_status}, Version: {current_game_version}",
                         url=f95_url,
                         url_title=f"View {name_to_use} on F95Zone"
                     )
                 return True, f"Game '{name_to_use}' added to your list."
             except sqlite3.IntegrityError: # Handles UNIQUE constraint violation (game_id already in user_played_games)
                 conn.rollback()
-                logger.warning(f"Game ID {game_id_in_db} ('{name_to_use}') is already in user_played_games.")
+                logger.warning(f"Game ID {game_id_in_db} ('{name_to_use}') is already in user_played_games for user_id {user_id}.")
                 return False, f"Game '{name_to_use}' is already in your list."
         else:
             # This case should ideally not be reached if game insertion/retrieval was successful
@@ -539,7 +622,34 @@ def add_game_to_my_list(db_path: str,
         if conn:
             conn.close()
 
-def get_my_played_games(db_path: str, 
+def get_user_played_game_urls(db_path: str, user_id: int) -> Set[str]:
+    """
+    Retrieves a set of F95 URLs for all games in the specified user's played list.
+    """
+    urls = set()
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT g.f95_url
+            FROM user_played_games upg
+            JOIN games g ON upg.game_id = g.id
+            WHERE upg.user_id = ?
+        """, (user_id,))
+        rows = cursor.fetchall()
+        for row in rows:
+            urls.add(row[0])
+        logger.info(f"Retrieved {len(urls)} unique F95 URLs from user_id {user_id}'s played list.")
+    except sqlite3.Error as e:
+        logger.error(f"Database error in get_user_played_game_urls for user_id {user_id}: {e}", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
+    return urls
+
+def get_my_played_games(db_path: str,
+                        user_id: int, # Added user_id
                         name_filter: Optional[str] = None, 
                         min_rating_filter: Optional[float] = None, 
                         sort_by: str = 'name', 
@@ -551,12 +661,13 @@ def get_my_played_games(db_path: str,
 
     Args:
         db_path: Path to the SQLite database.
+        user_id: ID of the user to filter games for.
         name_filter: Optional string to filter games by name (case-insensitive partial match).
         min_rating_filter: Optional float to filter games by minimum user rating (inclusive).
         sort_by: Column to sort by. Allowed: 'name', 'last_updated', 'date_added'. Defaults to 'name'.
         sort_order: Sort order. Allowed: 'ASC', 'DESC'. Defaults to 'ASC'.
     """
-    logger.info(f"Fetching user's played games list with filters: name='{name_filter}', min_rating='{min_rating_filter}', sort_by='{sort_by}', sort_order='{sort_order}'.")
+    logger.info(f"Fetching user's (user_id: {user_id}) played games list with filters: name='{name_filter}', min_rating='{min_rating_filter}', sort_by='{sort_by}', sort_order='{sort_order}'.")
     games_list = []
     conn = None
     try:
@@ -579,8 +690,8 @@ def get_my_played_games(db_path: str,
             JOIN games g ON upg.game_id = g.id
         """
         
-        where_clauses = []
-        params = []
+        where_clauses = ["upg.user_id = ?"] # Start with user_id filter
+        params = [user_id]
 
         if name_filter:
             where_clauses.append("g.name LIKE ?")
@@ -627,13 +738,13 @@ def get_my_played_games(db_path: str,
             conn.close()
     return games_list
 
-def get_my_played_game_details(db_path: str, played_game_id: int) -> Optional[dict]:
+def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) -> Optional[dict]: # Added user_id
     """
     Retrieves details for a specific game from the user's played list, 
     joined with details from the main games table.
-    'played_game_id' is the ID from the user_played_games table.
+    'played_game_id' is the ID from the user_played_games table, constrained by user_id.
     """
-    logger.info(f"Fetching details for played game ID: {played_game_id}")
+    logger.info(f"Fetching details for played game ID: {played_game_id} for user_id: {user_id}")
     conn = None
     try:
         conn = sqlite3.connect(db_path)
@@ -653,34 +764,34 @@ def get_my_played_game_details(db_path: str, played_game_id: int) -> Optional[di
                 upg.user_acknowledged_completion_status
             FROM user_played_games upg
             JOIN games g ON upg.game_id = g.id
-            WHERE upg.id = ?
-        """, (played_game_id,))
+            WHERE upg.id = ? AND upg.user_id = ?
+        """, (played_game_id, user_id)) # Added user_id to query
         row = cursor.fetchone()
         if row:
-            logger.info(f"Details found for played game ID: {played_game_id} - {row['name']}")
+            logger.info(f"Details found for played game ID: {played_game_id} (user_id: {user_id}) - {row['name']}")
             return dict(row)
         else:
-            logger.warning(f"No game found with played_game_id: {played_game_id}")
+            logger.warning(f"No game found with played_game_id: {played_game_id} for user_id: {user_id}")
             return None
     except sqlite3.Error as e:
-        logger.error(f"Database error in get_my_played_game_details for ID {played_game_id}: {e}", exc_info=True)
+        logger.error(f"Database error in get_my_played_game_details for ID {played_game_id}, user_id {user_id}: {e}", exc_info=True)
         return None
     except Exception as e:
-        logger.error(f"Unexpected error in get_my_played_game_details for ID {played_game_id}: {e}", exc_info=True)
+        logger.error(f"Unexpected error in get_my_played_game_details for ID {played_game_id}, user_id {user_id}: {e}", exc_info=True)
         return None
     finally:
         if conn:
             conn.close()
 
-def update_my_played_game_details(db_path: str, played_game_id: int, 
+def update_my_played_game_details(db_path: str, user_id: int, played_game_id: int, # Added user_id
                                   user_notes: str = None, user_rating: float = None, 
                                   notify_for_updates: bool = None) -> dict:
     """
     Updates details for a specific game in the user's played list.
     Only updates fields that are provided (not None).
-    'played_game_id' is the ID from the user_played_games table.
+    'played_game_id' is the ID from the user_played_games table, constrained by user_id.
     """
-    logger.info(f"Attempting to update details for played game ID: {played_game_id}")
+    logger.info(f"Attempting to update details for played game ID: {played_game_id} for user_id: {user_id}")
     if not any([user_notes is not None, user_rating is not None, notify_for_updates is not None]):
         return {'success': False, 'message': "No update parameters provided."}
 
@@ -706,38 +817,39 @@ def update_my_played_game_details(db_path: str, played_game_id: int,
             return {'success': False, 'message': "No valid update fields provided."}
 
         params.append(played_game_id)
+        params.append(user_id) # Add user_id to params for WHERE clause
         
-        sql = f"UPDATE user_played_games SET {', '.join(set_clauses)} WHERE id = ?"
+        sql = f"UPDATE user_played_games SET {', '.join(set_clauses)} WHERE id = ? AND user_id = ?" # Add user_id to WHERE
         
         cursor.execute(sql, tuple(params))
         updated_rows = cursor.rowcount
         conn.commit()
 
         if updated_rows > 0:
-            logger.info(f"Successfully updated details for played game ID: {played_game_id}")
+            logger.info(f"Successfully updated details for played game ID: {played_game_id}, user_id: {user_id}")
             return {'success': True, 'message': "Game details updated successfully."}
         else:
-            logger.warning(f"No game found with played_game_id: {played_game_id} to update.")
+            logger.warning(f"No game found with played_game_id: {played_game_id} for user_id: {user_id} to update.")
             return {'success': False, 'message': "No game found with that ID in your played list."}
 
     except sqlite3.Error as e:
-        logger.error(f"Database error in update_my_played_game_details for ID {played_game_id}: {e}", exc_info=True)
+        logger.error(f"Database error in update_my_played_game_details for ID {played_game_id}, user_id {user_id}: {e}", exc_info=True)
         return {'success': False, 'message': f"Database error: {e}"}
     except Exception as e:
-        logger.error(f"Unexpected error in update_my_played_game_details for ID {played_game_id}: {e}", exc_info=True)
+        logger.error(f"Unexpected error in update_my_played_game_details for ID {played_game_id}, user_id {user_id}: {e}", exc_info=True)
         return {'success': False, 'message': f"Unexpected error: {e}"}
     finally:
         if conn:
             conn.close()
 
-def delete_game_from_my_list(db_path: str, played_game_id: int) -> tuple[bool, str]:
+def delete_game_from_my_list(db_path: str, user_id: int, played_game_id: int) -> tuple[bool, str]: # Added user_id
     """
     Deletes a game from the user's played list based on the user_played_games.id.
-    Does not delete from the main 'games' table.
+    Does not delete from the main 'games' table. Constrained by user_id.
     """
-    logger.info(f"Attempting to delete played game ID: {played_game_id} from user's list.")
+    logger.info(f"Attempting to delete played game ID: {played_game_id} from user's (user_id: {user_id}) list.")
     conn = None
-    game_name_for_notification = "Unknown Game" # For Pushover
+    game_name_for_notification = "Unknown Game"
     game_url_for_notification = None
     try:
         conn = sqlite3.connect(db_path)
@@ -748,8 +860,8 @@ def delete_game_from_my_list(db_path: str, played_game_id: int) -> tuple[bool, s
             SELECT g.name, g.f95_url 
             FROM user_played_games upg
             JOIN games g ON upg.game_id = g.id
-            WHERE upg.id = ?
-        """, (played_game_id,))
+            WHERE upg.id = ? AND upg.user_id = ?
+        """, (played_game_id, user_id)) # Added user_id to query
         game_info = cursor.fetchone()
         if game_info:
             game_name_for_notification = game_info[0]
@@ -757,16 +869,17 @@ def delete_game_from_my_list(db_path: str, played_game_id: int) -> tuple[bool, s
         else:
             game_name_for_notification = "Unknown Game (ID: " + str(played_game_id) + ")"
 
-        cursor.execute("DELETE FROM user_played_games WHERE id = ?", (played_game_id,))
+        cursor.execute("DELETE FROM user_played_games WHERE id = ? AND user_id = ?", (played_game_id, user_id)) # Added user_id
         deleted_rows = cursor.rowcount
         conn.commit()
 
         if deleted_rows > 0:
-            logger.info(f"Successfully deleted played game ID: {played_game_id} ('{game_name_for_notification}') from user's list.")
+            logger.info(f"Successfully deleted played game ID: {played_game_id} ('{game_name_for_notification}') from user's (user_id: {user_id}) list.")
             # Send Pushover notification for game delete
-            if get_setting(db_path, 'notify_on_game_delete', 'False') == 'True':
+            if get_setting(db_path, 'notify_on_game_delete', 'False', user_id=user_id) == 'True': # Pass user_id
                 send_pushover_notification(
                     db_path,
+                    user_id=user_id, # Pass user_id
                     title=f"Game Removed: {game_name_for_notification}",
                     message=f"'{game_name_for_notification}' was removed from your monitored list.",
                     url=game_url_for_notification,
@@ -774,37 +887,37 @@ def delete_game_from_my_list(db_path: str, played_game_id: int) -> tuple[bool, s
                 )
             return True, f"Game '{game_name_for_notification}' removed from your list."
         else:
-            logger.warning(f"No game found with played_game_id: {played_game_id} to delete from user's list.")
+            logger.warning(f"No game found with played_game_id: {played_game_id} for user_id: {user_id} to delete from user's list.")
             return False, "No game found with that ID in your list to delete."
 
     except sqlite3.Error as e:
-        logger.error(f"Database error deleting played game ID {played_game_id}: {e}", exc_info=True)
+        logger.error(f"Database error deleting played game ID {played_game_id} for user_id {user_id}: {e}", exc_info=True)
         return False, f"Database error: {e}"
     except Exception as e:
-        logger.error(f"Unexpected error deleting played game ID {played_game_id}: {e}", exc_info=True)
+        logger.error(f"Unexpected error deleting played game ID {played_game_id} for user_id {user_id}: {e}", exc_info=True)
         return False, f"An unexpected error occurred: {e}"
     finally:
         if conn:
             conn.close()
 
-def mark_game_as_acknowledged(db_path: str, played_game_id: int) -> tuple[bool, str, Optional[dict]]:
+def mark_game_as_acknowledged(db_path: str, user_id: int, played_game_id: int) -> tuple[bool, str, Optional[dict]]: # Added user_id
     """
     Marks a game associated with a user_played_games entry as acknowledged by the user.
     Updates the user_acknowledged_version, _rss_pub_date, and _completed_status
     in the user_played_games table to the current values from the games table for that game.
-    This is used to hide update indicators in the UI until a new update arrives.
+    Constrained by user_id.
     """
-    logger.info(f"Attempting to mark updates as acknowledged for played game ID: {played_game_id}.")
+    logger.info(f"Attempting to mark updates as acknowledged for played game ID: {played_game_id} for user_id: {user_id}.")
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Step 1: Get the game_id from user_played_games
-        cursor.execute("SELECT game_id FROM user_played_games WHERE id = ?", (played_game_id,))
+        # Step 1: Get the game_id from user_played_games, ensuring it belongs to the user
+        cursor.execute("SELECT game_id FROM user_played_games WHERE id = ? AND user_id = ?", (played_game_id, user_id)) # Added user_id
         played_game_row = cursor.fetchone()
         if not played_game_row:
-            logger.warning(f"No played game entry found for played_game_id: {played_game_id}.")
+            logger.warning(f"No played game entry found for played_game_id: {played_game_id} and user_id: {user_id}.")
             return False, "Game not found in your list.", None
         
         game_id_from_games_table = played_game_row[0]
@@ -824,14 +937,14 @@ def mark_game_as_acknowledged(db_path: str, played_game_id: int) -> tuple[bool, 
             SET user_acknowledged_version = ?,
                 user_acknowledged_rss_pub_date = ?,
                 user_acknowledged_completed_status = ?
-            WHERE id = ?
-        """, (current_version, current_rss_pub_date, current_completed_status, played_game_id))
+            WHERE id = ? AND user_id = ?
+        """, (current_version, current_rss_pub_date, current_completed_status, played_game_id, user_id)) # Added user_id
         
         updated_rows = cursor.rowcount
         conn.commit()
 
         if updated_rows > 0:
-            logger.info(f"Successfully marked updates as acknowledged for played game ID: {played_game_id} ('{game_name}').")
+            logger.info(f"Successfully marked updates as acknowledged for played game ID: {played_game_id} ('{game_name}') for user_id: {user_id}.")
             acknowledged_details = {
                 "version": current_version,
                 "rss_pub_date": current_rss_pub_date,
@@ -840,14 +953,14 @@ def mark_game_as_acknowledged(db_path: str, played_game_id: int) -> tuple[bool, 
             return True, f"Updates for '{game_name}' marked as acknowledged.", acknowledged_details
         else:
             # This case should be rare if the initial select for played_game_id succeeded
-            logger.warning(f"Failed to update acknowledged status for played_game_id: {played_game_id} (rowcount 0).")
+            logger.warning(f"Failed to update acknowledged status for played_game_id: {played_game_id}, user_id: {user_id} (rowcount 0).")
             return False, "Failed to update acknowledged status.", None
 
     except sqlite3.Error as e:
-        logger.error(f"Database error marking game acknowledged (ID {played_game_id}): {e}", exc_info=True)
+        logger.error(f"Database error marking game acknowledged (ID {played_game_id}, user_id {user_id}): {e}", exc_info=True)
         return False, f"Database error: {e}", None
     except Exception as e:
-        logger.error(f"Unexpected error marking game acknowledged (ID {played_game_id}): {e}", exc_info=True)
+        logger.error(f"Unexpected error marking game acknowledged (ID {played_game_id}, user_id {user_id}): {e}", exc_info=True)
         return False, f"An unexpected error occurred: {e}", None
     finally:
         if conn:
@@ -933,14 +1046,14 @@ def update_completion_statuses(db_path: str, client: F95ApiClient):
         if conn:
             conn.close()
 
-def check_for_my_updates(db_path: str) -> list[dict]:
+def check_for_my_updates(db_path: str, user_id: int) -> list[dict]: # Added user_id
     """
-    Checks for updates for games in the user's played list that are marked for notification.
+    Checks for updates for games in the specified user's played list that are marked for notification.
     Identifies version changes, RSS pub date changes, or significant completion status changes.
     Returns a list of notification objects (dictionaries).
     This function DOES NOT update the 'last_notified' fields in the database.
     """
-    logger.info("Checking for updates in user's played games list...")
+    logger.info(f"Checking for updates in user's (user_id: {user_id}) played games list...")
     notifications = []
     conn = None
     try:
@@ -959,13 +1072,13 @@ def check_for_my_updates(db_path: str) -> list[dict]:
                 g.completed_status AS current_completed_status,
                 upg.last_notified_version,
                 upg.last_notified_rss_pub_date,
-                upg.last_notified_completed_status
+                upg.last_notified_completion_status
             FROM user_played_games upg
             JOIN games g ON upg.game_id = g.id
-            WHERE upg.notify_for_updates = TRUE
-        """)
+            WHERE upg.notify_for_updates = TRUE AND upg.user_id = ? 
+        """, (user_id,)) # Added user_id to query
         games_to_notify = cursor.fetchall()
-        logger.info(f"Found {len(games_to_notify)} games in played list marked for notifications.")
+        logger.info(f"Found {len(games_to_notify)} games in played list for user_id {user_id} marked for notifications.")
 
         for game in games_to_notify:
             notification_reasons = []
@@ -994,10 +1107,10 @@ def check_for_my_updates(db_path: str) -> list[dict]:
 
             # Check for completion status change to COMPLETED
             # Only notify if previous status was known (not None/empty) and was not 'COMPLETED' already
-            if (game['last_notified_completed_status'] is not None and
-                game['last_notified_completed_status'] != '' and
+            if (game['last_notified_completion_status'] is not None and
+                game['last_notified_completion_status'] != '' and
                 game['current_completed_status'] == 'COMPLETED' and
-                game['last_notified_completed_status'] != 'COMPLETED'):
+                game['last_notified_completion_status'] != 'COMPLETED'):
                 notification_reasons.append("Game has been marked as COMPLETED!")
                 is_newly_completed = True
             
@@ -1033,12 +1146,13 @@ def check_for_my_updates(db_path: str) -> list[dict]:
             conn.close()
     return notifications
 
-def update_last_notified_status(db_path: str, played_game_id: int, version: str, rss_pub_date: str, completed_status: str):
+def update_last_notified_status(db_path: str, user_id: int, played_game_id: int, version: str, rss_pub_date: str, completed_status: str): # Added user_id
     """
     Updates the last_notified fields for a game in the user_played_games table.
     This should be called AFTER a notification has been successfully sent/processed.
+    Constrained by user_id.
     """
-    logger.info(f"Updating last notified status for played game ID: {played_game_id}")
+    logger.info(f"Updating last notified status for played game ID: {played_game_id} for user_id: {user_id}")
     conn = None
     try:
         conn = sqlite3.connect(db_path)
@@ -1048,17 +1162,17 @@ def update_last_notified_status(db_path: str, played_game_id: int, version: str,
             SET last_notified_version = ?, 
                 last_notified_rss_pub_date = ?, 
                 last_notified_completed_status = ?
-            WHERE id = ?
-        """, (version, rss_pub_date, completed_status, played_game_id))
+            WHERE id = ? AND user_id = ?
+        """, (version, rss_pub_date, completed_status, played_game_id, user_id)) # Added user_id
         conn.commit()
         if cursor.rowcount > 0:
-            logger.info(f"Successfully updated last_notified status for played_game_id {played_game_id}.")
+            logger.info(f"Successfully updated last_notified status for played_game_id {played_game_id}, user_id {user_id}.")
         else:
-            logger.warning(f"No row found to update last_notified status for played_game_id {played_game_id}.")
+            logger.warning(f"No row found to update last_notified status for played_game_id {played_game_id}, user_id {user_id}.")
     except sqlite3.Error as e:
-        logger.error(f"Database error in update_last_notified_status for ID {played_game_id}: {e}", exc_info=True)
+        logger.error(f"Database error in update_last_notified_status for ID {played_game_id}, user_id {user_id}: {e}", exc_info=True)
     except Exception as e:
-        logger.error(f"Unexpected error in update_last_notified_status for ID {played_game_id}: {e}", exc_info=True)
+        logger.error(f"Unexpected error in update_last_notified_status for ID {played_game_id}, user_id {user_id}: {e}", exc_info=True)
     finally:
         if conn:
             conn.close()
@@ -1142,12 +1256,12 @@ def _determine_specific_game_status(f95_client: F95ApiClient, game_url: str, gam
         logger.error(f"Error checking status '{target_status_prefix}' for game '{game_name}': {e}", exc_info=True)
         return None
 
-def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, played_game_row_id: int):
+def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, played_game_row_id: int, user_id: int): # Added user_id
     """
     Checks a single game for updates (version, RSS date) and then for status changes
     (COMPLETED, ABANDONED, ON-HOLD) based on the logic requested.
     Updates the 'games' table accordingly.
-    Sends Pushover notifications based on settings.
+    Sends Pushover notifications based on settings for the specified user.
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row # Access columns by name
@@ -1155,15 +1269,16 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
     
     try:
         cursor.execute("""
-            SELECT g.id, g.name, g.version, g.rss_pub_date, g.completed_status, g.f95_url as url, upg.id as user_played_game_id
+            SELECT g.id, g.name, g.version, g.author, g.image_url, g.rss_pub_date, g.completed_status, g.f95_url as url, 
+                   upg.id as user_played_game_id, upg.user_id
             FROM games g
             JOIN user_played_games upg ON g.id = upg.game_id
-            WHERE upg.id = ?
-        """, (played_game_row_id,))
+            WHERE upg.id = ? AND upg.user_id = ?
+        """, (played_game_row_id, user_id)) # Added user_id to query
         game_data = cursor.fetchone()
 
         if not game_data:
-            logger.warning(f"SCHEDULER: No game data found for user_played_games.id {played_game_row_id}. Skipping.")
+            logger.warning(f"SCHEDULER: No game data found for user_played_games.id {played_game_row_id} and user_id {user_id}. Skipping.")
             return
 
         game_id = game_data['id']
@@ -1173,11 +1288,17 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
         current_status = game_data['completed_status']
         game_url = game_data['url']
         
+        # Ensure the user_id from fetched game_data matches the passed user_id, as a sanity check.
+        # This should always be true due to the WHERE clause.
+        if game_data['user_id'] != user_id:
+            logger.error(f"SCHEDULER/SYNC: Mismatch user_id for game '{current_name}'. Expected {user_id}, got {game_data['user_id']}. Aborting for this game.")
+            return
+
         original_name_for_notification = current_name # Store before potential update
         original_version_for_notification = current_version
         original_status_for_notification = current_status
 
-        logger.info(f"SCHEDULER/SYNC: Checking '{current_name}' (GameID: {game_id}, PlayedID: {played_game_row_id}, URL: {game_url})")
+        logger.info(f"SCHEDULER/SYNC (User: {user_id}): Checking '{current_name}' (GameID: {game_id}, PlayedID: {played_game_row_id}, URL: {game_url})")
         
         search_term = get_first_significant_word(current_name)
         if not search_term:
@@ -1229,7 +1350,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
 
             if name_changed or version_changed or date_changed or author_changed or image_changed:
                 has_primary_update = True
-                logger.info(f"SCHEDULER/SYNC: Primary update found for '{original_name_for_notification}'. OldVer: {original_version_for_notification}, NewVer: {new_version}. OldDate: {current_rss_pub_date_str}, NewDate: {new_rss_pub_date.isoformat() if new_rss_pub_date else 'N/A'}")
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Primary update found for '{original_name_for_notification}'. OldVer: {original_version_for_notification}, NewVer: {new_version}. OldDate: {current_rss_pub_date_str}, NewDate: {new_rss_pub_date.isoformat() if new_rss_pub_date else 'N/A'}")
                 
                 pushover_update_message_parts = []
                 if name_changed and new_name: pushover_update_message_parts.append(f"Name: {original_name_for_notification} -> {new_name}")
@@ -1259,23 +1380,24 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                         cursor.execute(f"UPDATE games SET {set_clause}, last_updated_in_db = ?, last_seen_on_rss = ? WHERE id = ?", final_params)
 
                         conn.commit()
-                        logger.info(f"SCHEDULER/SYNC: Updated game details in DB for '{original_name_for_notification}'.")
+                        logger.info(f"SCHEDULER/SYNC (User: {user_id}): Updated game details in DB for '{original_name_for_notification}'.")
                         # Update current_name, current_version etc. if they were changed, for subsequent status checks
                         if name_changed: current_name = new_name 
                         if version_changed: current_version = new_version
                         # current_status not updated here, but by specific status checks below.
 
                         # Send Pushover notification for game update if enabled
-                        if pushover_update_message_parts and get_setting(db_path, 'notify_on_game_update', 'False') == 'True':
+                        if pushover_update_message_parts and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True': # Pass user_id
                             send_pushover_notification(
                                 db_path,
+                                user_id=user_id, # Pass user_id
                                 title=f"Update: {new_name if new_name else original_name_for_notification}",
-                                message="Details updated:\n" + "\n".join(pushover_update_message_parts),
+                                message="Details updated:\\n" + "\\n".join(pushover_update_message_parts),
                                 url=game_url,
                                 url_title=f"View {new_name if new_name else original_name_for_notification} on F95Zone"
                             )
                     except sqlite3.Error as e_update:
-                         logger.error(f"SCHEDULER/SYNC: DB error updating game '{original_name_for_notification}': {e_update}")
+                         logger.error(f"SCHEDULER/SYNC (User: {user_id}): DB error updating game '{original_name_for_notification}': {e_update}")
                          has_primary_update = False # If DB update fails, treat as no primary update for status logic
 
         # Status checking logic
@@ -1283,38 +1405,38 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
         status_change_notification_message = None
 
         if has_primary_update:
-            logger.info(f"SCHEDULER/SYNC: Primary update for '{current_name}'. Checking for 'COMPLETED' status.")
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Primary update for '{current_name}'. Checking for 'COMPLETED' status.")
             # Only check for completed if the game is not already marked as such
             if original_status_for_notification != "COMPLETED": # Use original status for this check
                 status_check_result = _determine_specific_game_status(f95_client, game_url, current_name, "completed")
                 if status_check_result == "COMPLETED":
                     new_status_determined = "COMPLETED"
-                    if get_setting(db_path, 'notify_on_status_change_completed', 'False') == 'True':
+                    if get_setting(db_path, 'notify_on_status_change_completed', 'False', user_id=user_id) == 'True': # Pass user_id
                         status_change_notification_message = f"'{current_name}' status changed: {original_status_for_notification} -> COMPLETED"
             elif original_status_for_notification == "COMPLETED": 
                 status_check_result = _determine_specific_game_status(f95_client, game_url, current_name, "completed")
                 if status_check_result != "COMPLETED":
-                    logger.info(f"SCHEDULER/SYNC: Game '{current_name}' was COMPLETED, but no longer found in completed feed after update. Setting to ONGOING.")
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' was COMPLETED, but no longer found in completed feed after update. Setting to ONGOING.")
                     new_status_determined = "ONGOING" # Reverted from COMPLETED
                     # Decide if this reversion warrants a notification based on 'notify_on_game_update' or a new toggle
-                    if get_setting(db_path, 'notify_on_game_update', 'False') == 'True': # Treat as a general update
+                    if get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True': # Pass user_id; Treat as a general update
                          status_change_notification_message = f"'{current_name}' status changed: COMPLETED -> ONGOING"
                 else:
-                    logger.info(f"SCHEDULER/SYNC: Game '{current_name}' confirmed still COMPLETED after update.")
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' confirmed still COMPLETED after update.")
 
         else: # No primary update detected (or general search failed / DB update failed)
-            logger.info(f"SCHEDULER/SYNC: No primary update for '{current_name}'. Checking for 'ABANDONED' or 'ON-HOLD'.")
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): No primary update for '{current_name}'. Checking for 'ABANDONED' or 'ON-HOLD'.")
             if original_status_for_notification not in ["COMPLETED", "ABANDONED"]:
                 status_check_result = _determine_specific_game_status(f95_client, game_url, current_name, "abandoned")
                 if status_check_result == "ABANDONED":
                     new_status_determined = "ABANDONED"
-                    if get_setting(db_path, 'notify_on_status_change_abandoned', 'False') == 'True':
+                    if get_setting(db_path, 'notify_on_status_change_abandoned', 'False', user_id=user_id) == 'True': # Pass user_id
                         status_change_notification_message = f"'{current_name}' status changed: {original_status_for_notification} -> ABANDONED"
                 elif original_status_for_notification not in ["ON_HOLD"]: 
                      status_check_result_onhold = _determine_specific_game_status(f95_client, game_url, current_name, "on_hold")
                      if status_check_result_onhold == "ON_HOLD":
                          new_status_determined = "ON_HOLD"
-                         if get_setting(db_path, 'notify_on_status_change_on_hold', 'False') == 'True':
+                         if get_setting(db_path, 'notify_on_status_change_on_hold', 'False', user_id=user_id) == 'True': # Pass user_id
                             status_change_notification_message = f"'{current_name}' status changed: {original_status_for_notification} -> ON_HOLD"
         
         if new_status_determined and new_status_determined != original_status_for_notification: # Compare with original status
@@ -1322,12 +1444,13 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                 cursor.execute("UPDATE games SET completed_status = ?, last_updated_in_db = ?, last_seen_on_rss = ? WHERE id = ?", 
                                (new_status_determined, datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), game_id))
                 conn.commit()
-                logger.info(f"SCHEDULER/SYNC: Status for '{current_name}' (ID: {game_id}) changed from '{original_status_for_notification}' to '{new_status_determined}'.")
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Status for '{current_name}' (ID: {game_id}) changed from '{original_status_for_notification}' to '{new_status_determined}'.")
                 
                 # Send Pushover for status change if message was prepared and not already sent by primary update
-                if status_change_notification_message and not (has_primary_update and get_setting(db_path, 'notify_on_game_update', 'False') == 'True'):
+                if status_change_notification_message and not (has_primary_update and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True'): # Pass user_id
                     send_pushover_notification(
                         db_path,
+                        user_id=user_id, # Pass user_id
                         title=f"Status Change: {current_name}",
                         message=status_change_notification_message,
                         url=game_url,
@@ -1337,11 +1460,12 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                 # the status change might already be part of that broader update context or could be sent separately.
                 # Current logic might send two if primary update + specific status change toggle are both on.
                 # Let's refine: only send specific status change if no primary update notif was sent.
-                elif status_change_notification_message and has_primary_update and get_setting(db_path, 'notify_on_game_update', 'False') == 'False':
+                elif status_change_notification_message and has_primary_update and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'False': # Pass user_id
                      # Primary update occurred, but its notification toggle is off.
                      # So, if this specific status change toggle is on, send it.
                      send_pushover_notification(
                         db_path,
+                        user_id=user_id, # Pass user_id
                         title=f"Status Change: {current_name}",
                         message=status_change_notification_message,
                         url=game_url,
@@ -1349,19 +1473,19 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                     )
 
             except sqlite3.Error as e_status_update:
-                logger.error(f"SCHEDULER/SYNC: DB error updating status for '{current_name}': {e_status_update}")
+                logger.error(f"SCHEDULER/SYNC (User: {user_id}): DB error updating status for '{current_name}': {e_status_update}")
         
         # Update last_checked_at regardless of updates found, to show it was processed
         try:
             cursor.execute("UPDATE games SET last_checked_at = ? WHERE id = ?", (datetime.now(timezone.utc).isoformat(), game_id))
             conn.commit()
         except sqlite3.Error as e_lc:
-            logger.error(f"SCHEDULER/SYNC: DB error updating last_checked_at for '{current_name}': {e_lc}")
+            logger.error(f"SCHEDULER/SYNC (User: {user_id}): DB error updating last_checked_at for '{current_name}': {e_lc}")
 
     except sqlite3.Error as e:
-        logger.error(f"SCHEDULER/SYNC: Database error in check_single_game_update_and_status for played_game_id {played_game_row_id}: {e}", exc_info=True)
+        logger.error(f"SCHEDULER/SYNC (User: {user_id}): Database error in check_single_game_update_and_status for played_game_id {played_game_row_id}: {e}", exc_info=True)
     except Exception as e:
-        logger.error(f"SCHEDULER/SYNC: Unexpected error in check_single_game_update_and_status for played_game_id {played_game_row_id}: {e}", exc_info=True)
+        logger.error(f"SCHEDULER/SYNC (User: {user_id}): Unexpected error in check_single_game_update_and_status for played_game_id {played_game_row_id}: {e}", exc_info=True)
     finally:
         if conn:
             conn.close()
@@ -1370,105 +1494,117 @@ def scheduled_games_update_check(db_path: str, f95_client: F95ApiClient):
     """
     Scheduled task to check all user-tracked games for updates and status changes.
     Only processes games where 'notify_for_updates' is true in 'user_played_games'.
+    Iterates over all users.
     """
-    logger.info("--- Starting scheduled games update check (task initiated by APScheduler) ---")
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    games_to_check_count = 0
-    try:
-        # Select user_played_games.id for games where notify_for_updates is true
-        # AND the game is not already marked as 'COMPLETED' in the games table.
-        cursor.execute("""
-            SELECT upg.id 
-            FROM user_played_games upg
-            JOIN games g ON upg.game_id = g.id
-            WHERE upg.notify_for_updates = 1 
-              AND (g.completed_status IS NULL OR g.completed_status != 'COMPLETED')
-        """)
-        played_game_ids_to_check = [row[0] for row in cursor.fetchall()]
-        games_to_check_count = len(played_game_ids_to_check)
-        
-        if not played_game_ids_to_check:
-            logger.info("SCHEDULER: No games in user's list are set for update notifications. Scheduled check complete.")
-            return
+    logger.info("--- Starting scheduled games update check for ALL USERS (task initiated by APScheduler) ---")
+    
+    all_user_ids = get_all_user_ids(db_path)
+    if not all_user_ids:
+        logger.info("SCHEDULER: No users found in the database. Scheduled check complete.")
+        return
 
-        logger.info(f"SCHEDULER: Found {games_to_check_count} games to check for updates based on user notification preferences.")
-        
-        for i, played_game_row_id in enumerate(played_game_ids_to_check):
-            logger.info(f"SCHEDULER: Processing game {i+1}/{games_to_check_count} (PlayedID: {played_game_row_id})")
-            check_single_game_update_and_status(db_path, f95_client, played_game_row_id)
-            # Optional: time.sleep(1) # Consider if API rate limiting becomes an issue despite client's proxy use
+    logger.info(f"SCHEDULER: Found {len(all_user_ids)} users to process.")
+
+    total_games_checked_for_all_users = 0
+
+    for user_id_to_check in all_user_ids:
+        logger.info(f"SCHEDULER: Processing user_id: {user_id_to_check}")
+        conn = None
+        games_to_check_for_this_user_count = 0
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
             
-    except sqlite3.Error as e:
-        logger.error(f"SCHEDULER: Database error during scheduled_games_update_check: {e}", exc_info=True)
-    except Exception as e:
-        logger.error(f"SCHEDULER: Unexpected error during scheduled_games_update_check: {e}", exc_info=True)
-    finally:
-        if conn:
-            conn.close()
-        logger.info(f"--- Scheduled games update check finished (processed {games_to_check_count} applicable games) ---")
+            cursor.execute("""
+                SELECT upg.id 
+                FROM user_played_games upg
+                JOIN games g ON upg.game_id = g.id
+                WHERE upg.user_id = ? 
+                  AND upg.notify_for_updates = 1 
+                  AND (g.completed_status IS NULL OR g.completed_status NOT IN ('COMPLETED', 'ABANDONED')) 
+            """, (user_id_to_check,)) # Added user_id filter, also don't re-check ABANDONED
+            
+            played_game_ids_for_user = [row[0] for row in cursor.fetchall()]
+            games_to_check_for_this_user_count = len(played_game_ids_for_user)
+            
+            if not played_game_ids_for_user:
+                logger.info(f"SCHEDULER: No games to check for user_id {user_id_to_check} based on preferences and status.")
+                continue
+
+            logger.info(f"SCHEDULER: Found {games_to_check_for_this_user_count} games to check for user_id {user_id_to_check}.")
+            
+            for i, played_game_row_id in enumerate(played_game_ids_for_user):
+                logger.info(f"SCHEDULER (User: {user_id_to_check}): Processing game {i+1}/{games_to_check_for_this_user_count} (PlayedID: {played_game_row_id})")
+                check_single_game_update_and_status(db_path, f95_client, played_game_row_id, user_id_to_check)
+                total_games_checked_for_all_users +=1
+                # Optional: time.sleep(1) 
+                
+        except sqlite3.Error as e:
+            logger.error(f"SCHEDULER: Database error during processing for user_id {user_id_to_check}: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"SCHEDULER: Unexpected error during processing for user_id {user_id_to_check}: {e}", exc_info=True)
+        finally:
+            if conn:
+                conn.close()
+    
+    logger.info(f"--- Scheduled games update check finished for all users (processed {total_games_checked_for_all_users} applicable games across all users) ---")
 
 # --- Main Execution ---
 if __name__ == "__main__":
     logger.info("F95Zone Update Checker - Application Started")
 
-    # Load environment variables - No longer needed for credentials
-    # if not load_dotenv(ENV_FILE_PATH):
-    #     logger.error(f"Failed to load {ENV_FILE_PATH}. Please ensure it exists with credentials.")
-    #     exit(1)
-    #
-    # f95_username = os.getenv("F95_USERNAME")
-    # f95_password = os.getenv("F95_PASSWORD")
-    #
-    # if not f95_username or not f95_password:
-    #     logger.error("F95_USERNAME or F95_PASSWORD not found in environment variables.")
-    #     exit(1)
-    # logger.info("Credentials loaded successfully.")
-
     # Initialize F95APIClient
     client = F95ApiClient() # No credentials passed
     
     try:
-        # Login - No longer needed
-        # logger.info(f"Attempting to log in as {f95_username}...")
-        # login_result = client.login(f95_username, f95_password)
-        #
-        # if not login_result.get('success'):
-        #     logger.error(f"Login failed: {login_result.get('message', 'Unknown error')}")
-        #     exit(1)
-        # logger.info("Login successful.")
-
         # Initialize Database
-        initialize_database(DB_PATH)
+        initialize_database(DB_PATH) # This creates tables including users.
+                                     # It does not create the initial admin user. app.py does that on its startup.
 
-        # Process RSS Feed for general updates
+        # Process RSS Feed for general updates (global games table)
         process_rss_feed(DB_PATH, client)
 
-        # Update completion statuses
+        # Update completion statuses (global games table)
         update_completion_statuses(DB_PATH, client)
 
-        # Check for notifications
-        notifications = check_for_my_updates(DB_PATH)
-        if notifications:
-            logger.info(f"--- {len(notifications)} UPDATES/NOTIFICATIONS FOUND ---")
-            for notif in notifications:
-                logger.info(f"Notification for Game: '{notif['game_name']}' (Played ID: {notif['played_game_id']})")
-                logger.info(f"  URL: {notif['game_url']}")
-                logger.info(f"  Current Version: {notif['current_version']}, Status: {notif['current_completed_status']}")
-                for reason in notif['reasons']:
-                    logger.info(f"  - {reason}")
-                
-                # In a real app, send notification here. 
-                # For now, we'll just log and then update the notified status immediately.
-                update_last_notified_status(DB_PATH, 
-                                            notif['played_game_id'], 
-                                            notif['new_notified_version'], 
-                                            notif['new_notified_rss_pub_date'], 
-                                            notif['new_notified_completed_status'])
-            logger.info("--- FINISHED PROCESSING NOTIFICATIONS ---")
+        # The following check_for_my_updates and notification sending is now per-user,
+        # and typically handled by the scheduled job or UI, not directly in __main__.
+        # This section can be removed or adapted if a specific user's check is needed here for CLI.
+        # For now, commenting out the user-specific part that would require a user_id.
+        """
+        # Example: Check for updates for a specific user (e.g., first admin) if needed for CLI testing
+        primary_admin_id = get_primary_admin_user_id(DB_PATH)
+        if primary_admin_id:
+            logger.info(f"CLI: Checking updates for primary admin user (ID: {primary_admin_id})...")
+            notifications = check_for_my_updates(DB_PATH, user_id=primary_admin_id)
+            if notifications:
+                logger.info(f"--- {len(notifications)} UPDATES/NOTIFICATIONS FOUND for user {primary_admin_id} ---")
+                for notif in notifications:
+                    logger.info(f"Notification for Game: '{notif['game_name']}' (Played ID: {notif['played_game_id']})")
+                    logger.info(f"  URL: {notif['game_url']}")
+                    logger.info(f"  Current Version: {notif['current_version']}, Status: {notif['current_completed_status']}")
+                    for reason in notif['reasons']:
+                        logger.info(f"  - {reason}")
+                    
+                    # Send Pushover (using user_id) and update notified status
+                    send_pushover_notification(DB_PATH,
+                                               user_id=primary_admin_id,
+                                               title=f"Update: {notif['game_name']}",
+                                               message="\\n".join(notif['reasons']),
+                                               url=notif['game_url'],
+                                               url_title=f"View {notif['game_name']}")
+                    update_last_notified_status(DB_PATH,
+                                                user_id=primary_admin_id,
+                                                played_game_id=notif['played_game_id'], 
+                                                version=notif['new_notified_version'], 
+                                                rss_pub_date=notif['new_notified_rss_pub_date'], 
+                                                completed_status=notif['new_notified_completed_status'])
+                logger.info(f"--- FINISHED PROCESSING NOTIFICATIONS for user {primary_admin_id} ---")
+            else:
+                logger.info(f"No new updates or notifications for user {primary_admin_id}.")
         else:
-            logger.info("No new updates or notifications for your played games.")
-
+            logger.info("CLI: No primary admin user found to check updates for in __main__.")
+        """
     except Exception as e:
         logger.error(f"An unexpected error occurred in the main execution block: {e}", exc_info=True)
     finally:

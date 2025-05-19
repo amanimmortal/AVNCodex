@@ -8,8 +8,11 @@
 </head>
 <body>
     <div class="top-bar">
-        <a href="{{ url_for('index') }}">AVN Codex</a>
-        <a href="{{ url_for('search') }}">Search Games</a>
+        <div>
+            <a href="{{ url_for('index') }}">AVN Codex</a>
+            <a href="{{ url_for('search') }}">Search Games</a>
+        </div>
+        <div class="user-actions">
         {% if g.user %}
             <span>Logged in as: {{ g.user.username }}</span>
             <a href="{{ url_for('settings_route') }}">Settings</a>
@@ -18,6 +21,7 @@
             <a href="{{ url_for('login_route') }}">Login</a>
             <a href="{{ url_for('register_route') }}">Register</a>
         {% endif %}
+        </div>
     </div>
 
     <div class="container-fluid">
@@ -35,6 +39,9 @@
                     <li><a href="{{ url_for('search') }}">Search & Add New Game</a></li>
                     {% if g.user %}
                     <li><a href="{{ url_for('settings_route') }}">Settings</a></li>
+                    {% if g.user.is_admin %}
+                    <li><a href="{{ url_for('admin_users_route') }}">User Management</a></li>
+                    {% endif %}
                     {% endif %}
                     {# User management link for admin could go here later #}
                 </ul>

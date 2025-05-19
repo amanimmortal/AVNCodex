@@ -18,6 +18,7 @@
     <div class="search-form">
         <form method="POST" action="{{ url_for('search') }}" id="searchGameForm">
             <input type="text" name="search_term" placeholder="Enter game name..." value="{{ search_term if search_term else '' }}">
+            <p class="form-text search-help-text">Tip: For best results, try 1-2 main keywords. Short common words (e.g., 'a', 'in', 'the') may be ignored by the search.</p>
             <button type="submit" class="btn btn-primary" id="searchButton">Search</button>
         </form>
     </div>
@@ -47,32 +48,38 @@
                                 <p class="text-muted">Published: {{ game.rss_pub_date.split(' ')[1:4]|join(' ') if game.rss_pub_date else 'N/A' }}</p>
                             </div>
                             <div class="card-actions">
-                                <form method="POST" action="{{ url_for('add_game_to_user_list') }}" style="width:100%;" onsubmit="handleAddToList(this)">
-                                    <input type="hidden" name="game_name" value="{{ game.name }}">
-                                    <input type="hidden" name="f95_url" value="{{ game.url }}">
-                                    <input type="hidden" name="version" value="{{ game.version if game.version else '' }}">
-                                    <input type="hidden" name="author" value="{{ game.author if game.author else '' }}">
-                                    <input type="hidden" name="image_url" value="{{ game.image_url if game.image_url else '' }}">
-                                    <input type="hidden" name="rss_pub_date" value="{{ game.rss_pub_date if game.rss_pub_date else '' }}">
-                                    
-                                    <div class="form-group">
-                                        <label for="user_notes_{{ loop.index }}">Notes:</label>
-                                        <textarea name="user_notes" id="user_notes_{{ loop.index }}" rows="2"></textarea>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="user_rating_{{ loop.index }}">Rating:</label>
-                                        <select class="form-select form-select-sm" id="user_rating_{{ loop.index }}" name="user_rating">
-                                            <option value="" selected>Not Rated</option>
-                                            <option value="0">0 Stars (Worst)</option>
-                                            <option value="1">1 Star</option>
-                                            <option value="2">2 Stars</option>
-                                            <option value="3">3 Stars</option>
-                                            <option value="4">4 Stars</option>
-                                            <option value="5">5 Stars (Best)</option>
-                                        </select>
-                                    </div>
-                                    <button type="submit" class="btn btn-success">Add to My List</button>
-                                </form>
+                                {% if game.is_already_in_list %}
+                                    <button type="button" class="btn btn-secondary" disabled>Already in Your List</button>
+                                    {# Optionally, add a link to view/edit it in their list #}
+                                    {# <a href="{{ url_for('edit_details_route', played_game_id=THE_ID_IF_WE_HAD_IT) }}" class="btn btn-info btn-sm">View/Edit</a> #}
+                                {% else %}
+                                    <form method="POST" action="{{ url_for('add_game_to_user_list') }}" style="width:100%;" onsubmit="handleAddToList(this)">
+                                        <input type="hidden" name="game_name" value="{{ game.name }}">
+                                        <input type="hidden" name="f95_url" value="{{ game.url }}">
+                                        <input type="hidden" name="version" value="{{ game.version if game.version else '' }}">
+                                        <input type="hidden" name="author" value="{{ game.author if game.author else '' }}">
+                                        <input type="hidden" name="image_url" value="{{ game.image_url if game.image_url else '' }}">
+                                        <input type="hidden" name="rss_pub_date" value="{{ game.rss_pub_date if game.rss_pub_date else '' }}">
+                                        
+                                        <div class="form-group">
+                                            <label for="user_notes_{{ loop.index }}">Notes:</label>
+                                            <textarea name="user_notes" id="user_notes_{{ loop.index }}" rows="2"></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="user_rating_{{ loop.index }}">Rating:</label>
+                                            <select class="form-select form-select-sm" id="user_rating_{{ loop.index }}" name="user_rating">
+                                                <option value="" selected>Not Rated</option>
+                                                <option value="0">0 Stars (Worst)</option>
+                                                <option value="1">1 Star</option>
+                                                <option value="2">2 Stars</option>
+                                                <option value="3">3 Stars</option>
+                                                <option value="4">4 Stars</option>
+                                                <option value="5">5 Stars (Best)</option>
+                                            </select>
+                                        </div>
+                                        <button type="submit" class="btn btn-success">Add to My List</button>
+                                    </form>
+                                {% endif %}
                             </div>
                         </div> {# End card-body-content #}
                     </article>

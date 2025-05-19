@@ -3,3 +3,6 @@ debug.log
 dist/
 .dccache
 .eslintcache
+
+# Application data (database, logs, etc.)
+data/
