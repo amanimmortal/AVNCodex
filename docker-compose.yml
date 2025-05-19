@@ -11,5 +11,4 @@ services:
       - ./data:/data  # Changed from named volume to bind mount
     restart: unless-stopped
 
-volumes:
-  avn_codex_data: 
+# Removed unused named volume declaration 
