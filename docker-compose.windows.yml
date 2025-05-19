@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/data  # Changed from named volume to bind mount
+    restart: unless-stopped
+
+# Removed unused named volume declaration 
