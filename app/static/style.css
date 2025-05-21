@@ -38,12 +38,12 @@ body {
 .container-fluid {
     display: flex;
     padding: 15px;
-    max-width: 1400px; /* Standard max-width, can be adjusted */
+    max-width: 1600px; /* Increased from 1400px */
     margin: 0 auto; /* Centers the container */
 }
 
 .main-content {
-    flex: 3; /* Takes up more space */
+    flex: 4; /* Takes up more space (4/5 of total if sidebar is flex: 1) */
     padding-right: 15px;
 }
 
@@ -479,14 +479,15 @@ body {
 
 #played-games-list.grid-view {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); /* Adjusted for 4 columns in wider main-content */
     gap: 1rem;
 }
 
 #played-games-list.grid-view .game-card {
     display: flex;
     flex-direction: column;
-    width: 100%; /* Full width of grid cell */
+    width: 100%; /* Make card take full width of its grid cell */
+    /* max-width: none; */ /* Ensure no prior max-width on game-card itself is limiting it in grid */
 }
 
 #played-games-list.grid-view .card-banner-area {
@@ -569,10 +570,22 @@ body {
     margin-right: auto;
 }
 
+/* Header for Monitored Games and Toggle Button */
+.played-games-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem; /* Matches Bootstrap mb-3 */
+}
+
+.played-games-header h2 {
+    margin-bottom: 0; /* Remove default h2 margin if a flex child */
+}
+
 /* Responsive Adjustments */
 @media (max-width: 992px) { /* Medium devices (tablets, less than 992px) */
     #played-games-list.grid-view {
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); /* Adjusted */
     }
     #played-games-list.list-view .card-banner-area {
         flex: 0 0 150px; 
@@ -643,6 +656,24 @@ body {
     #toggle-view-btn {
         width: 100%;
     }
+    body {
+        overflow-x: hidden; /* Prevent horizontal scroll on mobile */
+    }
+
+    .played-games-header {
+        flex-direction: column;
+        align-items: stretch; /* Make h2 and button full width when stacked */
+    }
+
+    .played-games-header h2 {
+        margin-bottom: 0.5rem; /* Space between stacked h2 and button */
+        text-align: center;
+    }
+
+    #toggle-view-btn {
+        width: 100%; /* Make button full width when stacked */
+        margin-bottom: 1rem; /* Space below button before list */
+    }
 }
 
 @media (max-width: 576px) { /* Extra small devices (portrait phones, less than 576px) */
@@ -660,4 +691,39 @@ body {
         font-size: 0.8rem;
         padding: 0.25rem 0.5rem;
     }
+}
+
+#played-games-list.grid-view .card-details h3 {
+    font-size: 1.2rem; /* Consistent font size */
+    line-height: 1.4;  /* Set for consistent calculation */
+    height: calc(1.2rem * 1.4 * 2); /* Height for 2 lines of title */
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2; /* Number of lines to show */
+    -webkit-box-orient: vertical;
+    margin-top: 0; /* Match general .card-details h3 */
+    margin-bottom: 0.5rem; /* Match general .card-details h3 */
+}
+
+#played-games-list.grid-view .card-details h3 a {
+    color: #e0e0e0; /* Match general style */
+    text-decoration: none; /* Match general style */
+    /* display: block; Might be needed if 'a' is the direct element for ellipsis and h3 has padding */
+}
+
+#played-games-list.grid-view .card-actions {
+    /* display: flex; align-items: center; gap: 0.5rem are inherited or set by general .card-actions */
+    flex-wrap: nowrap; /* Prevent wrapping of buttons */
+    justify-content: flex-start; /* Align items to the start, delete-form will push itself right */
+}
+
+/* The general .card-actions .delete-form { margin-left: auto; } should still apply */
+
+#played-games-list.grid-view .card-actions .btn,
+#played-games-list.grid-view .card-actions form button.btn {
+    padding: 0.3rem 0.6rem; /* Slightly reduce padding */
+    font-size: 0.85em; /* Slightly reduce font size */
+    white-space: nowrap; /* Ensure button text doesn't wrap */
+    flex-shrink: 1; /* Allow buttons to shrink if space is very tight */
+    /* flex-grow: 0; is inherited from general .card-actions .btn */
 } 
