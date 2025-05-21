@@ -34,3 +34,46 @@ ul.pagination > li > a {
     align-items: center;
     gap: 25px;
 }
+
+.paginator-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+#pagination-content.grid-view {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 25px;
+}
+
+#pagination-content.list-view {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+}
+
+@media (max-width: 900px) {
+    .paginator-container {
+        max-width: 100%;
+        padding: 0 5px;
+    }
+    #pagination-content.grid-view {
+        gap: 12px;
+    }
+}
+
+@media (max-width: 600px) {
+    #pagination-content.grid-view,
+    #pagination-content.list-view {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    .paginator-container {
+        padding: 0 2px;
+    }
+}

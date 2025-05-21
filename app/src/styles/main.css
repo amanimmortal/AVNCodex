@@ -163,3 +163,21 @@ input[type="text"]:not(.browser-default):focus:not([readonly]) {
 input[type="text"]:not(.browser-default):focus:not([readonly]) + label {
   color: var(--secondary-app) !important;
 }
+
+@media (max-width: 600px) {
+    .input-field.col.s9 {
+        width: 100% !important;
+        max-width: 100%;
+        display: block;
+        margin-bottom: 10px;
+    }
+    #main-games-tab > .input-field {
+        width: 100%;
+        max-width: 100%;
+        display: block;
+    }
+    #toggle-view-btn {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+}

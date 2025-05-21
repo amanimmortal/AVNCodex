@@ -62,6 +62,11 @@ class CardPaginator extends HTMLElement {
          * @type Boolean
          */
         this._isLoading = false;
+        /**
+         * Current view of the paginator
+         * @type String
+         */
+        this._currentView = 'list';
     }
 
     //#region Properties
@@ -100,6 +105,35 @@ class CardPaginator extends HTMLElement {
         // Prepare DOM
         this._prepareDOM();
         window.API.log.info("Paginator connected to DOM");
+
+        // Set up view toggle
+        this._currentView = 'list';
+        this._updateViewClass();
+        const toggleBtn = document.getElementById('toggle-view-btn');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => {
+                // On mobile, always use list view
+                if (window.innerWidth <= 600) return;
+                this._currentView = this._currentView === 'list' ? 'grid' : 'list';
+                this._updateViewClass();
+                // Update button text/icon
+                if (this._currentView === 'grid') {
+                    toggleBtn.innerHTML = '<i class="material-icons left">view_list</i>Switch to List View';
+                } else {
+                    toggleBtn.innerHTML = '<i class="material-icons left">view_module</i>Switch to Grid View';
+                }
+            });
+        }
+        // Listen for resize to force list view on mobile
+        window.addEventListener('resize', () => {
+            if (window.innerWidth <= 600 && this._currentView !== 'list') {
+                this._currentView = 'list';
+                this._updateViewClass();
+                if (toggleBtn) {
+                    toggleBtn.innerHTML = '<i class="material-icons left">view_module</i>Switch to Grid View';
+                }
+            }
+        });
     }
 
     //#region Events
@@ -781,6 +815,22 @@ class CardPaginator extends HTMLElement {
     //#endregion Creation
 
     //#endregion Private methods
+
+    //#region View toggle
+    /**
+     * @private
+     * Update the view class of the content based on the current view
+     */
+    _updateViewClass() {
+        if (!this.content) return;
+        this.content.classList.remove('grid-view', 'list-view');
+        if (this._currentView === 'grid' && window.innerWidth > 600) {
+            this.content.classList.add('grid-view');
+        } else {
+            this.content.classList.add('list-view');
+        }
+    }
+    //#endregion View toggle
 }
 
 // Let the browser know that <card-paginator> is served by our new class

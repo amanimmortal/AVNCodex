@@ -3,6 +3,12 @@
 {% block title %}My Monitored Games - AVN Codex{% endblock %}
 
 {% block main_content %}
+    {# Hidden div to pass data to JavaScript #}
+    <div id="app-config" 
+         data-pushover-config-missing="{{ pushover_config_missing|tojson }}" 
+         data-settings-url="{{ url_for('settings_route') }}"
+         style="display: none;"></div>
+
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             <ul class="flash-messages">
@@ -32,82 +38,88 @@
         </section>
     {% endif %}
 
-    <section class="played-games-list">
-        <h2>My Monitored Games ({{ played_games|length }})</h2>
-        {% if played_games or current_filters.name_filter or current_filters.min_rating_filter != 'any' %}
-            {# Show list if there are games OR if filters are active (to show 'no results' message) #}
-            {% if played_games %}
-            <div> {# Changed ul to div for more flexible card layout #}
-                {% for game in played_games %}
-                    <article class="card">
-                        <div class="card-banner-area">
-                            {% if game.image_url %}
-                                <img src="{{ game.image_url }}" alt="{{ game.name }}" class="card-image-banner">
-                            {% else %}
-                                <div class="card-image-banner-placeholder">{{ game.name }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="card-body-content"> {# Wrapper for details, content, actions #}
-                            <div class="card-details">
-                                <h3>
-                                    <a href="{{ game.f95_url }}" target="_blank">{{ game.name }}</a>
-                                    {% if game.completed_status %}
-                                        <span class="game-status-tag status-{{ game.completed_status.lower().replace(' ', '_') }}">
-                                            {{ game.completed_status.replace('_', ' ')|title }}
-                                        </span>
-                                    {% endif %}
-                                </h3>
-                                <p><strong>Version:</strong> {{ game.version if game.version else 'N/A' }}</p>
-                                <p><strong>Author:</strong> {{ game.author if game.author else 'N/A' }}</p>
-                                <p class="text-muted">Last Updated: {{ game.last_updated_in_db.split('T')[0] if game.last_updated_in_db else 'N/A' }}</p>
-                            </div>
-                            <div class="card-content">
-                                 <p><strong>Added:</strong> {{ game.date_added_to_played_list.split('T')[0] if game.date_added_to_played_list else 'N/A'}}</p>
-                                 <p><strong>Rating:</strong> {{ '%d'|format(game.user_rating|int) if game.user_rating is not none else 'Not Rated' }} / 5</p>
-                                 <p><strong>Notes:</strong> {{ game.user_notes if game.user_notes else 'No notes.' }}</p>
-                                 <p class="text-muted">Notify: {{ 'Yes' if game.notify_for_updates else 'No' }}</p>
-                            </div>
-                            <div class="card-actions">
-                                <a href="{{ url_for('edit_details_route', played_game_id=game.played_game_id) }}" class="btn btn-primary btn-sm">Edit Details</a> 
-                                
-                                {# Manual Sync Button - next to Edit #}
-                                <form action="{{ url_for('manual_sync_route', played_game_id=game.played_game_id) }}" method="POST" style="display: inline-block; margin-left: 5px;">
-                                    <button type="submit" class="btn btn-sm btn-secondary sync-btn">
-                                        <span class="sync-text">Sync</span>
-                                        <span class="sync-spinner" style="display: none;">
-                                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                                            Syncing...
-                                        </span>
-                                    </button>
-                                </form>
+    <section class="played-games-section">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>My Monitored Games ({{ played_games|length }})</h2>
+            <button id="toggle-view-btn" class="btn btn-outline-secondary btn-sm">
+                Switch to Grid View
+            </button>
+        </div>
 
-                                {# Acknowledge Update Button - conditionally shown next to Edit #}
-                                {% set needs_acknowledgement = (
-                                    (game.version is not none and game.version != game.user_acknowledged_version) or 
-                                    (game.rss_pub_date is not none and game.rss_pub_date != game.user_acknowledged_rss_pub_date) or 
-                                    (game.completed_status is not none and game.completed_status != game.user_acknowledged_completion_status)
-                                ) %}
-                                {% if needs_acknowledgement %}
-                                <form method="POST" action="{{ url_for('acknowledge_update_route', played_game_id=game.played_game_id) }}" class="acknowledge-form">
-                                    <button type="submit" class="btn btn-info btn-sm">Acknowledge Update</button>
-                                </form>
+        <div id="played-games-list" class="list-view"> {# Default to list-view #}
+            {% if played_games or current_filters.name_filter or current_filters.min_rating_filter != 'any' %}
+                {# Show list if there are games OR if filters are active (to show 'no results' message) #}
+                {% if played_games %}
+                    {% for game in played_games %}
+                        <article class="card game-card">
+                            <div class="card-banner-area">
+                                {% if game.image_url %}
+                                    <img src="{{ game.image_url }}" alt="{{ game.name }}" class="card-image-banner">
+                                {% else %}
+                                    <div class="card-image-banner-placeholder">{{ game.name }}</div>
                                 {% endif %}
-
-                                {# Delete Button - pushed to the right #}
-                                <form method="POST" action="{{ url_for('delete_game_route', played_game_id=game.played_game_id) }}" class="delete-form" onsubmit="return confirm('Are you sure you want to remove this game from your list? This action cannot be undone.');">
-                                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                                </form>
                             </div>
-                        </div> {# End card-body-content #}
-                    </article>
-                {% endfor %}
-            </div>
+                            <div class="card-body-content"> {# Wrapper for details, content, actions #}
+                                <div class="card-details">
+                                    <h3>
+                                        <a href="{{ game.f95_url }}" target="_blank">{{ game.name }}</a>
+                                        {% if game.completed_status %}
+                                            <span class="game-status-tag status-{{ game.completed_status.lower().replace(' ', '_') }}">
+                                                {{ game.completed_status.replace('_', ' ')|title }}
+                                            </span>
+                                        {% endif %}
+                                    </h3>
+                                    <p><strong>Version:</strong> {{ game.version if game.version else 'N/A' }}</p>
+                                    <p><strong>Author:</strong> {{ game.author if game.author else 'N/A' }}</p>
+                                    <p class="text-muted">Last Updated: {{ game.last_updated_in_db.split('T')[0] if game.last_updated_in_db else 'N/A' }}</p>
+                                </div>
+                                <div class="card-content">
+                                     <p><strong>Added:</strong> {{ game.date_added_to_played_list.split('T')[0] if game.date_added_to_played_list else 'N/A'}}</p>
+                                     <p><strong>Rating:</strong> {{ '%d'|format(game.user_rating|int) if game.user_rating is not none else 'Not Rated' }} / 5</p>
+                                     <p><strong>Notes:</strong> {{ game.user_notes if game.user_notes else 'No notes.' }}</p>
+                                     <p class="text-muted">Notify: {{ 'Yes' if game.notify_for_updates else 'No' }}</p>
+                                </div>
+                                <div class="card-actions">
+                                    <a href="{{ url_for('edit_details_route', played_game_id=game.played_game_id) }}" class="btn btn-primary btn-sm">Edit Details</a> 
+                                    
+                                    {# Manual Sync Button - next to Edit #}
+                                    <form action="{{ url_for('manual_sync_route', played_game_id=game.played_game_id) }}" method="POST" style="display: inline-block; margin-left: 5px;">
+                                        <button type="submit" class="btn btn-sm btn-secondary sync-btn">
+                                            <span class="sync-text">Sync</span>
+                                            <span class="sync-spinner" style="display: none;">
+                                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                                Syncing...
+                                            </span>
+                                        </button>
+                                    </form>
+    
+                                    {# Acknowledge Update Button - conditionally shown next to Edit #}
+                                    {% set needs_acknowledgement = (
+                                        (game.version is not none and game.version != game.user_acknowledged_version) or 
+                                        (game.rss_pub_date is not none and game.rss_pub_date != game.user_acknowledged_rss_pub_date) or 
+                                        (game.completed_status is not none and game.completed_status != game.user_acknowledged_completion_status)
+                                    ) %}
+                                    {% if needs_acknowledgement %}
+                                    <form method="POST" action="{{ url_for('acknowledge_update_route', played_game_id=game.played_game_id) }}" class="acknowledge-form">
+                                        <button type="submit" class="btn btn-info btn-sm">Acknowledge Update</button>
+                                    </form>
+                                    {% endif %}
+    
+                                    {# Delete Button - pushed to the right #}
+                                    <form method="POST" action="{{ url_for('delete_game_route', played_game_id=game.played_game_id) }}" class="delete-form" onsubmit="return confirm('Are you sure you want to remove this game from your list? This action cannot be undone.');">
+                                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                    </form>
+                                </div>
+                            </div> {# End card-body-content #}
+                        </article>
+                    {% endfor %}
+                {% else %}
+                    <p>No games found. Please clear filters or add more games.</p>
+                {% endif %}
             {% else %}
-                <p>No games found. Please clear filters or add more games.</p>
+                <p>No games found. Please add more games or use filters.</p>
             {% endif %}
-        {% else %}
-            <p>No games found. Please add more games or use filters.</p>
-        {% endif %}
+        </div> {# End #played-games-list #}
     </section>
 {% endblock %}
 
@@ -157,24 +169,5 @@
 
 {% block scripts %}
 {{ super() }} {# Include scripts from base if any #}
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const pushoverConfigMissing = {{ pushover_config_missing|tojson }};
-
-        document.querySelectorAll('.sync-btn').forEach(button => {
-            button.closest('form').addEventListener('submit', function() {
-                const btn = this.querySelector('.sync-btn');
-                btn.querySelector('.sync-text').style.display = 'none';
-                btn.querySelector('.sync-spinner').style.display = 'inline-block';
-                btn.disabled = true;
-            });
-        });
-
-        if (pushoverConfigMissing) {
-            if (window.confirm("Pushover notification details are not configured. Would you like to go to the settings page to add them?")) {
-                window.location.href = "{{ url_for('settings_route') }}";
-            }
-        }
-    });
-</script>
+<script src="{{ url_for('static', filename='js/main-index.js') }}"></script>
 {% endblock %} 

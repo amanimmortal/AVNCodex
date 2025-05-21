@@ -6,8 +6,13 @@
 #gc-preview {
     background-color: var(--primary-gc);
     object-fit: cover;
-    width: 300px;
-    height: 200px;
+    width: 100%;
+    max-width: 400px;
+    aspect-ratio: 4 / 1;
+    height: auto;
+    max-height: 100px;
+    display: block;
+    margin: 0 auto;
 }
 
 /* Handles colors for the texts */
@@ -66,7 +71,9 @@
 
 /* Handles properties for the entire body */
 .card {
-    max-width: 300px;
+    max-width: 400px;
+    width: 100%;
+    margin: 0 auto 16px auto;
     background-color: var(--primary-gc) !important;
     font-family: Roboto;
 }
@@ -101,4 +108,26 @@ div.progress {
 
 .progress .indeterminate {
     background-color: var(--secondary-app) !important;
+}
+
+@media (max-width: 900px) {
+    #gc-preview {
+        max-width: 100%;
+        max-height: 75px;
+    }
+    .card {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 600px) {
+    #gc-preview {
+        max-width: 100%;
+        max-height: 60px;
+    }
+    .card {
+        max-width: 100%;
+        width: 100%;
+        margin: 0 0 10px 0;
+    }
 }
