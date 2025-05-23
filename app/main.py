@@ -715,7 +715,7 @@ def get_my_played_games(db_path: str,
         # Validate sort_by and sort_order to prevent SQL injection
         allowed_sort_columns = {
             'name': 'g.name',
-            'last_updated': 'g.last_updated_in_db',
+            'last_updated': 'g.rss_pub_date', # Changed to use rss_pub_date
             'date_added': 'upg.date_added_to_played_list',
             'rating': 'upg.user_rating' # Added rating sort
         }
