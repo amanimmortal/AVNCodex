@@ -11,6 +11,7 @@ import sqlite3
 import logging
 import os
 from datetime import datetime, timezone, timedelta # Ensure all are imported
+from email.utils import parsedate_to_datetime # Added for RSS date parsing
 from dotenv import load_dotenv
 from f95apiclient import F95ApiClient # Assuming f95apiclient is in PYTHONPATH or installed
 from typing import Optional, Set # Added Set
@@ -726,8 +727,24 @@ def get_my_played_games(db_path: str,
         
         cursor.execute(base_query, tuple(params))
         rows = cursor.fetchall()
-        for row in rows:
-            games_list.append(dict(row))
+        for row_data in rows:
+            game_dict = dict(row_data)
+            raw_pub_date_str = game_dict.get('rss_pub_date')
+            if raw_pub_date_str:
+                try:
+                    dt_obj = parsedate_to_datetime(raw_pub_date_str)
+                    # Ensure dt_obj is UTC
+                    if dt_obj.tzinfo is None or dt_obj.tzinfo.utcoffset(dt_obj) is None:
+                        dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+                    else:
+                        dt_obj = dt_obj.astimezone(timezone.utc)
+                    game_dict['rss_pub_date'] = dt_obj.strftime('%a, %d %b %Y %H:%M') + ' UTC'
+                except (TypeError, ValueError) as e:
+                    logger.warning(f"Could not parse rss_pub_date '{raw_pub_date_str}' for game {game_dict.get('name', 'Unknown')}: {e}")
+                    game_dict['rss_pub_date'] = 'Invalid Date' 
+            else:
+                game_dict['rss_pub_date'] = 'N/A'
+            games_list.append(game_dict)
         logger.info(f"Retrieved {len(games_list)} games from user's played list.")
     except sqlite3.Error as e:
         logger.error(f"Database error in get_my_played_games: {e}", exc_info=True)
@@ -768,8 +785,23 @@ def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) 
         """, (played_game_id, user_id)) # Added user_id to query
         row = cursor.fetchone()
         if row:
-            logger.info(f"Details found for played game ID: {played_game_id} (user_id: {user_id}) - {row['name']}")
-            return dict(row)
+            game_dict = dict(row)
+            raw_pub_date_str = game_dict.get('rss_pub_date')
+            if raw_pub_date_str:
+                try:
+                    dt_obj = parsedate_to_datetime(raw_pub_date_str)
+                    if dt_obj.tzinfo is None or dt_obj.tzinfo.utcoffset(dt_obj) is None:
+                        dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+                    else:
+                        dt_obj = dt_obj.astimezone(timezone.utc)
+                    game_dict['rss_pub_date'] = dt_obj.strftime('%a, %d %b %Y %H:%M') + ' UTC'
+                except (TypeError, ValueError) as e:
+                    logger.warning(f"Could not parse rss_pub_date '{raw_pub_date_str}' for game {game_dict.get('name', 'Unknown')} in details: {e}")
+                    game_dict['rss_pub_date'] = 'Invalid Date'
+            else:
+                game_dict['rss_pub_date'] = 'N/A'
+            logger.info(f"Details found for played game ID: {played_game_id} (user_id: {user_id}) - {game_dict['name']}")
+            return game_dict
         else:
             logger.warning(f"No game found with played_game_id: {played_game_id} for user_id: {user_id}")
             return None
