@@ -94,12 +94,7 @@
                                     </form>
     
                                     {# Acknowledge Update Button - conditionally shown next to Edit #}
-                                    {% set needs_acknowledgement = (
-                                        (game.version is not none and game.version != game.user_acknowledged_version) or 
-                                        (game.rss_pub_date is not none and game.rss_pub_date != game.user_acknowledged_rss_pub_date) or 
-                                        (game.completed_status is not none and game.completed_status != game.user_acknowledged_completion_status)
-                                    ) %}
-                                    {% if needs_acknowledgement %}
+                                    {% if game.needs_acknowledgement_flag %}
                                     <form method="POST" action="{{ url_for('acknowledge_update_route', played_game_id=game.played_game_id) }}" class="acknowledge-form">
                                         <button type="submit" class="btn btn-info btn-sm">Acknowledge Update</button>
                                     </form>

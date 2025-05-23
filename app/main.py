@@ -133,6 +133,22 @@ def initialize_database(db_path):
             )
         """)
         
+        # Check and add missing columns to user_played_games for older databases
+        cursor.execute("PRAGMA table_info(user_played_games)")
+        upg_columns = [column[1] for column in cursor.fetchall()]
+
+        if 'user_acknowledged_version' not in upg_columns:
+            cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_version TEXT")
+            logger.info("Added 'user_acknowledged_version' column to 'user_played_games' table.")
+        
+        if 'user_acknowledged_rss_pub_date' not in upg_columns:
+            cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_rss_pub_date TEXT")
+            logger.info("Added 'user_acknowledged_rss_pub_date' column to 'user_played_games' table.")
+
+        if 'user_acknowledged_completion_status' not in upg_columns:
+            cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_completion_status TEXT")
+            logger.info("Added 'user_acknowledged_completion_status' column to 'user_played_games' table.")
+        
         # Create app_settings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS app_settings (
@@ -729,6 +745,17 @@ def get_my_played_games(db_path: str,
         rows = cursor.fetchall()
         for row_data in rows:
             game_dict = dict(row_data)
+            
+            # Determine if acknowledgement is needed BEFORE formatting rss_pub_date for display
+            needs_ack = False
+            if game_dict.get('version') is not None and game_dict.get('version') != game_dict.get('user_acknowledged_version'):
+                needs_ack = True
+            if not needs_ack and game_dict.get('rss_pub_date') is not None and game_dict.get('rss_pub_date') != game_dict.get('user_acknowledged_rss_pub_date'):
+                needs_ack = True
+            if not needs_ack and game_dict.get('completed_status') is not None and game_dict.get('completed_status') != game_dict.get('user_acknowledged_completion_status'):
+                needs_ack = True
+            game_dict['needs_acknowledgement_flag'] = needs_ack
+
             raw_pub_date_str = game_dict.get('rss_pub_date')
             if raw_pub_date_str:
                 try:
@@ -786,6 +813,17 @@ def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) 
         row = cursor.fetchone()
         if row:
             game_dict = dict(row)
+            
+            # Determine if acknowledgement is needed BEFORE formatting rss_pub_date for display
+            needs_ack = False
+            if game_dict.get('version') is not None and game_dict.get('version') != game_dict.get('user_acknowledged_version'):
+                needs_ack = True
+            if not needs_ack and game_dict.get('rss_pub_date') is not None and game_dict.get('rss_pub_date') != game_dict.get('user_acknowledged_rss_pub_date'):
+                needs_ack = True
+            if not needs_ack and game_dict.get('completed_status') is not None and game_dict.get('completed_status') != game_dict.get('user_acknowledged_completion_status'):
+                needs_ack = True
+            game_dict['needs_acknowledgement_flag'] = needs_ack
+
             raw_pub_date_str = game_dict.get('rss_pub_date')
             if raw_pub_date_str:
                 try:
