@@ -42,8 +42,23 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.jobstores.base import JobLookupError
 
+# --- Early Initialization ---
+# Initialize the database (creates tables/adds columns if missing)
+initialize_database(DB_PATH)
+
+# Create the Flask app instance
 flask_app = Flask(__name__, template_folder='app/templates', static_folder='app/static')
 flask_app.secret_key = os.urandom(24) # Needed for flash messages
+
+# --- Further Initialization (after app object exists) ---
+# Create initial admin user if no users exist in the database
+# This needs to be after initialize_database.
+with flask_app.app_context(): # Ensures app context for DB operations like get_user_count
+    create_initial_admin_user_if_none_exists()
+
+# Start the scheduler (needs flask_app instance)
+# This should be done after the app and its config/context are available.
+start_or_reschedule_scheduler(flask_app)
 
 # Set Flask's logger level to DEBUG to ensure debug messages from app.main are processed
 flask_app.logger.setLevel(logging.DEBUG)
@@ -715,17 +730,12 @@ def admin_users_route():
     return render_template('admin_users.html', users=users)
 
 # @flask_app.route('/update_played_game/<int:played_game_id>', methods=['GET', 'POST'])
+# def update_played_game_route(played_game_id): # Placeholder - comment out if not implemented
+#     pass
 
 if __name__ == '__main__':
-    # Initialize the database if it doesn't exist or tables are missing
-    initialize_database(DB_PATH)
-    create_initial_admin_user_if_none_exists() # Create admin if no users
-    
-    # Removed explicit call to scheduled_games_update_check here
-    # The scheduler will now handle the first run shortly after startup.
-    
-    # Start the scheduler after app initialization
-    # Pass flask_app directly as the app_instance
-    start_or_reschedule_scheduler(flask_app)
+    # initialize_database(DB_PATH) # Moved to top-level
+    # create_initial_admin_user_if_none_exists() # Moved to top-level
+    # start_or_reschedule_scheduler(flask_app) # Moved to top-level
     
     flask_app.run(debug=True, host='0.0.0.0', port=5000) 
