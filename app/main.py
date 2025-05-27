@@ -737,19 +737,7 @@ def get_my_played_games(db_path: str,
                         min_rating_filter: Optional[float] = None, 
                         sort_by: str = 'name', 
                         sort_order: str = 'ASC') -> list[dict]:
-    """
-    Retrieves all games from the user's played list, joined with details from the main games table.
-    Supports filtering by name (partial match) and minimum rating,
-    and sorting by specified columns.
-
-    Args:
-        db_path: Path to the SQLite database.
-        user_id: ID of the user to filter games for.
-        name_filter: Optional string to filter games by name (case-insensitive partial match).
-        min_rating_filter: Optional float to filter games by minimum user rating (inclusive).
-        sort_by: Column to sort by. Allowed: 'name', 'last_updated', 'date_added'. Defaults to 'name'.
-        sort_order: Sort order. Allowed: 'ASC', 'DESC'. Defaults to 'ASC'.
-    """
+    logger.critical("ENTERING get_my_played_games FUNCTION NOW") # ADDED CRITICAL LOG
     logger.info(f"Fetching user's (user_id: {user_id}) played games list with filters: name='{name_filter}', min_rating='{min_rating_filter}', sort_by='{sort_by}', sort_order='{sort_order}'.")
     games_list = []
     conn = None
@@ -809,6 +797,7 @@ def get_my_played_games(db_path: str,
         
         cursor.execute(base_query, tuple(params))
         rows = cursor.fetchall()
+        logger.critical(f"get_my_played_games: BEFORE LOOP. Number of rows fetched: {len(rows)}") # ADDED CRITICAL LOG
         for row_data in rows:
             game_dict = dict(row_data)
 
