@@ -1317,13 +1317,32 @@ def update_last_notified_status(db_path: str, user_id: int, played_game_id: int,
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("""
+
+        # DEBUG: Check table info right before the problematic UPDATE
+        try:
+            print(f"DEBUG_UPDATE_NOTIFIED: Checking table_info for user_played_games just before UPDATE for played_game_id: {played_game_id}", file=sys.stderr)
+            cursor.execute("PRAGMA table_info(user_played_games)")
+            columns_in_update_notified = [column_info[1] for column_info in cursor.fetchall()]
+            print(f"DEBUG_UPDATE_NOTIFIED: Columns in user_played_games (from update_last_notified_status): {columns_in_update_notified}", file=sys.stderr)
+            if 'last_notified_completed_status' not in columns_in_update_notified:
+                print("DEBUG_UPDATE_NOTIFIED: CRITICAL - last_notified_completed_status IS MISSING right before UPDATE!", file=sys.stderr)
+            else:
+                print("DEBUG_UPDATE_NOTIFIED: last_notified_completion_status IS PRESENT right before UPDATE.", file=sys.stderr)
+        except Exception as e_pragma_un:
+            print(f"DEBUG_UPDATE_NOTIFIED: Error doing PRAGMA check: {e_pragma_un}", file=sys.stderr)
+
+        # Re-typing the column name carefully in the SQL query.
+        sql_update_query = """ 
             UPDATE user_played_games 
             SET last_notified_version = ?, 
                 last_notified_rss_pub_date = ?, 
                 last_notified_completed_status = ?
             WHERE id = ? AND user_id = ?
-        """, (version, rss_pub_date, completed_status, played_game_id, user_id)) # Added user_id
+        """
+        params_for_update = (version, rss_pub_date, completed_status, played_game_id, user_id)
+        
+        logger.debug(f"Executing SQL in update_last_notified_status: {sql_update_query} with params: {params_for_update}")
+        cursor.execute(sql_update_query, params_for_update)
         conn.commit()
         if cursor.rowcount > 0:
             logger.info(f"Successfully updated last_notified status for played_game_id {played_game_id}, user_id {user_id}.")

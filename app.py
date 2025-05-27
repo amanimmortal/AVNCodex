@@ -230,8 +230,15 @@ def run_scheduled_update_job():
                 process_rss_feed(DB_PATH, f95_client) 
                 update_completion_statuses(DB_PATH, f95_client)
                 
+                current_utc_timestamp_iso = datetime.now(timezone.utc).isoformat()
                 if primary_admin_id:
-                    set_setting(DB_PATH, 'last_master_data_sync_completed_at', datetime.now(timezone.utc).isoformat(), user_id=primary_admin_id)
+                    if set_setting(DB_PATH, 'last_master_data_sync_completed_at', current_utc_timestamp_iso, user_id=primary_admin_id):
+                        flask_app.logger.info(f"APScheduler: Successfully set last_master_data_sync_completed_at to {current_utc_timestamp_iso} for admin user {primary_admin_id}.")
+                    else:
+                        flask_app.logger.error(f"APScheduler: FAILED to set last_master_data_sync_completed_at for admin user {primary_admin_id}.")
+                else:
+                    flask_app.logger.warning("APScheduler: No primary_admin_id found, cannot set last_master_data_sync_completed_at.")
+                
                 flask_app.logger.info("APScheduler: Master data sync tasks completed.")
             except Exception as e_global_sync:
                 flask_app.logger.error(f"APScheduler: Error during global master data sync: {e_global_sync}", exc_info=True)
