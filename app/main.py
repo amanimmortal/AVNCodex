@@ -802,20 +802,18 @@ def get_my_played_games(db_path: str,
             game_dict = dict(row_data)
 
             # --- START DEBUG LOGGING FOR ACKNOWLEDGE BUTTON (ALL GAMES) ---
-            logger.debug(f"ACK_DEBUG_ALL (GameID: {game_dict.get('game_db_id')}, PlayedID: {game_dict.get('played_game_id')}) - Comparing for needs_ack:")
-            logger.debug(f"  g.version: '{game_dict.get('version')}' (type: {type(game_dict.get('version'))})")
-            logger.debug(f"  upg.user_acknowledged_version: '{game_dict.get('user_acknowledged_version')}' (type: {type(game_dict.get('user_acknowledged_version'))})")
-            logger.debug(f"  Version Match: {game_dict.get('version') == game_dict.get('user_acknowledged_version')}")
+            logger.info(f"ACK_INFO_ALL (GameID: {game_dict.get('game_db_id')}, PlayedID: {game_dict.get('played_game_id')}) - Comparing for needs_ack:")
+            logger.info(f"  g.version: '{game_dict.get('version')}' (type: {type(game_dict.get('version'))})")
+            logger.info(f"  upg.user_acknowledged_version: '{game_dict.get('user_acknowledged_version')}' (type: {type(game_dict.get('user_acknowledged_version'))})")
+            logger.info(f"  Version Match: {game_dict.get('version') == game_dict.get('user_acknowledged_version')}")
 
-            logger.debug(f"  g.rss_pub_date (raw from DB): '{game_dict.get('rss_pub_date')}' (type: {type(game_dict.get('rss_pub_date'))})")
-            logger.debug(f"  upg.user_acknowledged_rss_pub_date: '{game_dict.get('user_acknowledged_rss_pub_date')}' (type: {type(game_dict.get('user_acknowledged_rss_pub_date'))})")
-            # Note: The direct comparison for rss_pub_date happens with the raw DB value for g.rss_pub_date vs user_acknowledged_rss_pub_date
-            # The formatted version is only for display.
-            logger.debug(f"  Raw RSS Date Match (g.rss_pub_date vs upg.user_acknowledged_rss_pub_date): {game_dict.get('rss_pub_date') == game_dict.get('user_acknowledged_rss_pub_date')}")
+            logger.info(f"  g.rss_pub_date (raw from DB): '{game_dict.get('rss_pub_date')}' (type: {type(game_dict.get('rss_pub_date'))})")
+            logger.info(f"  upg.user_acknowledged_rss_pub_date: '{game_dict.get('user_acknowledged_rss_pub_date')}' (type: {type(game_dict.get('user_acknowledged_rss_pub_date'))})")
+            logger.info(f"  Raw RSS Date Match (g.rss_pub_date vs upg.user_acknowledged_rss_pub_date): {game_dict.get('rss_pub_date') == game_dict.get('user_acknowledged_rss_pub_date')}")
 
-            logger.debug(f"  g.completed_status: '{game_dict.get('completed_status')}' (type: {type(game_dict.get('completed_status'))})")
-            logger.debug(f"  upg.user_acknowledged_completion_status: '{game_dict.get('user_acknowledged_completion_status')}' (type: {type(game_dict.get('user_acknowledged_completion_status'))})")
-            logger.debug(f"  Status Match: {game_dict.get('completed_status') == game_dict.get('user_acknowledged_completion_status')}")
+            logger.info(f"  g.completed_status: '{game_dict.get('completed_status')}' (type: {type(game_dict.get('completed_status'))})")
+            logger.info(f"  upg.user_acknowledged_completion_status: '{game_dict.get('user_acknowledged_completion_status')}' (type: {type(game_dict.get('user_acknowledged_completion_status'))})")
+            logger.info(f"  Status Match: {game_dict.get('completed_status') == game_dict.get('user_acknowledged_completion_status')}")
             # --- END DEBUG LOGGING ---
             
             # Determine if acknowledgement is needed BEFORE formatting rss_pub_date for display
@@ -829,6 +827,9 @@ def get_my_played_games(db_path: str,
             if not needs_ack and game_dict.get('completed_status') != game_dict.get('user_acknowledged_completion_status'):
                 needs_ack = True
             game_dict['needs_acknowledgement_flag'] = needs_ack
+
+            # Also log the outcome of needs_ack determination
+            logger.info(f"ACK_INFO_ALL (GameID: {game_dict.get('game_db_id')}, PlayedID: {game_dict.get('played_game_id')}) - Final needs_ack: {needs_ack}")
 
             raw_pub_date_str = game_dict.get('rss_pub_date')
             if raw_pub_date_str and isinstance(raw_pub_date_str, str) and raw_pub_date_str.strip():
@@ -917,6 +918,9 @@ def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) 
             if not needs_ack and game_dict.get('completed_status') != game_dict.get('user_acknowledged_completion_status'):
                 needs_ack = True
             game_dict['needs_acknowledgement_flag'] = needs_ack
+
+            # Add logging for the outcome of needs_ack in get_my_played_game_details as well
+            logger.info(f"ACK_INFO_DETAILS (GameID: {game_dict.get('game_db_id')}, PlayedID: {game_dict.get('played_game_id')}) - Final needs_ack: {needs_ack}")
 
             raw_pub_date_str = game_dict.get('rss_pub_date')
             if raw_pub_date_str and isinstance(raw_pub_date_str, str) and raw_pub_date_str.strip():
