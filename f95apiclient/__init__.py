@@ -425,7 +425,7 @@ class F95ApiClient:
             self.is_logged_in = False
             return {'success': False, 'status_code': 'REQUEST_EXCEPTION', 'message': f"Login request failed: {e}"}
 
-    def get_latest_game_data_from_rss(self, limit=60, search_term: str = None, completion_status_filter: str = None) -> list[dict]:
+    def get_latest_game_data_from_rss(self, limit=90, search_term: str = None, completion_status_filter: str = None) -> list[dict]:
         """
         Fetches and parses game data from the F95Zone RSS feed using the new _make_request method.
         """

@@ -161,6 +161,15 @@ def initialize_database(db_path):
                 conn.commit()
                 logger.info("Added 'last_notified_completion_status' column to 'user_played_games' table.")
                 print("DEBUG_INIT_DB: Committed last_notified_completion_status.", file=sys.stderr)
+                
+                # Immediate re-check for this specific column
+                cursor.execute("PRAGMA table_info(user_played_games)")
+                rechecked_columns = [column_info[1] for column_info in cursor.fetchall()]
+                if 'last_notified_completion_status' in rechecked_columns:
+                    print("DEBUG_INIT_DB: CONFIRMED - 'last_notified_completion_status' IS PRESENT after specific add and commit.", file=sys.stderr)
+                else:
+                    print("DEBUG_INIT_DB: CRITICAL FAILURE - 'last_notified_completion_status' IS STILL MISSING after specific add and commit.", file=sys.stderr)
+
             except sqlite3.Error as e_alter_lncs:
                 print(f"DEBUG_INIT_DB: SQLITE ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs}", file=sys.stderr)
                 logger.error(f"SQLITE ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs}")
@@ -1351,10 +1360,10 @@ def update_last_notified_status(db_path: str, user_id: int, played_game_id: int,
             cursor.execute("PRAGMA table_info(user_played_games)")
             columns_in_update_notified = [column_info[1] for column_info in cursor.fetchall()]
             print(f"DEBUG_UPDATE_NOTIFIED: Columns in user_played_games (from update_last_notified_status): {columns_in_update_notified}", file=sys.stderr)
-            if 'last_notified_completed_status' not in columns_in_update_notified:
-                print("DEBUG_UPDATE_NOTIFIED: CRITICAL - last_notified_completed_status IS MISSING right before UPDATE!", file=sys.stderr)
+            if 'last_notified_completion_status' not in columns_in_update_notified:
+                print("DEBUG_UPDATE_NOTIFIED: CRITICAL - last_notified_completion_status IS MISSING right before UPDATE!", file=sys.stderr)
             else:
-                print("DEBUG_UPDATE_NOTIFIED: last_notified_completion_status IS PRESENT right before UPDATE.", file=sys.stderr)
+                print("DEBUG_UPDATE_NOTIFIED: 'last_notified_completion_status' IS PRESENT right before UPDATE.", file=sys.stderr)
         except Exception as e_pragma_un:
             print(f"DEBUG_UPDATE_NOTIFIED: Error doing PRAGMA check: {e_pragma_un}", file=sys.stderr)
 
@@ -1559,7 +1568,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
             logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' NOT FOUND in initial 'ongoing' check with search term '{search_term_for_rss}'. Will proceed to specific status checks.")
 
         has_primary_update = False # For version/date changes
-        name_changed, version_changed, date_changed = False, False, False
+        name_changed, version_changed, date_changed, author_changed, image_changed = False, False, False, False, False # Initialize all here
         new_name, new_version, new_author, new_image_url = None, None, None, None
         new_rss_pub_date_str = None
         new_rss_pub_date_dt = None # Initialize to None
@@ -1573,6 +1582,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
 
             # Robust date parsing for new_rss_pub_date_str
             if new_rss_pub_date_str and isinstance(new_rss_pub_date_str, str):
+                parsed_dt = None # Initialize parsed_dt
                 try:
                     # Remove 'Z' if present and ensure '+00:00' for fromisoformat
                     iso_date_str = new_rss_pub_date_str
@@ -1580,56 +1590,59 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                         iso_date_str = iso_date_str[:-1] + '+00:00'
                     
                     parsed_dt = datetime.fromisoformat(iso_date_str)
+                except ValueError:
+                    try:
+                        parsed_dt = parsedate_to_datetime(new_rss_pub_date_str)
+                    except (TypeError, ValueError) as e_parse_new_fallback:
+                        logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Could not parse new_rss_pub_date_str (fallback) '{new_rss_pub_date_str}' for {log_name_for_notification}: {e_parse_new_fallback}")
+                        parsed_dt = None # Ensure None on fallback failure
+                except Exception as e_parse_new_main: # Catch any other unexpected error from fromisoformat
+                    logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Could not parse new_rss_pub_date_str (main) '{new_rss_pub_date_str}' for {log_name_for_notification}: {e_parse_new_main}")
+                    parsed_dt = None # Ensure None on main parse failure
+
+                if parsed_dt: # Check if parsed_dt is not None
                     if parsed_dt.tzinfo is None or parsed_dt.tzinfo.utcoffset(parsed_dt) is None:
                         new_rss_pub_date_dt = parsed_dt.replace(tzinfo=timezone.utc)
                     else:
                         new_rss_pub_date_dt = parsed_dt.astimezone(timezone.utc)
-                except ValueError:
-                    try:
-                        parsed_dt = parsedate_to_datetime(new_rss_pub_date_str)
-                        if parsed_dt: # Check if parsed_dt is not None
-                            if parsed_dt.tzinfo is None or parsed_dt.tzinfo.utcoffset(parsed_dt) is None:
-                                new_rss_pub_date_dt = parsed_dt.replace(tzinfo=timezone.utc)
-                            else:
-                                new_rss_pub_date_dt = parsed_dt.astimezone(timezone.utc)
-                    except (TypeError, ValueError) as e_parse:
-                        logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Could not parse new_rss_pub_date_str '{new_rss_pub_date_str}' for {log_name_for_notification}: {e_parse}")
             
             # Robust date parsing for current_rss_pub_date_str (from DB)
             current_rss_pub_date_dt = None
             if current_rss_pub_date_str and isinstance(current_rss_pub_date_str, str):
+                parsed_db_dt = None # Initialize parsed_db_dt
                 try:
                     iso_db_date_str = current_rss_pub_date_str
                     if iso_db_date_str.endswith('Z'):
                         iso_db_date_str = iso_db_date_str[:-1] + '+00:00'
                     
                     parsed_db_dt = datetime.fromisoformat(iso_db_date_str)
+                except ValueError:
+                    try:
+                        parsed_db_dt = parsedate_to_datetime(current_rss_pub_date_str)
+                    except (TypeError, ValueError) as e_parse_db_fallback:
+                         logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Could not parse current_rss_pub_date_str (from DB fallback) '{current_rss_pub_date_str}' for {log_name_for_notification}: {e_parse_db_fallback}")
+                         parsed_db_dt = None # Ensure None on fallback failure
+                except Exception as e_parse_db_main: # Catch any other unexpected error from fromisoformat
+                    logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Could not parse current_rss_pub_date_str (from DB main) '{current_rss_pub_date_str}' for {log_name_for_notification}: {e_parse_db_main}")
+                    parsed_db_dt = None # Ensure None on main parse failure
+
+                if parsed_db_dt: # Check if parsed_db_dt is not None
                     if parsed_db_dt.tzinfo is None or parsed_db_dt.tzinfo.utcoffset(parsed_db_dt) is None:
                         current_rss_pub_date_dt = parsed_db_dt.replace(tzinfo=timezone.utc)
                     else:
                         current_rss_pub_date_dt = parsed_db_dt.astimezone(timezone.utc)
-                except ValueError:
-                    try:
-                        parsed_db_dt = parsedate_to_datetime(current_rss_pub_date_str)
-                        if parsed_db_dt: # Check if parsed_db_dt is not None
-                            if parsed_db_dt.tzinfo is None or parsed_db_dt.tzinfo.utcoffset(parsed_db_dt) is None:
-                                current_rss_pub_date_dt = parsed_db_dt.replace(tzinfo=timezone.utc)
-                            else:
-                                current_rss_pub_date_dt = parsed_db_dt.astimezone(timezone.utc)
-                    except (TypeError, ValueError) as e_parse_db:
-                         logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Could not parse current_rss_pub_date_str (from DB) '{current_rss_pub_date_str}' for {log_name_for_notification}: {e_parse_db}")
 
-            name_changed = new_name and new_name != current_name
-            version_changed = new_version and current_version and new_version.lower() != current_version.lower()
+            name_changed = bool(new_name and new_name != current_name)
+            version_changed = bool(new_version and current_version and new_version.lower() != current_version.lower())
             
             if new_rss_pub_date_dt and current_rss_pub_date_dt:
                 if new_rss_pub_date_dt > current_rss_pub_date_dt:
                     date_changed = True
             elif new_rss_pub_date_dt and not current_rss_pub_date_dt:
                 date_changed = True
-
-            author_changed = new_author and new_author != game_data['author']
-            image_changed = new_image_url and new_image_url != game_data['image_url']
+            # Ensure author_changed and image_changed are based on whether new values are present and different
+            author_changed = bool(new_author and new_author != game_data['author'])
+            image_changed = bool(new_image_url and new_image_url != game_data['image_url'])
 
             if name_changed or version_changed or date_changed or author_changed or image_changed:
                 has_primary_update = True
