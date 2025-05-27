@@ -43,7 +43,7 @@ def setup_logging():
             # For now, allow to proceed, basicConfig might fail or log to current dir if path invalid.
     
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO, # CHANGED from DEBUG to INFO
         format='%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(message)s',
         handlers=[
             logging.FileHandler(LOG_FILE_PATH, mode='a'), # Append to log file
@@ -137,72 +137,76 @@ def initialize_database(db_path):
         # Check and add missing columns to user_played_games for older databases
         cursor.execute("PRAGMA table_info(user_played_games)")
         upg_columns = [column[1] for column in cursor.fetchall()]
-        print(f"DEBUG_INIT_DB: Columns in user_played_games before alter: {upg_columns}", file=sys.stderr)
+        # print(f"DEBUG_INIT_DB: Columns in user_played_games before alter: {upg_columns}", file=sys.stderr) # REMOVE
 
         if 'user_acknowledged_version' not in upg_columns:
-            print("DEBUG_INIT_DB: Attempting to add user_acknowledged_version.", file=sys.stderr)
+            # print("DEBUG_INIT_DB: Attempting to add user_acknowledged_version.", file=sys.stderr) # REMOVE
             cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_version TEXT")
             conn.commit()
             logger.info("Added 'user_acknowledged_version' column to 'user_played_games' table.")
-            print("DEBUG_INIT_DB: Committed user_acknowledged_version.", file=sys.stderr)
+            # print("DEBUG_INIT_DB: Committed user_acknowledged_version.", file=sys.stderr) # REMOVE
         
         if 'user_acknowledged_rss_pub_date' not in upg_columns:
-            print("DEBUG_INIT_DB: Attempting to add user_acknowledged_rss_pub_date.", file=sys.stderr)
+            # print("DEBUG_INIT_DB: Attempting to add user_acknowledged_rss_pub_date.", file=sys.stderr) # REMOVE
             cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_rss_pub_date TEXT")
             conn.commit()
             logger.info("Added 'user_acknowledged_rss_pub_date' column to 'user_played_games' table.")
-            print("DEBUG_INIT_DB: Committed user_acknowledged_rss_pub_date.", file=sys.stderr)
+            # print("DEBUG_INIT_DB: Committed user_acknowledged_rss_pub_date.", file=sys.stderr) # REMOVE
 
         if 'last_notified_completion_status' not in upg_columns:
-            print("DEBUG_INIT_DB: 'last_notified_completion_status' NOT FOUND in columns.", file=sys.stderr)
-            print("DEBUG_INIT_DB: Attempting to add last_notified_completion_status.", file=sys.stderr)
+            # print("DEBUG_INIT_DB: 'last_notified_completion_status' NOT FOUND in columns.", file=sys.stderr) # REMOVE
+            # print("DEBUG_INIT_DB: Attempting to add last_notified_completion_status.", file=sys.stderr) # REMOVE
             try:
                 cursor.execute("ALTER TABLE user_played_games ADD COLUMN last_notified_completion_status TEXT")
-                print("DEBUG_INIT_DB: Executed ALTER TABLE for last_notified_completion_status.", file=sys.stderr)
+                # print("DEBUG_INIT_DB: Executed ALTER TABLE for last_notified_completion_status.", file=sys.stderr) # REMOVE
                 conn.commit()
                 logger.info("Added 'last_notified_completion_status' column to 'user_played_games' table.")
-                print("DEBUG_INIT_DB: Committed last_notified_completion_status.", file=sys.stderr)
+                # print("DEBUG_INIT_DB: Committed last_notified_completion_status.", file=sys.stderr) # REMOVE
                 
                 # Immediate re-check for this specific column
                 cursor.execute("PRAGMA table_info(user_played_games)")
                 rechecked_columns = [column_info[1] for column_info in cursor.fetchall()]
                 if 'last_notified_completion_status' in rechecked_columns:
-                    print("DEBUG_INIT_DB: CONFIRMED - 'last_notified_completion_status' IS PRESENT after specific add and commit.", file=sys.stderr)
+                    # print("DEBUG_INIT_DB: CONFIRMED - 'last_notified_completion_status' IS PRESENT after specific add and commit.", file=sys.stderr) # REMOVE
+                    pass
                 else:
-                    print("DEBUG_INIT_DB: CRITICAL FAILURE - 'last_notified_completion_status' IS STILL MISSING after specific add and commit.", file=sys.stderr)
+                    # print("DEBUG_INIT_DB: CRITICAL FAILURE - 'last_notified_completion_status' IS STILL MISSING after specific add and commit.", file=sys.stderr) # REMOVE
+                    logger.error("CRITICAL FAILURE - 'last_notified_completion_status' IS STILL MISSING after specific add and commit.")
 
             except sqlite3.Error as e_alter_lncs:
-                print(f"DEBUG_INIT_DB: SQLITE ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs}", file=sys.stderr)
+                # print(f"DEBUG_INIT_DB: SQLITE ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs}", file=sys.stderr) # REMOVE
                 logger.error(f"SQLITE ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs}")
             except Exception as e_alter_lncs_generic:
-                print(f"DEBUG_INIT_DB: GENERIC ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs_generic}", file=sys.stderr)
+                # print(f"DEBUG_INIT_DB: GENERIC ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs_generic}", file=sys.stderr) # REMOVE
                 logger.error(f"GENERIC ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs_generic}")
         else:
-            print("DEBUG_INIT_DB: 'last_notified_completion_status' ALREADY FOUND in columns.", file=sys.stderr)
+            # print("DEBUG_INIT_DB: 'last_notified_completion_status' ALREADY FOUND in columns.", file=sys.stderr) # REMOVE
+            pass
 
         # Check for user_acknowledged_completion_status (this block should already exist and be correct)
         if 'user_acknowledged_completion_status' not in upg_columns:
-            print("DEBUG_INIT_DB: 'user_acknowledged_completion_status' NOT FOUND in columns.", file=sys.stderr)
-            print("DEBUG_INIT_DB: Attempting to add user_acknowledged_completion_status.", file=sys.stderr)
+            # print("DEBUG_INIT_DB: 'user_acknowledged_completion_status' NOT FOUND in columns.", file=sys.stderr) # REMOVE
+            # print("DEBUG_INIT_DB: Attempting to add user_acknowledged_completion_status.", file=sys.stderr) # REMOVE
             try:
                 cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_completion_status TEXT")
-                print("DEBUG_INIT_DB: Executed ALTER TABLE for user_acknowledged_completion_status.", file=sys.stderr)
+                # print("DEBUG_INIT_DB: Executed ALTER TABLE for user_acknowledged_completion_status.", file=sys.stderr) # REMOVE
                 conn.commit()
                 logger.info("Added 'user_acknowledged_completion_status' column to 'user_played_games' table.")
-                print("DEBUG_INIT_DB: Committed user_acknowledged_completion_status.", file=sys.stderr)
+                # print("DEBUG_INIT_DB: Committed user_acknowledged_completion_status.", file=sys.stderr) # REMOVE
             except sqlite3.Error as e_alter:
-                print(f"DEBUG_INIT_DB: SQLITE ERROR during ALTER TABLE for user_acknowledged_completion_status: {e_alter}", file=sys.stderr)
+                # print(f"DEBUG_INIT_DB: SQLITE ERROR during ALTER TABLE for user_acknowledged_completion_status: {e_alter}", file=sys.stderr) # REMOVE
                 logger.error(f"SQLITE ERROR during ALTER TABLE for user_acknowledged_completion_status: {e_alter}")
             except Exception as e_alter_generic:
-                print(f"DEBUG_INIT_DB: GENERIC ERROR during ALTER TABLE for user_acknowledged_completion_status: {e_alter_generic}", file=sys.stderr)
+                # print(f"DEBUG_INIT_DB: GENERIC ERROR during ALTER TABLE for user_acknowledged_completion_status: {e_alter_generic}", file=sys.stderr) # REMOVE
                 logger.error(f"GENERIC ERROR during ALTER TABLE for user_acknowledged_completion_status: {e_alter_generic}")
         else:
-            print("DEBUG_INIT_DB: 'user_acknowledged_completion_status' ALREADY FOUND in columns.", file=sys.stderr)
+            # print("DEBUG_INIT_DB: 'user_acknowledged_completion_status' ALREADY FOUND in columns.", file=sys.stderr) # REMOVE
+            pass
         
         # Refresh column list to see if it was added
         cursor.execute("PRAGMA table_info(user_played_games)")
         upg_columns_after = [column[1] for column in cursor.fetchall()]
-        print(f"DEBUG_INIT_DB: Columns in user_played_games AFTER alter attempts: {upg_columns_after}", file=sys.stderr)
+        # print(f"DEBUG_INIT_DB: Columns in user_played_games AFTER alter attempts: {upg_columns_after}", file=sys.stderr) # REMOVE
         
         # Create app_settings table
         cursor.execute("""
@@ -737,7 +741,7 @@ def get_my_played_games(db_path: str,
                         min_rating_filter: Optional[float] = None, 
                         sort_by: str = 'name', 
                         sort_order: str = 'ASC') -> list[dict]:
-    logger.critical("ENTERING get_my_played_games FUNCTION NOW") # ADDED CRITICAL LOG
+    # logger.critical("ENTERING get_my_played_games FUNCTION NOW") # REMOVE
     logger.info(f"Fetching user's (user_id: {user_id}) played games list with filters: name='{name_filter}', min_rating='{min_rating_filter}', sort_by='{sort_by}', sort_order='{sort_order}'.")
     games_list = []
     conn = None
@@ -797,23 +801,23 @@ def get_my_played_games(db_path: str,
         
         cursor.execute(base_query, tuple(params))
         rows = cursor.fetchall()
-        logger.critical(f"get_my_played_games: BEFORE LOOP. Number of rows fetched: {len(rows)}") # ADDED CRITICAL LOG
+        # logger.critical(f"get_my_played_games: BEFORE LOOP. Number of rows fetched: {len(rows)}") # REMOVE
         for row_data in rows:
             game_dict = dict(row_data)
 
             # --- START DEBUG LOGGING FOR ACKNOWLEDGE BUTTON (ALL GAMES) ---
-            logger.info(f"ACK_INFO_ALL (GameID: {game_dict.get('game_db_id')}, PlayedID: {game_dict.get('played_game_id')}) - Comparing for needs_ack:")
-            logger.info(f"  g.version: '{game_dict.get('version')}' (type: {type(game_dict.get('version'))})")
-            logger.info(f"  upg.user_acknowledged_version: '{game_dict.get('user_acknowledged_version')}' (type: {type(game_dict.get('user_acknowledged_version'))})")
-            logger.info(f"  Version Match: {game_dict.get('version') == game_dict.get('user_acknowledged_version')}")
+            # logger.info(f"ACK_INFO_ALL (GameID: {game_dict.get('game_db_id')}, PlayedID: {game_dict.get('played_game_id')}) - Comparing for needs_ack:") # REMOVE
+            # logger.info(f"  g.version: '{game_dict.get('version')}' (type: {type(game_dict.get('version'))})") # REMOVE
+            # logger.info(f"  upg.user_acknowledged_version: '{game_dict.get('user_acknowledged_version')}' (type: {type(game_dict.get('user_acknowledged_version'))})") # REMOVE
+            # logger.info(f"  Version Match: {game_dict.get('version') == game_dict.get('user_acknowledged_version')}") # REMOVE
 
-            logger.info(f"  g.rss_pub_date (raw from DB): '{game_dict.get('rss_pub_date')}' (type: {type(game_dict.get('rss_pub_date'))})")
-            logger.info(f"  upg.user_acknowledged_rss_pub_date: '{game_dict.get('user_acknowledged_rss_pub_date')}' (type: {type(game_dict.get('user_acknowledged_rss_pub_date'))})")
-            logger.info(f"  Raw RSS Date Match (g.rss_pub_date vs upg.user_acknowledged_rss_pub_date): {game_dict.get('rss_pub_date') == game_dict.get('user_acknowledged_rss_pub_date')}")
+            # logger.info(f"  g.rss_pub_date (raw from DB): '{game_dict.get('rss_pub_date')}' (type: {type(game_dict.get('rss_pub_date'))})") # REMOVE
+            # logger.info(f"  upg.user_acknowledged_rss_pub_date: '{game_dict.get('user_acknowledged_rss_pub_date')}' (type: {type(game_dict.get('user_acknowledged_rss_pub_date'))})") # REMOVE
+            # logger.info(f"  Raw RSS Date Match (g.rss_pub_date vs upg.user_acknowledged_rss_pub_date): {game_dict.get('rss_pub_date') == game_dict.get('user_acknowledged_rss_pub_date')}") # REMOVE
 
-            logger.info(f"  g.completed_status: '{game_dict.get('completed_status')}' (type: {type(game_dict.get('completed_status'))})")
-            logger.info(f"  upg.user_acknowledged_completion_status: '{game_dict.get('user_acknowledged_completion_status')}' (type: {type(game_dict.get('user_acknowledged_completion_status'))})")
-            logger.info(f"  Status Match: {game_dict.get('completed_status') == game_dict.get('user_acknowledged_completion_status')}")
+            # logger.info(f"  g.completed_status: '{game_dict.get('completed_status')}' (type: {type(game_dict.get('completed_status'))})") # REMOVE
+            # logger.info(f"  upg.user_acknowledged_completion_status: '{game_dict.get('user_acknowledged_completion_status')}' (type: {type(game_dict.get('user_acknowledged_completion_status'))})") # REMOVE
+            # logger.info(f"  Status Match: {game_dict.get('completed_status') == game_dict.get('user_acknowledged_completion_status')}") # REMOVE
             # --- END DEBUG LOGGING ---
             
             # Determine if acknowledgement is needed BEFORE formatting rss_pub_date for display
@@ -829,7 +833,7 @@ def get_my_played_games(db_path: str,
             game_dict['needs_acknowledgement_flag'] = needs_ack
 
             # Also log the outcome of needs_ack determination
-            logger.info(f"ACK_INFO_ALL (GameID: {game_dict.get('game_db_id')}, PlayedID: {game_dict.get('played_game_id')}) - Final needs_ack: {needs_ack}")
+            # logger.info(f"ACK_INFO_ALL (GameID: {game_dict.get('game_db_id')}, PlayedID: {game_dict.get('played_game_id')}) - Final needs_ack: {needs_ack}") # REMOVE
 
             raw_pub_date_str = game_dict.get('rss_pub_date')
             if raw_pub_date_str and isinstance(raw_pub_date_str, str) and raw_pub_date_str.strip():
@@ -920,7 +924,7 @@ def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) 
             game_dict['needs_acknowledgement_flag'] = needs_ack
 
             # Add logging for the outcome of needs_ack in get_my_played_game_details as well
-            logger.info(f"ACK_INFO_DETAILS (GameID: {game_dict.get('game_db_id')}, PlayedID: {game_dict.get('played_game_id')}) - Final needs_ack: {needs_ack}")
+            # logger.info(f"ACK_INFO_DETAILS (GameID: {game_dict.get('game_db_id')}, PlayedID: {game_dict.get('played_game_id')}) - Final needs_ack: {needs_ack}") # REMOVE
 
             raw_pub_date_str = game_dict.get('rss_pub_date')
             if raw_pub_date_str and isinstance(raw_pub_date_str, str) and raw_pub_date_str.strip():
@@ -1100,16 +1104,19 @@ def mark_game_as_acknowledged(db_path: str, user_id: int, played_game_id: int) -
 
         # DEBUG: Check table info right before the problematic UPDATE
         try:
-            print(f"DEBUG_MARK_ACK: Checking table_info for user_played_games just before UPDATE for played_game_id: {played_game_id}", file=sys.stderr)
+            # print(f"DEBUG_MARK_ACK: Checking table_info for user_played_games just before UPDATE for played_game_id: {played_game_id}", file=sys.stderr) # REMOVE
             cursor.execute("PRAGMA table_info(user_played_games)")
             columns_in_mark_ack = [column_info[1] for column_info in cursor.fetchall()]
-            print(f"DEBUG_MARK_ACK: Columns in user_played_games (from mark_game_as_acknowledged): {columns_in_mark_ack}", file=sys.stderr)
+            # print(f"DEBUG_MARK_ACK: Columns in user_played_games (from mark_game_as_acknowledged): {columns_in_mark_ack}", file=sys.stderr) # REMOVE
             if 'user_acknowledged_completion_status' not in columns_in_mark_ack:
-                print("DEBUG_MARK_ACK: CRITICAL - user_acknowledged_completion_status IS MISSING right before UPDATE!", file=sys.stderr)
+                # print("DEBUG_MARK_ACK: CRITICAL - user_acknowledged_completion_status IS MISSING right before UPDATE!", file=sys.stderr) # REMOVE
+                logger.error("CRITICAL - user_acknowledged_completion_status IS MISSING right before UPDATE in mark_game_as_acknowledged!")
             else:
-                print("DEBUG_MARK_ACK: user_acknowledged_completion_status IS PRESENT right before UPDATE.", file=sys.stderr)
+                # print("DEBUG_MARK_ACK: user_acknowledged_completion_status IS PRESENT right before UPDATE.", file=sys.stderr) # REMOVE
+                pass
         except Exception as e_pragma:
-            print(f"DEBUG_MARK_ACK: Error doing PRAGMA check: {e_pragma}", file=sys.stderr)
+            # print(f"DEBUG_MARK_ACK: Error doing PRAGMA check: {e_pragma}", file=sys.stderr) # REMOVE
+            logger.error(f"Error doing PRAGMA table_info check in mark_game_as_acknowledged: {e_pragma}")
 
         # Step 1: Get the game_id from user_played_games, ensuring it belongs to the user
         cursor.execute("SELECT game_id FROM user_played_games WHERE id = ? AND user_id = ?", (played_game_id, user_id)) # Added user_id
@@ -1140,7 +1147,7 @@ def mark_game_as_acknowledged(db_path: str, user_id: int, played_game_id: int) -
         """
         params_for_update = (current_version, current_rss_pub_date, current_completed_status, played_game_id, user_id)
         
-        logger.debug(f"Executing SQL: {sql_update_query} with params: {params_for_update}") # Log the query and params
+        # logger.debug(f"Executing SQL: {sql_update_query} with params: {params_for_update}") # COMMENTED OUT - too verbose for INFO
         cursor.execute(sql_update_query, params_for_update)
         
         updated_rows = cursor.rowcount
@@ -1155,12 +1162,12 @@ def mark_game_as_acknowledged(db_path: str, user_id: int, played_game_id: int) -
                     WHERE id = ? AND user_id = ?
                 """, (played_game_id, user_id))
                 refetched_row = cursor.fetchone()
-                if refetched_row:
-                    logger.info(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Refetched user_acknowledged_version: '{refetched_row['user_acknowledged_version']}'")
-                    logger.info(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Refetched user_acknowledged_rss_pub_date: '{refetched_row['user_acknowledged_rss_pub_date']}'")
-                    logger.info(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Refetched user_acknowledged_completion_status: '{refetched_row['user_acknowledged_completion_status']}'")
-                else:
-                    logger.error(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Failed to re-fetch row after update.")
+                # if refetched_row: # REMOVE BLOCK
+                #     logger.info(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Refetched user_acknowledged_version: '{refetched_row['user_acknowledged_version']}'")
+                #     logger.info(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Refetched user_acknowledged_rss_pub_date: '{refetched_row['user_acknowledged_rss_pub_date']}'")
+                #     logger.info(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Refetched user_acknowledged_completion_status: '{refetched_row['user_acknowledged_completion_status']}'")
+                # else:
+                #     logger.error(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Failed to re-fetch row after update.")
             except Exception as e_verify:
                 logger.error(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Error during post-commit verification: {e_verify}")
             # --- END POST-COMMIT VERIFICATION LOGGING ---
@@ -1390,16 +1397,19 @@ def update_last_notified_status(db_path: str, user_id: int, played_game_id: int,
 
         # DEBUG: Check table info right before the problematic UPDATE
         try:
-            print(f"DEBUG_UPDATE_NOTIFIED: Checking table_info for user_played_games just before UPDATE for played_game_id: {played_game_id}", file=sys.stderr)
+            # print(f"DEBUG_UPDATE_NOTIFIED: Checking table_info for user_played_games just before UPDATE for played_game_id: {played_game_id}", file=sys.stderr) # REMOVE
             cursor.execute("PRAGMA table_info(user_played_games)")
             columns_in_update_notified = [column_info[1] for column_info in cursor.fetchall()]
-            print(f"DEBUG_UPDATE_NOTIFIED: Columns in user_played_games (from update_last_notified_status): {columns_in_update_notified}", file=sys.stderr)
+            # print(f"DEBUG_UPDATE_NOTIFIED: Columns in user_played_games (from update_last_notified_status): {columns_in_update_notified}", file=sys.stderr) # REMOVE
             if 'last_notified_completion_status' not in columns_in_update_notified:
-                print("DEBUG_UPDATE_NOTIFIED: CRITICAL - last_notified_completion_status IS MISSING right before UPDATE!", file=sys.stderr)
+                # print("DEBUG_UPDATE_NOTIFIED: CRITICAL - last_notified_completion_status IS MISSING right before UPDATE!", file=sys.stderr) # REMOVE
+                logger.error("CRITICAL - last_notified_completion_status IS MISSING right before UPDATE in update_last_notified_status!")
             else:
-                print("DEBUG_UPDATE_NOTIFIED: 'last_notified_completion_status' IS PRESENT right before UPDATE.", file=sys.stderr)
+                # print("DEBUG_UPDATE_NOTIFIED: 'last_notified_completion_status' IS PRESENT right before UPDATE.", file=sys.stderr) # REMOVE
+                pass
         except Exception as e_pragma_un:
-            print(f"DEBUG_UPDATE_NOTIFIED: Error doing PRAGMA check: {e_pragma_un}", file=sys.stderr)
+            # print(f"DEBUG_UPDATE_NOTIFIED: Error doing PRAGMA check: {e_pragma_un}", file=sys.stderr) # REMOVE
+            logger.error(f"Error doing PRAGMA table_info check in update_last_notified_status: {e_pragma_un}")
 
         # Correcting the column name in the SQL query.
         sql_update_query = """ 
@@ -1411,7 +1421,7 @@ def update_last_notified_status(db_path: str, user_id: int, played_game_id: int,
         """
         params_for_update = (version, rss_pub_date, completed_status, played_game_id, user_id)
         
-        logger.debug(f"Executing SQL in update_last_notified_status: {sql_update_query} with params: {params_for_update}")
+        # logger.debug(f"Executing SQL in update_last_notified_status: {sql_update_query} with params: {params_for_update}") # COMMENTED OUT - too verbose for INFO
         cursor.execute(sql_update_query, params_for_update)
         conn.commit()
         if cursor.rowcount > 0:
