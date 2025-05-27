@@ -44,6 +44,9 @@ from apscheduler.jobstores.base import JobLookupError
 flask_app = Flask(__name__, template_folder='app/templates', static_folder='app/static')
 flask_app.secret_key = os.urandom(24) # Needed for flash messages
 
+# Set Flask's logger level to DEBUG to ensure debug messages from app.main are processed
+flask_app.logger.setLevel(logging.DEBUG)
+
 # Configure Flask app logger for APScheduler too
 # If not already configured, APScheduler might use its own default
 if not flask_app.debug:
