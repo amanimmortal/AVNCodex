@@ -17,6 +17,7 @@ from f95apiclient import F95ApiClient # Assuming f95apiclient is in PYTHONPATH o
 from typing import Optional, Set # Added Set
 import re # Added for regex in get_first_significant_word
 from pushover import Client as PushoverClient # Added for Pushover
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # --- Constants ---
 DB_PATH = "/data/f95_games.db" # Changed for Docker volume
@@ -813,11 +814,13 @@ def get_my_played_games(db_path: str,
             
             # Determine if acknowledgement is needed BEFORE formatting rss_pub_date for display
             needs_ack = False
-            if game_dict.get('version') is not None and game_dict.get('version') != game_dict.get('user_acknowledged_version'):
+            if game_dict.get('version') != game_dict.get('user_acknowledged_version'):
                 needs_ack = True
-            if not needs_ack and game_dict.get('rss_pub_date') is not None and game_dict.get('rss_pub_date') != game_dict.get('user_acknowledged_rss_pub_date'):
+            
+            if not needs_ack and game_dict.get('rss_pub_date') != game_dict.get('user_acknowledged_rss_pub_date'):
                 needs_ack = True
-            if not needs_ack and game_dict.get('completed_status') is not None and game_dict.get('completed_status') != game_dict.get('user_acknowledged_completion_status'):
+            
+            if not needs_ack and game_dict.get('completed_status') != game_dict.get('user_acknowledged_completion_status'):
                 needs_ack = True
             game_dict['needs_acknowledgement_flag'] = needs_ack
 
@@ -899,11 +902,13 @@ def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) 
             
             # Determine if acknowledgement is needed BEFORE formatting rss_pub_date for display
             needs_ack = False
-            if game_dict.get('version') is not None and game_dict.get('version') != game_dict.get('user_acknowledged_version'):
+            if game_dict.get('version') != game_dict.get('user_acknowledged_version'):
                 needs_ack = True
-            if not needs_ack and game_dict.get('rss_pub_date') is not None and game_dict.get('rss_pub_date') != game_dict.get('user_acknowledged_rss_pub_date'):
+            
+            if not needs_ack and game_dict.get('rss_pub_date') != game_dict.get('user_acknowledged_rss_pub_date'):
                 needs_ack = True
-            if not needs_ack and game_dict.get('completed_status') is not None and game_dict.get('completed_status') != game_dict.get('user_acknowledged_completion_status'):
+            
+            if not needs_ack and game_dict.get('completed_status') != game_dict.get('user_acknowledged_completion_status'):
                 needs_ack = True
             game_dict['needs_acknowledgement_flag'] = needs_ack
 
@@ -1936,56 +1941,26 @@ if __name__ == "__main__":
     
     try:
         # Initialize Database
-        initialize_database(DB_PATH) # This creates tables including users.
-                                     # It does not create the initial admin user. app.py does that on its startup.
+        initialize_database(DB_PATH) 
+        # process_rss_feed(DB_PATH, client) # Removed - master sync is no longer used
+        # update_completion_statuses(DB_PATH, client) # Removed - master sync is no longer used
+        logger.info("Direct run: Database initialized. Master RSS processing and completion status updates are skipped.")
 
-        # Process RSS Feed for general updates (global games table)
-        process_rss_feed(DB_PATH, client)
+        # The main purpose of a direct run of app/main.py might be for specific CLI tasks or tests.
+        # User-specific checks are typically handled by the scheduler in the Flask app context.
+        # If you need to test user-specific checks via CLI, you would call scheduled_games_update_check here,
+        # possibly after ensuring a user and their game list exist.
+        # For example:
+        # primary_admin_id = get_primary_admin_user_id(DB_PATH)
+        # if primary_admin_id:
+        #    logger.info(f"CLI: Manually triggering user-specific checks for admin ID: {primary_admin_id}")
+        #    scheduled_games_update_check(DB_PATH, client) # This would run for all users
+        # else:
+        #    logger.info("CLI: No primary admin user found to trigger checks for.")
 
-        # Update completion statuses (global games table)
-        update_completion_statuses(DB_PATH, client)
-
-        # The following check_for_my_updates and notification sending is now per-user,
-        # and typically handled by the scheduled job or UI, not directly in __main__.
-        # This section can be removed or adapted if a specific user's check is needed here for CLI.
-        # For now, commenting out the user-specific part that would require a user_id.
-        """
-        # Example: Check for updates for a specific user (e.g., first admin) if needed for CLI testing
-        primary_admin_id = get_primary_admin_user_id(DB_PATH)
-        if primary_admin_id:
-            logger.info(f"CLI: Checking updates for primary admin user (ID: {primary_admin_id})...")
-            notifications = check_for_my_updates(DB_PATH, user_id=primary_admin_id)
-            if notifications:
-                logger.info(f"--- {len(notifications)} UPDATES/NOTIFICATIONS FOUND for user {primary_admin_id} ---")
-                for notif in notifications:
-                    logger.info(f"Notification for Game: '{notif['game_name']}' (Played ID: {notif['played_game_id']})")
-                    logger.info(f"  URL: {notif['game_url']}")
-                    logger.info(f"  Current Version: {notif['current_version']}, Status: {notif['current_completed_status']}")
-                    for reason in notif['reasons']:
-                        logger.info(f"  - {reason}")
-                    
-                    # Send Pushover (using user_id) and update notified status
-                    send_pushover_notification(DB_PATH,
-                                               user_id=primary_admin_id,
-                                               title=f"Update: {notif['game_name']}",
-                                               message="\\n".join(notif['reasons']),
-                                               url=notif['game_url'],
-                                               url_title=f"View {notif['game_name']}")
-                    update_last_notified_status(DB_PATH,
-                                                user_id=primary_admin_id,
-                                                played_game_id=notif['played_game_id'], 
-                                                version=notif['new_notified_version'], 
-                                                rss_pub_date=notif['new_notified_rss_pub_date'], 
-                                                completed_status=notif['new_notified_completed_status'])
-                logger.info(f"--- FINISHED PROCESSING NOTIFICATIONS for user {primary_admin_id} ---")
-            else:
-                logger.info(f"No new updates or notifications for user {primary_admin_id}.")
-        else:
-            logger.info("CLI: No primary admin user found to check updates for in __main__.")
-        """
     except Exception as e:
-        logger.error(f"An unexpected error occurred in the main execution block: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred in the main execution block of app/main.py: {e}", exc_info=True)
     finally:
         if 'client' in locals() and client:
             client.close_session()
-        logger.info("F95Zone Update Checker - Application Finished") 
+        logger.info("F95Zone Update Checker - Application Finished")

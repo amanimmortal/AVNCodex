@@ -178,19 +178,18 @@ scheduler_job_id = "f95_update_check_job"
 def run_scheduled_update_job():
     with scheduler.app.app_context():
         current_time_utc = datetime.now(timezone.utc)
-        flask_app.logger.info(f"APScheduler: Evaluating scheduled job run at {current_time_utc.isoformat()}.")
-        
+        flask_app.logger.info(f"APScheduler: Evaluating user-specific game update job run at {current_time_utc.isoformat()}.")
+
         primary_admin_id = get_primary_admin_user_id(DB_PATH)
-        last_sync_completed_at_str = None
-        if primary_admin_id:
-            last_sync_completed_at_str = get_setting(DB_PATH, 'last_master_data_sync_completed_at', user_id=primary_admin_id)
+        if not primary_admin_id:
+            flask_app.logger.error("APScheduler: Cannot run user-specific sync. No primary admin user found to get/set sync timestamps.")
+            return
+
+        last_user_sync_completed_at_str = get_setting(DB_PATH, 'last_user_specific_sync_completed_at', user_id=primary_admin_id)
+        current_schedule_hours_str = get_setting(DB_PATH, 'update_schedule_hours_global', default_value='24', user_id=primary_admin_id)
         
-        current_schedule_hours_str = '24' # Default
-        if primary_admin_id:
-            current_schedule_hours_str = get_setting(DB_PATH, 'update_schedule_hours_global', default_value='24', user_id=primary_admin_id)
-        
-        perform_full_sync = True # Default to performing the sync
-        schedule_interval_hours = 24 # Default
+        perform_user_sync = True
+        schedule_interval_hours = 24.0 # Default to float for calculations
 
         try:
             schedule_config_value = int(current_schedule_hours_str)
@@ -198,64 +197,50 @@ def run_scheduled_update_job():
                 schedule_interval_hours = 5 / 60.0 
             elif schedule_config_value > 0:
                 schedule_interval_hours = float(schedule_config_value)
-            else: # Manual or disabled, job should ideally not be running if <0, but as a safeguard.
-                flask_app.logger.info(f"APScheduler: Schedule is {schedule_config_value} (manual/disabled). Job should not run.")
-                return # Do not run if schedule is manual/disabled
-
+            else: # Manual or disabled
+                flask_app.logger.info(f"APScheduler: User-specific sync schedule is {schedule_config_value} (manual/disabled). Job should not run based on this setting.")
+                # Note: The job itself is scheduled by start_or_reschedule_scheduler based on this value.
+                # This check provides an additional safeguard or differing logic if needed.
+                # For now, if it's <=0, the job shouldn't have been scheduled with an interval anyway.
+                return 
         except ValueError:
-            flask_app.logger.warning(f"APScheduler: Could not parse schedule hours '{current_schedule_hours_str}'. Using default {schedule_interval_hours}h.")
+            flask_app.logger.warning(f"APScheduler: Could not parse schedule hours '{current_schedule_hours_str}'. Using default {schedule_interval_hours}h for user-specific sync timing.")
 
-        if last_sync_completed_at_str:
+        if last_user_sync_completed_at_str:
             try:
-                last_sync_time = datetime.fromisoformat(last_sync_completed_at_str)
+                last_sync_time = datetime.fromisoformat(last_user_sync_completed_at_str)
                 time_since_last_sync = current_time_utc - last_sync_time
+                
                 # Skip if the last sync was completed more recently than 90% of the configured interval
-                # This prevents rapid re-syncs on restart if the interval is, e.g., 12 hours and it just ran 1 hour ago.
-                if time_since_last_sync < timedelta(hours=schedule_interval_hours * 0.90):
-                    flask_app.logger.info(f"APScheduler: Skipping full sync. Last sync at {last_sync_completed_at_str} is too recent "
-                                          f"(within {schedule_interval_hours * 0.90:.2f}h of interval {schedule_interval_hours}h). "
-                                          f"Time since last: {time_since_last_sync}")
-                    perform_full_sync = False
+                # This tolerance (0.90) prevents rapid re-syncs on restart if the interval is, e.g., 12 hours and it just ran 1 hour ago.
+                required_duration_since_last_sync = timedelta(hours=(schedule_interval_hours * 0.90))
+                
+                if time_since_last_sync < required_duration_since_last_sync:
+                    flask_app.logger.info(f"APScheduler: Skipping user-specific sync. Last sync at {last_user_sync_completed_at_str} is too recent. "
+                                          f"(Time since last: {time_since_last_sync} vs required: {required_duration_since_last_sync}, Interval: {schedule_interval_hours}h)")
+                    perform_user_sync = False
                 else:
-                    flask_app.logger.info(f"APScheduler: Proceeding with sync. Last sync was at {last_sync_completed_at_str}. "
-                                          f"Time since last: {time_since_last_sync} vs interval: {schedule_interval_hours}h.")
+                    flask_app.logger.info(f"APScheduler: Proceeding with user-specific sync. Last sync was at {last_user_sync_completed_at_str}. "
+                                          f"(Time since last: {time_since_last_sync} vs Interval: {schedule_interval_hours}h)")
             except ValueError:
-                flask_app.logger.warning(f"APScheduler: Could not parse last_master_data_sync_completed_at: '{last_sync_completed_at_str}'. Proceeding with sync.")
+                flask_app.logger.warning(f"APScheduler: Could not parse last_user_specific_sync_completed_at: '{last_user_sync_completed_at_str}'. Proceeding with user-specific sync.")
         else:
-            flask_app.logger.info("APScheduler: No record of last master data sync. Proceeding with initial sync.")
+            flask_app.logger.info("APScheduler: No record of last user-specific sync. Proceeding with initial user-specific sync.")
 
-        if perform_full_sync:
-            flask_app.logger.info("APScheduler: Performing full master data sync (process_rss_feed, update_completion_statuses)...")
+        if perform_user_sync:
+            flask_app.logger.info(f"APScheduler: Running scheduled user game update checks at {current_time_utc.isoformat()}.")
             try:
-                process_rss_feed(DB_PATH, f95_client) 
-                update_completion_statuses(DB_PATH, f95_client)
-                
+                scheduled_games_update_check(DB_PATH, f95_client)
                 current_utc_timestamp_iso = datetime.now(timezone.utc).isoformat()
-                if primary_admin_id:
-                    if set_setting(DB_PATH, 'last_master_data_sync_completed_at', current_utc_timestamp_iso, user_id=primary_admin_id):
-                        flask_app.logger.info(f"APScheduler: Successfully set last_master_data_sync_completed_at to {current_utc_timestamp_iso} for admin user {primary_admin_id}.")
-                    else:
-                        flask_app.logger.error(f"APScheduler: FAILED to set last_master_data_sync_completed_at for admin user {primary_admin_id}.")
+                if set_setting(DB_PATH, 'last_user_specific_sync_completed_at', current_utc_timestamp_iso, user_id=primary_admin_id):
+                    flask_app.logger.info(f"APScheduler: Successfully set last_user_specific_sync_completed_at to {current_utc_timestamp_iso} for admin user {primary_admin_id}.")
                 else:
-                    flask_app.logger.warning("APScheduler: No primary_admin_id found, cannot set last_master_data_sync_completed_at.")
-                
-                flask_app.logger.info("APScheduler: Master data sync tasks completed.")
-            except Exception as e_global_sync:
-                flask_app.logger.error(f"APScheduler: Error during global master data sync: {e_global_sync}", exc_info=True)
-                # Decide if we should still proceed with user-specific checks if global fails
-                # For now, let's assume global failure means we might not want to proceed.
-                # return # Optionally uncomment to stop if global sync fails
+                    flask_app.logger.error(f"APScheduler: FAILED to set last_user_specific_sync_completed_at for admin user {primary_admin_id}.")
+                flask_app.logger.info(f"APScheduler: User-specific game update checks completed at {datetime.now(timezone.utc).isoformat()}.")
+            except Exception as e_user_sync:
+                flask_app.logger.error(f"APScheduler: Error during user-specific game update checks: {e_user_sync}", exc_info=True)
         
-        # Always run user-specific checks after attempting/evaluating global sync, unless global sync critically failed and returned.
-        # This allows user syncs to occur even if the global sync was skipped due to timing.
-        flask_app.logger.info("APScheduler: Proceeding with user-specific game update checks (scheduled_games_update_check)...")
-        try:
-            scheduled_games_update_check(DB_PATH, f95_client) 
-            flask_app.logger.info("APScheduler: User-specific game update checks completed.")
-        except Exception as e_user_sync:
-            flask_app.logger.error(f"APScheduler: Error during user-specific scheduled_games_update_check: {e_user_sync}", exc_info=True)
-        
-        flask_app.logger.info("APScheduler: Full scheduled job evaluation and execution finished.")
+        flask_app.logger.info(f"APScheduler: Full scheduled job evaluation and execution finished at {datetime.now(timezone.utc).isoformat()}.")
 
 def start_or_reschedule_scheduler(app_instance):
     global scheduler 
