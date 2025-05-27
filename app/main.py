@@ -925,7 +925,7 @@ def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) 
                         dt_obj = parsedate_to_datetime(raw_pub_date_str)
                     except Exception as e_fallback_details:
                         logger.debug(f"Fallback parsedate_to_datetime also failed for '{raw_pub_date_str}' in game {game_dict.get('name', 'Unknown')} (details): {e_fallback_details}")
-                        dt_obj = None
+                        dt_obj = None # Ensure None on fallback failure
                 except Exception as e_main_parse_details:
                     logger.warning(f"Initial date parsing failed for '{raw_pub_date_str}' in game {game_dict.get('name', 'Unknown')} (details) due to: {e_main_parse_details}")
                     dt_obj = None
@@ -1774,6 +1774,11 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                 message=final_pushover_message,
                 url=game_url, url_title=f"View {original_name_for_notification} on F95Zone"
             )
+            # Update last notified status after sending a primary update notification
+            update_last_notified_status(db_path, user_id, played_game_row_id,
+                                        new_version if version_changed else current_version,
+                                        new_rss_pub_date_dt.isoformat() if date_changed and new_rss_pub_date_dt else current_rss_pub_date_str,
+                                        current_status) # current_status here reflects the final status after all checks
         
         # Notification specifically for a status change to COMPLETED, if not already covered by primary update notification
         # and if primary update notifications are OFF but completed status change notifications are ON.
@@ -1786,6 +1791,11 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                 message=f"'{original_name_for_notification}' status changed: {original_status_for_notification} -> COMPLETED",
                 url=game_url, url_title=f"View {original_name_for_notification} on F95Zone"
             )
+            # Update last notified status after sending a specific completion notification
+            update_last_notified_status(db_path, user_id, played_game_row_id,
+                                        current_version, # Version might not have changed, use current
+                                        current_rss_pub_date_str, # Date might not have changed, use current
+                                        "COMPLETED")
         
         # Simplified notification for other status changes (ABANDONED, ON_HOLD) if enabled
         # And not already covered by a primary update notification that included status.
@@ -1805,6 +1815,11 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                     message=f"'{original_name_for_notification}' status changed: {original_status_for_notification} -> {current_status}",
                     url=game_url, url_title=f"View {original_name_for_notification} on F95Zone"
                 )
+                # Update last notified status after sending other status change notifications
+                update_last_notified_status(db_path, user_id, played_game_row_id,
+                                            current_version, # Version might not have changed
+                                            current_rss_pub_date_str, # Date might not have changed
+                                            current_status)
 
         # Update last_checked_at regardless of updates found
         try:
