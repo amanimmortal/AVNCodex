@@ -2,11 +2,27 @@
 
 /* General card action styling if needed */
 .card-actions {
-    /* display: flex; */
-    /* justify-content: space-between; */
-    /* align-items: center; */
-    /* flex-wrap: wrap; */ /* Added to help with spacing issues before hiding */
+    display: flex; /* Make card-actions a flex container */
+    flex-wrap: wrap; /* Allow wrapping if absolutely necessary */
+    align-items: center; /* Align items vertically */
 }
+
+.standard-actions {
+    display: flex; /* This will be the main container for actions when ack is not pending */
+    justify-content: space-between; /* Pushes left-actions and delete-form apart */
+    align-items: center;
+    width: 100%; /* Take full width */
+    gap: 5px; /* Add a small gap between left and right groups if they are close */
+}
+
+.standard-actions .left-actions {
+    display: flex; /* Group Edit and Sync */
+    align-items: center;
+    gap: 5px; /* Space between Edit and Sync */
+}
+
+/* The .delete-form will naturally be on the right due to space-between on .standard-actions */
+/* No specific CSS needed for .delete-form to push it right if .standard-actions is space-between */
 
 /* When acknowledgement is pending, HIDE the standard action buttons */
 /* Increased specificity and using !important as a fallback for testing if needed */
