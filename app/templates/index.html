@@ -41,7 +41,17 @@
     <section class="played-games-section">
         <div class="played-games-header">
             <h2>My Monitored Games ({{ played_games|length }})</h2>
-            <button id="toggle-view-btn" class="btn btn-outline-secondary btn-sm">
+            {# Manual Sync All Button - Added here #}
+            <form action="{{ url_for('manual_sync_all_route') }}" method="POST" style="display: inline-block; margin-left: 10px;">
+                <button type="submit" class="btn btn-sm btn-info sync-all-btn">
+                    <span class="sync-text">Sync All Monitored</span>
+                    <span class="sync-spinner" style="display: none;">
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        Syncing All...
+                    </span>
+                </button>
+            </form>
+            <button id="toggle-view-btn" class="btn btn-outline-secondary btn-sm" style="margin-left: 10px;">
                 Switch to Grid View
             </button>
         </div>
@@ -79,31 +89,33 @@
                                      <p><strong>Notes:</strong> {{ game.user_notes if game.user_notes else 'No notes.' }}</p>
                                      <p class="text-muted">Notify: {{ 'Yes' if game.notify_for_updates else 'No' }}</p>
                                 </div>
-                                <div class="card-actions">
-                                    <a href="{{ url_for('edit_details_route', played_game_id=game.played_game_id) }}" class="btn btn-primary btn-sm">Edit Details</a> 
-                                    
-                                    {# Manual Sync Button - next to Edit #}
-                                    <form action="{{ url_for('manual_sync_route', played_game_id=game.played_game_id) }}" method="POST" style="display: inline-block; margin-left: 5px;">
-                                        <button type="submit" class="btn btn-sm btn-secondary sync-btn">
-                                            <span class="sync-text">Sync</span>
-                                            <span class="sync-spinner" style="display: none;">
-                                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                                                Syncing...
-                                            </span>
-                                        </button>
-                                    </form>
+                                <div class="card-actions {% if game.needs_acknowledgement_flag %}acknowledgement-pending{% endif %}">
+                                    <div class="standard-actions">
+                                        <a href="{{ url_for('edit_details_route', played_game_id=game.played_game_id) }}" class="btn btn-primary btn-sm">Edit Details</a> 
+                                        
+                                        {# Manual Sync Button - next to Edit #}
+                                        <form action="{{ url_for('manual_sync_route', played_game_id=game.played_game_id) }}" method="POST" style="display: inline-block; margin-left: 5px;">
+                                            <button type="submit" class="btn btn-sm btn-secondary sync-btn">
+                                                <span class="sync-text">Sync</span>
+                                                <span class="sync-spinner" style="display: none;">
+                                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                                    Syncing...
+                                                </span>
+                                            </button>
+                                        </form>
     
-                                    {# Acknowledge Update Button - conditionally shown next to Edit #}
+                                        {# Delete Button - pushed to the right #}
+                                        <form method="POST" action="{{ url_for('delete_game_route', played_game_id=game.played_game_id) }}" class="delete-form" onsubmit="return confirm('Are you sure you want to remove this game from your list? This action cannot be undone.');">
+                                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                        </form>
+                                    </div> {# End .standard-actions #}
+    
+                                    {# Acknowledge Update Button - conditionally shown #}
                                     {% if game.needs_acknowledgement_flag %}
                                     <form method="POST" action="{{ url_for('acknowledge_update_route', played_game_id=game.played_game_id) }}" class="acknowledge-form">
                                         <button type="submit" class="btn btn-info btn-sm">Acknowledge Update</button>
                                     </form>
                                     {% endif %}
-    
-                                    {# Delete Button - pushed to the right #}
-                                    <form method="POST" action="{{ url_for('delete_game_route', played_game_id=game.played_game_id) }}" class="delete-form" onsubmit="return confirm('Are you sure you want to remove this game from your list? This action cannot be undone.');">
-                                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                                    </form>
                                 </div>
                             </div> {# End card-body-content #}
                         </article>

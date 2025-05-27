@@ -334,10 +334,11 @@ def start_or_reschedule_scheduler(app_instance):
                     trigger=IntervalTrigger(**trigger_args),
                     id=scheduler_job_id,
                     name='F95Zone Game Update Check',
-                    replace_existing=True, # Should be redundant if we check get_job first, but safe
-                    next_run_time=datetime.now() + timedelta(hours=update_value)
+                    replace_existing=True, 
+                    # Run the first time shortly after startup, then follow the interval
+                    next_run_time=datetime.now() + timedelta(seconds=10) 
                 )
-                flask_app.logger.info(f"Scheduler: Added job '{scheduler_job_id}' with new interval. Next run scheduled accordingly.")
+                flask_app.logger.info(f"Scheduler: Added job '{scheduler_job_id}' with interval. First run in ~10 seconds, then by schedule: {trigger_args}.")
         except Exception as e:
             flask_app.logger.error(f"Scheduler: Error adding/rescheduling job '{scheduler_job_id}': {e}", exc_info=True)
 
@@ -720,17 +721,10 @@ if __name__ == '__main__':
     initialize_database(DB_PATH)
     create_initial_admin_user_if_none_exists() # Create admin if no users
     
-    # Perform an initial update check for all users and their games on startup
-    flask_app.logger.info("Performing initial game update check for all users on startup...")
-    try:
-        # Ensure f95_client is available here. It's globally defined in app.py.
-        # DB_PATH is also available, imported from app.main.
-        scheduled_games_update_check(DB_PATH, f95_client)
-        flask_app.logger.info("Initial game update check on startup completed.")
-    except Exception as e_startup_sync:
-        flask_app.logger.error(f"Error during initial startup game update check: {e_startup_sync}", exc_info=True)
+    # Removed explicit call to scheduled_games_update_check here
+    # The scheduler will now handle the first run shortly after startup.
     
-    # Start the scheduler after app initialization and initial sync
+    # Start the scheduler after app initialization
     # Pass flask_app directly as the app_instance
     start_or_reschedule_scheduler(flask_app)
     

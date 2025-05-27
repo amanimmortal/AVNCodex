@@ -1,0 +1,278 @@
+/* app/static/css/main.css */
+
+/* General card action styling if needed */
+.card-actions {
+    /* Add any existing flex or layout properties if you want to refine them */
+    /* display: flex; */
+    /* justify-content: space-between; */
+    /* align-items: center; */
+}
+
+/* When acknowledgement is pending, hide the standard action buttons */
+.card-actions.acknowledgement-pending .standard-actions {
+    display: none;
+}
+
+/* Ensure the acknowledge form itself is still visible */
+.card-actions.acknowledgement-pending .acknowledge-form {
+    display: inline-block; /* Or block, depending on desired layout */
+    width: 100%; /* Make it take full width if other buttons are hidden */
+    text-align: center; /* Center the button if it's the only one */
+}
+
+.card-actions.acknowledgement-pending .acknowledge-form button {
+    width: auto; /* Or adjust as needed */
+    margin: 5px auto; /* Center button a bit */
+}
+
+
+/* Styles for sync buttons to show spinner */
+.sync-btn .sync-spinner {
+    display: none;
+}
+
+.sync-btn.syncing .sync-text {
+    display: none;
+}
+
+.sync-btn.syncing .sync-spinner {
+    display: inline-block; /* Or flex, depending on your spinner design */
+    margin-right: 5px; /* Space between spinner and text if text was visible */
+}
+
+/* Optional: Style for the sync all button header area */
+.played-games-header {
+    display: flex; /* Use flexbox to align items */
+    justify-content: space-between; /* Puts h2 on left, buttons on right */
+    align-items: center; /* Vertically aligns items in the middle */
+    margin-bottom: 1rem; /* Space below the header */
+}
+
+.played-games-header h2 {
+    margin-bottom: 0; /* Remove default bottom margin from h2 if any */
+}
+
+.played-games-header form,
+.played-games-header button {
+    margin-left: 0.5rem; /* Add some space between buttons */
+}
+
+/* Flash messages styling */
+.flash-messages {
+    list-style-type: none;
+    padding: 0;
+    margin-bottom: 1rem;
+}
+
+.flash-messages li {
+    padding: 0.75rem 1.25rem;
+    margin-bottom: 1rem;
+    border: 1px solid transparent;
+    border-radius: 0.25rem;
+}
+
+.flash-messages li.success {
+    color: #155724;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+
+.flash-messages li.error {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}
+
+.flash-messages li.warning {
+    color: #856404;
+    background-color: #fff3cd;
+    border-color: #ffeeba;
+}
+
+.flash-messages li.info {
+    color: #0c5460;
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+}
+
+
+/* Grid view specific styles */
+#played-games-list.grid-view {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); /* Responsive grid columns */
+    gap: 1rem; /* Space between cards */
+}
+
+#played-games-list.grid-view .card.game-card {
+    display: flex;
+    flex-direction: column; /* Stack banner, body content vertically */
+    /* Add any other specific styles for cards in grid view if needed */
+}
+
+#played-games-list.list-view .card.game-card {
+    display: flex; /* For list view, banner and content side-by-side */
+    flex-direction: row;
+    margin-bottom: 1rem;
+}
+
+#played-games-list.list-view .card-banner-area {
+    flex: 0 0 150px; /* Fixed width for banner in list view */
+    height: 225px; /* Or desired height */
+    overflow: hidden;
+}
+
+#played-games-list.list-view .card-image-banner {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+#played-games-list.list-view .card-image-banner-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #333;
+    color: #ccc;
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 5px;
+}
+
+#played-games-list.list-view .card-body-content {
+    flex-grow: 1;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+/* Styles for game cards in grid view */
+#played-games-list.grid-view .card-banner-area {
+    width: 100%;
+    height: 180px; /* Adjust height for grid view banners */
+    overflow: hidden;
+}
+
+#played-games-list.grid-view .card-image-banner {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Cover ensures the image fills the area, might crop */
+}
+
+#played-games-list.grid-view .card-image-banner-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #333; /* Dark placeholder */
+    color: #ccc;
+    font-size: 1rem;
+    text-align: center;
+    padding: 10px;
+}
+
+#played-games-list.grid-view .card-body-content {
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1; /* Allows card-actions to be pushed to the bottom */
+}
+
+#played-games-list.grid-view .card-details,
+#played-games-list.grid-view .card-content {
+    margin-bottom: 0.5rem;
+}
+
+#played-games-list.grid-view .card-actions {
+    margin-top: auto; /* Pushes actions to the bottom of the card in grid view */
+    display: flex;
+    flex-wrap: wrap; /* Allow buttons to wrap if not enough space */
+    gap: 5px; /* Space between buttons */
+}
+
+#played-games-list.grid-view .card-actions .btn {
+    flex-grow: 1; /* Allow buttons to grow and fill space if desired */
+    /* Or set a min-width if you prefer them to wrap more predictably */
+}
+
+/* Game status tags styling (common for both views) */
+.game-status-tag {
+    display: inline-block;
+    padding: 0.2em 0.5em;
+    font-size: 0.75em;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 0.25rem;
+    margin-left: 0.5em;
+}
+
+.status-ongoing {
+    color: #fff;
+    background-color: #007bff; /* Blue for Ongoing */
+}
+
+.status-completed {
+    color: #fff;
+    background-color: #28a745; /* Green for Completed */
+}
+
+.status-on_hold {
+    color: #212529;
+    background-color: #ffc107; /* Yellow for On Hold */
+}
+
+.status-abandoned {
+    color: #fff;
+    background-color: #dc3545; /* Red for Abandoned */
+}
+
+.status-unknown {
+    color: #fff;
+    background-color: #6c757d; /* Gray for Unknown */
+}
+
+.notifications-section {
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background-color: #343a40; /* Dark background for notifications */
+    border-radius: 0.25rem;
+}
+
+.notifications-section h2 {
+    margin-top: 0;
+    color: #f8f9fa; /* Light text for heading */
+}
+
+.notification-item {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background-color: #495057;
+    border: 1px solid #adb5bd;
+    border-radius: 0.25rem;
+    color: #e9ecef;
+}
+
+.notification-item strong a {
+    color: #90caf9; /* Lighter blue for links in notifications */
+}
+
+.notification-item strong a:hover {
+    color: #e3f2fd;
+}
+
+.notification-reasons {
+    list-style-type: disc; /* Changed from none for better visibility */
+    padding-left: 20px; /* Indent reasons */
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.9em;
+}
+
+.text-muted {
+    color: #adb5bd !important; /* Lighter muted text on dark backgrounds */
+} 
