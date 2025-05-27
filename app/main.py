@@ -1154,6 +1154,12 @@ def check_for_my_updates(db_path: str, user_id: int) -> list[dict]: # Added user
             notification_reasons = []
             is_newly_completed = False
 
+            # Log values being compared
+            logger.debug(f"Checking game for notification: {game['game_name']} (PlayedID: {game['played_game_id']}, UserID: {user_id})")
+            logger.debug(f"  Current Version: '{game['current_version']}', Last Notified Version: '{game['last_notified_version']}'")
+            logger.debug(f"  Current RSS Date: '{game['current_rss_pub_date']}', Last Notified RSS Date: '{game['last_notified_rss_pub_date']}'")
+            logger.debug(f"  Current Status: '{game['current_completed_status']}', Last Notified Status: '{game['last_notified_completion_status']}'")
+
             # Check for version update
             # Only notify if there was a previous version and it's different
             if (game['last_notified_version'] is not None and
@@ -1189,6 +1195,9 @@ def check_for_my_updates(db_path: str, user_id: int) -> list[dict]: # Added user
             #     notification_reasons.append("Game status changed to ON HOLD.")
             # elif game['current_completed_status'] == 'ABANDONED' and game['last_notified_completed_status'] != 'ABANDONED':
             #     notification_reasons.append("Game status changed to ABANDONED.")
+
+            if not notification_reasons:
+                logger.debug(f"  No notification reasons identified for {game['game_name']} (PlayedID: {game['played_game_id']}).")
 
             if notification_reasons:
                 notifications.append({
@@ -1269,28 +1278,41 @@ _STOP_WORDS = set([
 ])
 
 def get_first_significant_word(name_str: str) -> str:
+    logger.debug(f"get_first_significant_word: Received original name_str: '{name_str}'")
     if not name_str:
+        logger.debug("get_first_significant_word: name_str is empty, returning empty string.")
         return ""
+
     # Remove content in brackets (like version, status, or author)
-    name_str_cleaned = re.sub(r'\\s*\\[.*?\\]\\s*', ' ', name_str).strip() # More robust removal
-    name_str_cleaned = re.sub(r'\\s*\\(.*?\\)\\s*', ' ', name_str_cleaned).strip() # Remove content in parentheses
+    name_str_cleaned_brackets = re.sub(r'\s*\[.*?\]\s*', ' ', name_str).strip()
+    name_str_cleaned_parentheses = re.sub(r'\s*\(.*?\)\s*', ' ', name_str_cleaned_brackets).strip()
+    logger.debug(f"get_first_significant_word: After bracket/parenthesis removal: '{name_str_cleaned_parentheses}'")
 
     # Remove common punctuation that might stick to words or be standalone
     # Keep alphanumeric, spaces, and hyphens if they are part of a word
-    name_str_cleaned = re.sub(r'[^\\w\\s-]', '', name_str_cleaned) 
+    name_str_final_cleaned = re.sub(r'[^\w\s-]', '', name_str_cleaned_parentheses)
+    logger.debug(f"get_first_significant_word: After punctuation removal: '{name_str_final_cleaned}'")
     
-    words = name_str_cleaned.split()
+    words = name_str_final_cleaned.split()
+    logger.debug(f"get_first_significant_word: Split into words: {words}")
+
     for word in words:
         # Further clean individual words: remove leading/trailing hyphens not part of word
         cleaned_word = word.strip('-')
+        logger.debug(f"get_first_significant_word: Checking cleaned_word: '{cleaned_word}'")
         if cleaned_word.lower() not in _STOP_WORDS and len(cleaned_word) > 2: # Ensure word is reasonably long
+            logger.debug(f"get_first_significant_word: Found significant word: '{cleaned_word}'")
             return cleaned_word # Return the cleaned word
     
     # Fallback: if all words are stop words or too short, try the first word if it exists and is not tiny
     if words:
         first_word_cleaned = words[0].strip('-')
+        logger.debug(f"get_first_significant_word: Fallback - checking first_word_cleaned: '{first_word_cleaned}'")
         if len(first_word_cleaned) > 1 : # Avoid single characters as search terms
-             return first_word_cleaned
+            logger.debug(f"get_first_significant_word: Using fallback first word: '{first_word_cleaned}'")
+            return first_word_cleaned
+            
+    logger.warning(f"get_first_significant_word: No significant word found for original name '{name_str}'. Returning empty string.")
     return "" # Absolute fallback
 
 # --- Scheduled Update Functions ---
