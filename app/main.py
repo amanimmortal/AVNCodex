@@ -1806,7 +1806,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
             if status_change_reason:
                 message_lines.append(status_change_reason)
 
-            final_pushover_message = "\n".join(message_lines)
+            final_pushover_message = chr(10).join(message_lines)
             send_pushover_notification(
                 db_path, user_id=user_id,
                 title=f"Update: {original_name_for_notification}", # Use potentially updated name
