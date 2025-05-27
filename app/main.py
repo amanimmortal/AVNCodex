@@ -152,6 +152,25 @@ def initialize_database(db_path):
             logger.info("Added 'user_acknowledged_rss_pub_date' column to 'user_played_games' table.")
             print("DEBUG_INIT_DB: Committed user_acknowledged_rss_pub_date.", file=sys.stderr)
 
+        if 'last_notified_completion_status' not in upg_columns:
+            print("DEBUG_INIT_DB: 'last_notified_completion_status' NOT FOUND in columns.", file=sys.stderr)
+            print("DEBUG_INIT_DB: Attempting to add last_notified_completion_status.", file=sys.stderr)
+            try:
+                cursor.execute("ALTER TABLE user_played_games ADD COLUMN last_notified_completion_status TEXT")
+                print("DEBUG_INIT_DB: Executed ALTER TABLE for last_notified_completion_status.", file=sys.stderr)
+                conn.commit()
+                logger.info("Added 'last_notified_completion_status' column to 'user_played_games' table.")
+                print("DEBUG_INIT_DB: Committed last_notified_completion_status.", file=sys.stderr)
+            except sqlite3.Error as e_alter_lncs:
+                print(f"DEBUG_INIT_DB: SQLITE ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs}", file=sys.stderr)
+                logger.error(f"SQLITE ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs}")
+            except Exception as e_alter_lncs_generic:
+                print(f"DEBUG_INIT_DB: GENERIC ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs_generic}", file=sys.stderr)
+                logger.error(f"GENERIC ERROR during ALTER TABLE for last_notified_completion_status: {e_alter_lncs_generic}")
+        else:
+            print("DEBUG_INIT_DB: 'last_notified_completion_status' ALREADY FOUND in columns.", file=sys.stderr)
+
+        # Check for user_acknowledged_completion_status (this block should already exist and be correct)
         if 'user_acknowledged_completion_status' not in upg_columns:
             print("DEBUG_INIT_DB: 'user_acknowledged_completion_status' NOT FOUND in columns.", file=sys.stderr)
             print("DEBUG_INIT_DB: Attempting to add user_acknowledged_completion_status.", file=sys.stderr)
