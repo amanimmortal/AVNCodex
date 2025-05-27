@@ -719,13 +719,17 @@ if __name__ == '__main__':
     initialize_database(DB_PATH)
     create_initial_admin_user_if_none_exists() # Create admin if no users
     
-    # Note: app.main.initialize_database() should be run by app.main.py
-    # This web app assumes the database is already initialized and populated by app.main.py
-    # If running this web app for the first time and DB doesn't exist, 
-    # you might want to run app/main.py once first.
-    # The above line now handles this for development.
-
-    # Start the scheduler after app initialization
+    # Perform an initial update check for all users and their games on startup
+    flask_app.logger.info("Performing initial game update check for all users on startup...")
+    try:
+        # Ensure f95_client is available here. It's globally defined in app.py.
+        # DB_PATH is also available, imported from app.main.
+        scheduled_games_update_check(DB_PATH, f95_client)
+        flask_app.logger.info("Initial game update check on startup completed.")
+    except Exception as e_startup_sync:
+        flask_app.logger.error(f"Error during initial startup game update check: {e_startup_sync}", exc_info=True)
+    
+    # Start the scheduler after app initialization and initial sync
     # Pass flask_app directly as the app_instance
     start_or_reschedule_scheduler(flask_app)
     
