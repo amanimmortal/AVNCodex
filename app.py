@@ -3,7 +3,7 @@ import os
 import sqlite3
 import logging # Added for scheduler logging
 import atexit # Added for scheduler shutdown
-from datetime import datetime, timezone # Added for user created_at
+from datetime import datetime, timezone, timedelta # Added for user created_at and next_run_time
 
 # Add project root to sys.path to allow importing f95apiclient and app.main
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '.')) # app.py is in root
@@ -334,9 +334,10 @@ def start_or_reschedule_scheduler(app_instance):
                     trigger=IntervalTrigger(**trigger_args),
                     id=scheduler_job_id,
                     name='F95Zone Game Update Check',
-                    replace_existing=True # Should be redundant if we check get_job first, but safe
+                    replace_existing=True, # Should be redundant if we check get_job first, but safe
+                    next_run_time=datetime.now() + timedelta(hours=update_value)
                 )
-                flask_app.logger.info(f"Scheduler: Added job '{scheduler_job_id}' with new interval.")
+                flask_app.logger.info(f"Scheduler: Added job '{scheduler_job_id}' with new interval. Next run scheduled accordingly.")
         except Exception as e:
             flask_app.logger.error(f"Scheduler: Error adding/rescheduling job '{scheduler_job_id}': {e}", exc_info=True)
 
