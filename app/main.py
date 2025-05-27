@@ -813,23 +813,37 @@ def get_my_played_games(db_path: str,
             game_dict['needs_acknowledgement_flag'] = needs_ack
 
             raw_pub_date_str = game_dict.get('rss_pub_date')
-            if raw_pub_date_str:
+            if raw_pub_date_str and isinstance(raw_pub_date_str, str) and raw_pub_date_str.strip():
+                dt_obj = None
                 try:
-                    dt_obj = parsedate_to_datetime(raw_pub_date_str)
-                    if dt_obj:  # Check if parsedate_to_datetime returned a valid datetime object
-                        # Ensure dt_obj is UTC
-                        if dt_obj.tzinfo is None or dt_obj.tzinfo.utcoffset(dt_obj) is None:
-                            dt_obj = dt_obj.replace(tzinfo=timezone.utc)
-                        else:
-                            dt_obj = dt_obj.astimezone(timezone.utc)
-                        game_dict['rss_pub_date'] = dt_obj.strftime('%a, %d %b %Y %H:%M') + ' UTC'
-                    else: # dt_obj is None, parsing failed
-                        logger.warning(f"parsedate_to_datetime failed for '{raw_pub_date_str}' in game {game_dict.get('name', 'Unknown')}. Setting to 'Invalid Date'.")
-                        game_dict['rss_pub_date'] = 'Invalid Date'
-                except Exception as e: # Catch a broader range of unexpected errors during parsing
-                    logger.warning(f"Could not parse rss_pub_date '{raw_pub_date_str}' for game {game_dict.get('name', 'Unknown')} due to: {e}")
-                    game_dict['rss_pub_date'] = 'Invalid Date' 
-            else:
+                    # Attempt to parse ISO 8601 format directly
+                    # Handle 'Z' for UTC explicitly for fromisoformat
+                    iso_format_str = raw_pub_date_str
+                    if iso_format_str.endswith('Z'):
+                        iso_format_str = iso_format_str[:-1] + '+00:00'
+                    dt_obj = datetime.fromisoformat(iso_format_str)
+                except ValueError: # If fromisoformat fails, try parsedate_to_datetime as a fallback
+                    try:
+                        dt_obj = parsedate_to_datetime(raw_pub_date_str)
+                    except Exception as e_fallback:
+                        logger.debug(f"Fallback parsedate_to_datetime also failed for '{raw_pub_date_str}' in game {game_dict.get('name', 'Unknown')}: {e_fallback}")
+                        dt_obj = None # Ensure dt_obj is None if fallback fails
+                except Exception as e_main_parse: # Catch any other unexpected error from fromisoformat or its prep
+                    logger.warning(f"Initial date parsing failed for '{raw_pub_date_str}' in game {game_dict.get('name', 'Unknown')} due to: {e_main_parse}")
+                    dt_obj = None # Ensure dt_obj is None
+
+                if dt_obj:  
+                    if dt_obj.tzinfo is None or dt_obj.tzinfo.utcoffset(dt_obj) is None:
+                        dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+                    else:
+                        dt_obj = dt_obj.astimezone(timezone.utc)
+                    game_dict['rss_pub_date'] = dt_obj.strftime('%a, %d %b %Y %H:%M') + ' UTC'
+                else: 
+                    logger.warning(f"All parsing attempts failed for date string '{raw_pub_date_str}' in game {game_dict.get('name', 'Unknown')}. Setting to 'Invalid Date'.")
+                    game_dict['rss_pub_date'] = 'Invalid Date'
+            elif not raw_pub_date_str or not raw_pub_date_str.strip():
+                 game_dict['rss_pub_date'] = 'N/A' # Handle empty or whitespace-only strings
+            else: # Not a string or None
                 game_dict['rss_pub_date'] = 'N/A'
             games_list.append(game_dict)
         logger.info(f"Retrieved {len(games_list)} games from user's played list.")
@@ -885,21 +899,34 @@ def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) 
             game_dict['needs_acknowledgement_flag'] = needs_ack
 
             raw_pub_date_str = game_dict.get('rss_pub_date')
-            if raw_pub_date_str:
+            if raw_pub_date_str and isinstance(raw_pub_date_str, str) and raw_pub_date_str.strip():
+                dt_obj = None
                 try:
-                    dt_obj = parsedate_to_datetime(raw_pub_date_str)
-                    if dt_obj: # Check if parsedate_to_datetime returned a valid datetime object
-                        if dt_obj.tzinfo is None or dt_obj.tzinfo.utcoffset(dt_obj) is None:
-                            dt_obj = dt_obj.replace(tzinfo=timezone.utc)
-                        else:
-                            dt_obj = dt_obj.astimezone(timezone.utc)
-                        game_dict['rss_pub_date'] = dt_obj.strftime('%a, %d %b %Y %H:%M') + ' UTC'
-                    else: # dt_obj is None, parsing failed
-                        logger.warning(f"parsedate_to_datetime failed for '{raw_pub_date_str}' in game {game_dict.get('name', 'Unknown')} (details). Setting to 'Invalid Date'.")
-                        game_dict['rss_pub_date'] = 'Invalid Date'
-                except Exception as e: # Catch a broader range of unexpected errors during parsing
-                    logger.warning(f"Could not parse rss_pub_date '{raw_pub_date_str}' for game {game_dict.get('name', 'Unknown')} in details due to: {e}")
+                    iso_format_str = raw_pub_date_str
+                    if iso_format_str.endswith('Z'):
+                        iso_format_str = iso_format_str[:-1] + '+00:00'
+                    dt_obj = datetime.fromisoformat(iso_format_str)
+                except ValueError: # If fromisoformat fails, try parsedate_to_datetime as a fallback
+                    try:
+                        dt_obj = parsedate_to_datetime(raw_pub_date_str)
+                    except Exception as e_fallback_details:
+                        logger.debug(f"Fallback parsedate_to_datetime also failed for '{raw_pub_date_str}' in game {game_dict.get('name', 'Unknown')} (details): {e_fallback_details}")
+                        dt_obj = None
+                except Exception as e_main_parse_details:
+                    logger.warning(f"Initial date parsing failed for '{raw_pub_date_str}' in game {game_dict.get('name', 'Unknown')} (details) due to: {e_main_parse_details}")
+                    dt_obj = None
+
+                if dt_obj: 
+                    if dt_obj.tzinfo is None or dt_obj.tzinfo.utcoffset(dt_obj) is None:
+                        dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+                    else:
+                        dt_obj = dt_obj.astimezone(timezone.utc)
+                    game_dict['rss_pub_date'] = dt_obj.strftime('%a, %d %b %Y %H:%M') + ' UTC'
+                else:
+                    logger.warning(f"All parsing attempts failed for date string '{raw_pub_date_str}' in game {game_dict.get('name', 'Unknown')} (details). Setting to 'Invalid Date'.")
                     game_dict['rss_pub_date'] = 'Invalid Date'
+            elif not raw_pub_date_str or not raw_pub_date_str.strip():
+                game_dict['rss_pub_date'] = 'N/A'
             else:
                 game_dict['rss_pub_date'] = 'N/A'
             logger.info(f"Details found for played game ID: {played_game_id} (user_id: {user_id}) - {game_dict['name']}")
@@ -1331,12 +1358,12 @@ def update_last_notified_status(db_path: str, user_id: int, played_game_id: int,
         except Exception as e_pragma_un:
             print(f"DEBUG_UPDATE_NOTIFIED: Error doing PRAGMA check: {e_pragma_un}", file=sys.stderr)
 
-        # Re-typing the column name carefully in the SQL query.
+        # Correcting the column name in the SQL query.
         sql_update_query = """ 
             UPDATE user_played_games 
             SET last_notified_version = ?, 
                 last_notified_rss_pub_date = ?, 
-                last_notified_completed_status = ?
+                last_notified_completion_status = ?  -- Corrected column name
             WHERE id = ? AND user_id = ?
         """
         params_for_update = (version, rss_pub_date, completed_status, played_game_id, user_id)
