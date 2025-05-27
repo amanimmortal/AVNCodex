@@ -1028,6 +1028,19 @@ def mark_game_as_acknowledged(db_path: str, user_id: int, played_game_id: int) -
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
+        # DEBUG: Check table info right before the problematic UPDATE
+        try:
+            print(f"DEBUG_MARK_ACK: Checking table_info for user_played_games just before UPDATE for played_game_id: {played_game_id}", file=sys.stderr)
+            cursor.execute("PRAGMA table_info(user_played_games)")
+            columns_in_mark_ack = [column_info[1] for column_info in cursor.fetchall()]
+            print(f"DEBUG_MARK_ACK: Columns in user_played_games (from mark_game_as_acknowledged): {columns_in_mark_ack}", file=sys.stderr)
+            if 'user_acknowledged_completion_status' not in columns_in_mark_ack:
+                print("DEBUG_MARK_ACK: CRITICAL - user_acknowledged_completion_status IS MISSING right before UPDATE!", file=sys.stderr)
+            else:
+                print("DEBUG_MARK_ACK: user_acknowledged_completion_status IS PRESENT right before UPDATE.", file=sys.stderr)
+        except Exception as e_pragma:
+            print(f"DEBUG_MARK_ACK: Error doing PRAGMA check: {e_pragma}", file=sys.stderr)
+
         # Step 1: Get the game_id from user_played_games, ensuring it belongs to the user
         cursor.execute("SELECT game_id FROM user_played_games WHERE id = ? AND user_id = ?", (played_game_id, user_id)) # Added user_id
         played_game_row = cursor.fetchone()
