@@ -9,6 +9,7 @@ import logging # Added for logging
 import random # Added for random sampling and proxy selection
 import urllib.parse # Added for URL encoding
 import time # Added for retry delay
+from typing import Optional
 
 # Setup basic logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -175,53 +176,50 @@ class F95ApiClient:
         self.logger.info(f"Session configured to use proxy: {selected_proxy_url} (type derived from its scheme: {scheme})")
         return True
 
-    def _make_request(self, method, url, params=None, data=None, headers=None, allow_redirects=True):
-        """
-        Makes an HTTP request with intelligent retry logic.
-        Attempts a direct connection first. If specific errors (ConnectionError, Timeout, HTTP 403)
-        occur on a direct attempt, subsequent retries will use proxies if available.
-        Returns the response object or None if all retries fail.
-        """
+    def _make_request(self, method: str, url: str, params: Optional[dict] = None, data: Optional[dict] = None, headers: Optional[dict] = None) -> requests.Response:
+        """Makes an HTTP request with the current session, handling proxies and retries."""
+        
         effective_headers = self.session.headers.copy()
         if headers:
             effective_headers.update(headers)
 
         last_exception = None
-        last_http_error_response = None
-        
-        # Flag to determine if proxies should be used for the current or subsequent attempts
-        # Will be set to True if a direct attempt fails with a proxy-worthy error.
+        # Initialize log_proxy_info with a default for the initial direct attempt
+        log_proxy_info = "direct connection" 
         attempt_with_proxy_activated = False 
 
         for attempt in range(self.max_attempts):
             self.logger.debug(f"Request attempt {attempt + 1}/{self.max_attempts} to {method.upper()} {url}")
             
-            # Determine proxies for this attempt
-            use_this_attempt_proxy = False
-            if attempt == 0 and not attempt_with_proxy_activated:
-                self.logger.info(f"Attempt {attempt + 1}: Initial attempt will be direct (no proxy).")
-                current_proxies_for_request = {}
-            elif attempt_with_proxy_activated and self.use_proxies and self.available_proxies:
-                if self._set_random_proxy(): # This sets self.session.proxies
-                    current_proxies_for_request = self.session.proxies # Use the newly set proxy
-                    self.logger.info(f"Attempt {attempt + 1}: Using new proxy: {current_proxies_for_request.get('http')}")
-                    use_this_attempt_proxy = True
-                else:
-                    self.logger.warning(f"Attempt {attempt + 1}: Failed to set a new random proxy, attempting direct.")
-                    current_proxies_for_request = {}
-            else: # Fallback to direct
-                log_reason = "proxies not yet activated"
-                if attempt_with_proxy_activated: # if this is true, then use_proxies or available_proxies must be false
-                    log_reason = "proxy use disabled" if not self.use_proxies else "no proxies available"
-                
-                self.logger.info(f"Attempt {attempt + 1}: Attempting direct connection ({log_reason}).")
-                current_proxies_for_request = {}
+            current_proxies_for_request = None # Default to no proxy / direct
 
-            # Explicitly log what proxies are being used for this exact request call
-            if current_proxies_for_request and current_proxies_for_request.get('http'):
-                self.logger.info(f"==> Making request with proxy: {current_proxies_for_request['http']}")
+            # Determine if proxy should be used for this attempt
+            if self.use_proxies and self.available_proxies:
+                if attempt == 0 and not attempt_with_proxy_activated:
+                    # First attempt for a request sequence is direct by default, unless forced
+                    self.logger.info(f"Attempt {attempt + 1}: Initial attempt will be direct (no proxy).")
+                    log_proxy_info = "direct connection"
+                    current_proxies_for_request = {}
+                else:
+                    # Subsequent attempts or if proxy activation was triggered
+                    if not attempt_with_proxy_activated: # Activate proxy usage if not already
+                        attempt_with_proxy_activated = True 
+                        self.logger.info("Proxy usage activated due to previous failure or settings.")
+                    
+                    if self._set_random_proxy(): # This sets self.session.proxies
+                        current_proxies_for_request = self.session.proxies
+                        log_proxy_info = f"proxy {self.current_proxy}"
+                        self.logger.info(f"Attempt {attempt + 1}: Using new proxy: {self.current_proxy}")
+                    else:
+                        # No proxies available, or failed to set one, try direct if allowed or last resort
+                        self.logger.warning(f"Attempt {attempt + 1}: No proxy available or failed to set. Attempting direct.")
+                        log_proxy_info = "direct connection (fallback)"
+                        current_proxies_for_request = {}
             else:
-                self.logger.info("==> Making request directly (no proxy configured for this attempt).")
+                # Proxies not enabled or none loaded, always direct
+                self.logger.info(f"Attempt {attempt + 1}: Making request directly (proxies not enabled or none loaded).")
+                log_proxy_info = "direct connection (proxies disabled/unavailable)"
+                current_proxies_for_request = {}
 
             try:
                 response = self.session.request(
@@ -231,7 +229,7 @@ class F95ApiClient:
                     data=data,
                     headers=effective_headers,
                     timeout=self.request_timeout,
-                    allow_redirects=allow_redirects,
+                    allow_redirects=True,
                     proxies=current_proxies_for_request # Explicitly pass proxies for this specific request call
                 )
                 response.raise_for_status()  # Raise HTTPError for bad responses (4XX or 5XX)
@@ -268,7 +266,7 @@ class F95ApiClient:
             
             except requests.exceptions.HTTPError as e:
                 self.logger.warning(f"Attempt {attempt + 1}/{self.max_attempts} with {log_proxy_info} failed: HTTPError {e.response.status_code} {e.response.reason}")
-                last_http_error_response = e.response 
+                last_exception = e
 
                 # If this was a direct attempt and it's a 403, activate proxy usage.
                 if not attempt_with_proxy_activated and current_proxies_for_request is None and e.response.status_code == 403 and self.use_proxies and self.available_proxies:
@@ -308,8 +306,6 @@ class F95ApiClient:
                     self.logger.error(f"All {self.max_attempts} attempts failed with unexpected error. Last error ({type(e).__name__}): {e}")
 
         # If loop finishes, all attempts failed.
-        if last_http_error_response: # Prioritize returning an actual HTTP response if one was received
-            return last_http_error_response
         if last_exception: # If no HTTP response but an exception was caught
             self.logger.error(f"Request to {url} failed after {self.max_attempts} attempts. Last exception: {last_exception}")
         return None # All attempts failed
