@@ -1059,17 +1059,21 @@ def mark_game_as_acknowledged(db_path: str, user_id: int, played_game_id: int) -
 
         game_name, current_version, current_rss_pub_date, current_completed_status = game_details_row
         
-        # Step 3: Update user_played_games
-        cursor.execute("""
+        # Step 3: Update user_played_games (This is where the error occurs)
+        # Re-typing the column name carefully.
+        sql_update_query = """
             UPDATE user_played_games
             SET user_acknowledged_version = ?,
                 user_acknowledged_rss_pub_date = ?,
-                user_acknowledged_completed_status = ?
+                user_acknowledged_completion_status = ? 
             WHERE id = ? AND user_id = ?
-        """, (current_version, current_rss_pub_date, current_completed_status, played_game_id, user_id)) # Added user_id
+        """
+        params_for_update = (current_version, current_rss_pub_date, current_completed_status, played_game_id, user_id)
+        
+        logger.debug(f"Executing SQL: {sql_update_query} with params: {params_for_update}") # Log the query and params
+        cursor.execute(sql_update_query, params_for_update)
         
         updated_rows = cursor.rowcount
-        conn.commit()
 
         if updated_rows > 0:
             logger.info(f"Successfully marked updates as acknowledged for played game ID: {played_game_id} ('{game_name}') for user_id: {user_id}.")
