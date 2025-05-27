@@ -34,6 +34,7 @@ from app.main import (
     scheduled_games_update_check, # Import the new scheduled task function
     check_single_game_update_and_status, # Added for manual sync
     get_user_played_game_urls, # Added for checking existing games in search
+    sync_all_my_games_for_user, # Added for manual sync all
 )
 
 # APScheduler imports
@@ -566,6 +567,21 @@ def manual_sync_route(played_game_id):
     except Exception as e:
         flask_app.logger.error(f"Error during manual sync for user {g.user['id']}, played_game_id {played_game_id}: {e}", exc_info=True)
         flash(f"Manual sync failed for '{game_name_for_flash}'. Error: {str(e)[:100]}", 'error') 
+    return redirect(url_for('index'))
+
+@flask_app.route('/manual_sync_all', methods=['POST'])
+@login_required
+def manual_sync_all_route():
+    flask_app.logger.info(f"Manual sync all requested by user {g.user['id']}")
+    try:
+        processed_count, total_count = sync_all_my_games_for_user(DB_PATH, f95_client, user_id=g.user['id'])
+        if total_count > 0:
+            flash(f"Manual sync for all {processed_count}/{total_count} relevant games initiated. Check notifications for any updates.", 'success')
+        else:
+            flash("No relevant games found to sync based on your notification preferences and game statuses.", 'info')
+    except Exception as e:
+        flask_app.logger.error(f"Error during manual sync all for user {g.user['id']}: {e}", exc_info=True)
+        flash(f"Manual sync for all games failed. Error: {str(e)[:100]}", 'error') 
     return redirect(url_for('index'))
 
 @flask_app.route('/settings', methods=['GET', 'POST'])

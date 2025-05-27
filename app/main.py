@@ -1508,11 +1508,19 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
 
                         # Send Pushover notification for game update if enabled
                         if pushover_update_message_parts and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True': # Pass user_id
+                            # Construct the message with newlines for Pushover
+                            # Start with the header
+                            message_lines = ["Game updated:"]
+                            # Add each part from pushover_update_message_parts as a new line
+                            message_lines.extend(pushover_update_message_parts)
+                            # Join all lines with a newline character
+                            final_pushover_message = "\n".join(message_lines)
+
                             send_pushover_notification(
                                 db_path,
                                 user_id=user_id, # Pass user_id
                                 title=f"Update: {new_name if new_name else original_name_for_notification}",
-                                message="Details updated:\\n" + "\\n".join(pushover_update_message_parts),
+                                message=final_pushover_message, # Use the message with proper newlines
                                 url=game_url,
                                 url_title=f"View {new_name if new_name else original_name_for_notification} on F95Zone"
                             )
@@ -1668,6 +1676,58 @@ def scheduled_games_update_check(db_path: str, f95_client: F95ApiClient):
                 conn.close()
     
     logger.info(f"--- Scheduled games update check finished for all users (processed {total_games_checked_for_all_users} applicable games across all users) ---")
+
+def sync_all_my_games_for_user(db_path: str, f95_client: F95ApiClient, user_id: int):
+    """
+    Manually triggers an update check for all relevant games for a specific user.
+    Only processes games where 'notify_for_updates' is true and game is not COMPLETED or ABANDONED.
+    """
+    logger.info(f"--- Starting manual sync for all relevant games for user_id: {user_id} ---")
+    
+    conn = None
+    games_processed_count = 0
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Select games for the user that are marked for notification and not in a final state
+        cursor.execute("""
+            SELECT upg.id 
+            FROM user_played_games upg
+            JOIN games g ON upg.game_id = g.id
+            WHERE upg.user_id = ? 
+              AND upg.notify_for_updates = 1 
+              AND (g.completed_status IS NULL OR g.completed_status NOT IN ('COMPLETED', 'ABANDONED')) 
+        """, (user_id,))
+        
+        played_game_ids_for_user = [row[0] for row in cursor.fetchall()]
+        total_games_to_sync = len(played_game_ids_for_user)
+
+        if not played_game_ids_for_user:
+            logger.info(f"MANUAL_SYNC_ALL (User: {user_id}): No games to sync based on preferences and status.")
+            return games_processed_count, total_games_to_sync
+
+        logger.info(f"MANUAL_SYNC_ALL (User: {user_id}): Found {total_games_to_sync} games to sync.")
+        
+        for i, played_game_row_id in enumerate(played_game_ids_for_user):
+            logger.info(f"MANUAL_SYNC_ALL (User: {user_id}): Processing game {i+1}/{total_games_to_sync} (PlayedID: {played_game_row_id})")
+            try:
+                check_single_game_update_and_status(db_path, f95_client, played_game_row_id, user_id)
+                games_processed_count += 1
+            except Exception as e_single:
+                logger.error(f"MANUAL_SYNC_ALL (User: {user_id}): Error syncing played_game_id {played_game_row_id}: {e_single}", exc_info=True)
+            # Optional: time.sleep(1) if rate limiting becomes an issue for many sequential calls
+
+    except sqlite3.Error as e:
+        logger.error(f"MANUAL_SYNC_ALL (User: {user_id}): Database error: {e}", exc_info=True)
+    except Exception as e:
+        logger.error(f"MANUAL_SYNC_ALL (User: {user_id}): Unexpected error: {e}", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
+            
+    logger.info(f"--- Manual sync finished for user_id: {user_id}. Processed {games_processed_count}/{total_games_to_sync} games. ---")
+    return games_processed_count, total_games_to_sync
 
 # --- Main Execution ---
 if __name__ == "__main__":
