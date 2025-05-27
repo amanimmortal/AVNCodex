@@ -685,7 +685,7 @@ def add_game_to_my_list(db_path: str,
                         db_path,
                         user_id=user_id, # Pass user_id
                         title=f"Game Added: {name_to_use}",
-                        message=f"'{name_to_use}' was added to your monitored list.\nStatus: {current_game_completed_status}, Version: {current_game_version}",
+                        message=f"'{name_to_use}' was added to your monitored list.{chr(10)}Status: {current_game_completed_status}, Version: {current_game_version}",
                         url=f95_url,
                         url_title=f"View {name_to_use} on F95Zone"
                     )
