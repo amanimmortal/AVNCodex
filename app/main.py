@@ -1144,8 +1144,27 @@ def mark_game_as_acknowledged(db_path: str, user_id: int, played_game_id: int) -
         cursor.execute(sql_update_query, params_for_update)
         
         updated_rows = cursor.rowcount
+        conn.commit() # Commit the changes
 
         if updated_rows > 0:
+            # --- START POST-COMMIT VERIFICATION LOGGING ---
+            try:
+                cursor.execute("""
+                    SELECT user_acknowledged_version, user_acknowledged_rss_pub_date, user_acknowledged_completion_status
+                    FROM user_played_games
+                    WHERE id = ? AND user_id = ?
+                """, (played_game_id, user_id))
+                refetched_row = cursor.fetchone()
+                if refetched_row:
+                    logger.info(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Refetched user_acknowledged_version: '{refetched_row['user_acknowledged_version']}'")
+                    logger.info(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Refetched user_acknowledged_rss_pub_date: '{refetched_row['user_acknowledged_rss_pub_date']}'")
+                    logger.info(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Refetched user_acknowledged_completion_status: '{refetched_row['user_acknowledged_completion_status']}'")
+                else:
+                    logger.error(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Failed to re-fetch row after update.")
+            except Exception as e_verify:
+                logger.error(f"POST_ACK_VERIFY (PlayedID: {played_game_id}): Error during post-commit verification: {e_verify}")
+            # --- END POST-COMMIT VERIFICATION LOGGING ---
+
             logger.info(f"Successfully marked updates as acknowledged for played game ID: {played_game_id} ('{game_name}') for user_id: {user_id}.")
             acknowledged_details = {
                 "version": current_version,
