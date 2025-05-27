@@ -685,7 +685,7 @@ def add_game_to_my_list(db_path: str,
                         db_path,
                         user_id=user_id, # Pass user_id
                         title=f"Game Added: {name_to_use}",
-                        message=f"'{name_to_use}' was added to your monitored list.\\nStatus: {current_game_completed_status}, Version: {current_game_version}",
+                        message=f"'{name_to_use}' was added to your monitored list.\nStatus: {current_game_completed_status}, Version: {current_game_version}",
                         url=f95_url,
                         url_title=f"View {name_to_use} on F95Zone"
                     )
@@ -1806,7 +1806,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
             if status_change_reason:
                 message_lines.append(status_change_reason)
 
-            final_pushover_message = "\\n".join(message_lines)
+            final_pushover_message = "\n".join(message_lines)
             send_pushover_notification(
                 db_path, user_id=user_id,
                 title=f"Update: {original_name_for_notification}", # Use potentially updated name

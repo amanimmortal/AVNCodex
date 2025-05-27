@@ -304,6 +304,11 @@ def start_or_reschedule_scheduler(app_instance):
         flask_app.logger.error(f"ERROR_SCHEDULER_ADD_JOB: {e}")
 
 # --- Module-Level Initialization Calls (after definitions and app instantiation) ---
+
+def shutdown_scheduler_politely():
+    if scheduler.running:
+        scheduler.shutdown()
+
 try:
     with flask_app.app_context():
         create_initial_admin_user_if_none_exists()
@@ -793,10 +798,6 @@ def admin_users_route():
 # @flask_app.route('/update_played_game/<int:played_game_id>', methods=['GET', 'POST'])
 # def update_played_game_route(played_game_id): # Placeholder - comment out if not implemented
 #     pass
-
-def shutdown_scheduler_politely():
-    if scheduler.running:
-        scheduler.shutdown()
 
 if __name__ == '__main__':
     # initialize_database(DB_PATH) # Moved to top-level
