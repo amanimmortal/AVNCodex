@@ -541,45 +541,56 @@ def add_game_to_my_list(db_path: str,
             logger.info(f"Game '{name_to_use}' not in 'games' table. Querying status before adding.")
             
             # Extract first significant word from name for search
-            search_name_part = name_to_use.split(' ')[0] if name_to_use else ""
-
-            # Check for COMPLETED status
-            completed_games_rss = client.get_latest_game_data_from_rss(
-                search_term=search_name_part, 
-                completion_status_filter="completed",
-                limit=90 # Max limit
-            )
-            if completed_games_rss is None: # API call failed
-                 logger.warning(f"Failed to fetch 'completed' RSS feed for game '{name_to_use}' during add_game_to_my_list. Status determination may be impacted.")
-                 current_game_completed_status = "UNKNOWN" # Fallback
-            elif any(g['url'] == f95_url for g in completed_games_rss):
-                current_game_completed_status = "COMPLETED"
+            search_name_part = get_first_significant_word(name_to_use) # Use helper
+            if not search_name_part:
+                logger.warning(f"Could not derive a search term for '{name_to_use}'. Status will default to UNKNOWN.")
+                current_game_completed_status = "UNKNOWN"
             else:
-                # Check for ABANDONED status
-                abandoned_games_rss = client.get_latest_game_data_from_rss(
-                    search_term=search_name_part,
-                    completion_status_filter="abandoned",
-                    limit=90
+                # Check for COMPLETED status
+                completed_games_rss = client.get_latest_game_data_from_rss(
+                    search_term=search_name_part, 
+                    completion_status_filter="completed",
+                    limit=MAX_COMPLETED_GAMES_TO_FETCH_FOR_STATUS_CHECK # Use defined constant
                 )
-                if abandoned_games_rss is None:
-                    logger.warning(f"Failed to fetch 'abandoned' RSS feed for game '{name_to_use}' during add_game_to_my_list. Status determination may be impacted.")
-                elif any(g['url'] == f95_url for g in abandoned_games_rss):
-                    current_game_completed_status = "ABANDONED"
-                else:
-                    # Check for ON_HOLD status
+                if completed_games_rss is None:
+                     logger.warning(f"Failed to fetch 'completed' RSS feed for game '{name_to_use}' during add_game_to_my_list. Status determination may be impacted.")
+                     # current_game_completed_status remains "UNKNOWN" or its previous value if this isn't the first check
+                elif any(g['url'] == f95_url for g in completed_games_rss):
+                    current_game_completed_status = "COMPLETED"
+                
+                # If not found as COMPLETED, check for ABANDONED
+                if current_game_completed_status == "UNKNOWN":
+                    abandoned_games_rss = client.get_latest_game_data_from_rss(
+                        search_term=search_name_part,
+                        completion_status_filter="abandoned",
+                        limit=MAX_COMPLETED_GAMES_TO_FETCH_FOR_STATUS_CHECK
+                    )
+                    if abandoned_games_rss is None:
+                        logger.warning(f"Failed to fetch 'abandoned' RSS feed for game '{name_to_use}' during add_game_to_my_list.")
+                    elif any(g['url'] == f95_url for g in abandoned_games_rss):
+                        current_game_completed_status = "ABANDONED"
+
+                # If not found as COMPLETED or ABANDONED, check for ON_HOLD
+                if current_game_completed_status == "UNKNOWN":
                     on_hold_games_rss = client.get_latest_game_data_from_rss(
                         search_term=search_name_part,
                         completion_status_filter="on_hold",
-                        limit=90
+                        limit=MAX_COMPLETED_GAMES_TO_FETCH_FOR_STATUS_CHECK
                     )
                     if on_hold_games_rss is None:
-                        logger.warning(f"Failed to fetch 'on_hold' RSS feed for game '{name_to_use}' during add_game_to_my_list. Status determination may be impacted.")
+                        logger.warning(f"Failed to fetch 'on_hold' RSS feed for game '{name_to_use}' during add_game_to_my_list.")
                     elif any(g['url'] == f95_url for g in on_hold_games_rss):
                         current_game_completed_status = "ON_HOLD"
-                    else:
-                        # If not found in specific status feeds, and not UNKNOWN from a previous fetch, assume ONGOING
-                        # We don't explicitly query "ongoing" as it's the default if not in other categories
-                        current_game_completed_status = "ONGOING" 
+
+                # If not found in any specific status feeds, assume ONGOING
+                if current_game_completed_status == "UNKNOWN":
+                    # We don't explicitly query "ongoing" here as it's the default if not in other categories.
+                    # An "ongoing" check could be added if needed, but for adding a new game,
+                    # if it's not explicitly completed, on-hold, or abandoned, "ONGOING" is a reasonable assumption.
+                    # However, to be consistent, we could do an "ongoing" search.
+                    # For now, if still UNKNOWN, it becomes ONGOING.
+                    logger.info(f"Game '{name_to_use}' not found in Completed, Abandoned, or On-Hold feeds. Assuming ONGOING.")
+                    current_game_completed_status = "ONGOING"
             
             logger.info(f"Determined status for new game '{name_to_use}': {current_game_completed_status}")
 
@@ -1393,140 +1404,224 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
         original_name_for_notification = current_name # Store before potential update
         original_version_for_notification = current_version
         original_status_for_notification = current_status
+        log_name_for_notification = current_name # Store for logging consistency
 
         logger.info(f"SCHEDULER/SYNC (User: {user_id}): Checking '{current_name}' (GameID: {game_id}, PlayedID: {played_game_row_id}, URL: {game_url})")
         
         search_term = get_first_significant_word(current_name)
         if not search_term:
             logger.warning(f"SCHEDULER: No significant search term for '{current_name}'. General update check might be unreliable.")
-            # We will still proceed to status checks as per logic.
+            # Fallback: use full name if get_first_significant_word returns empty
+            search_term_for_rss = current_name 
+        else:
+            search_term_for_rss = search_term
         
         latest_data_items = None
-        if search_term: # Only search if we have a term
-            latest_data_items = f95_client.get_latest_game_data_from_rss(search_term=search_term, limit=10) # Small limit for general update check
+        # Perform the initial "ongoing" search (noprefixes for C/A/OH implicitly by F95ApiClient)
+        # We use completion_status_filter='ongoing' to be explicit about wanting the general/up-to-date items
+        # that are not specifically completed, on-hold or abandoned.
+        logger.info(f"SCHEDULER/SYNC (User: {user_id}): Performing initial 'ongoing' check for '{current_name}' using search term '{search_term_for_rss}'")
+        latest_data_items = f95_client.get_latest_game_data_from_rss(
+            search_term=search_term_for_rss, 
+            limit=10, # Small limit for this check
+            completion_status_filter='ongoing' # Ensures we get latest, not specific C/A/OH items
+        )
 
-        found_game_update_data = None
+        found_game_in_initial_ongoing_check = False
+        found_game_update_data = None # This will store the matched item from initial check
+
         if latest_data_items:
             for item in latest_data_items:
                 if item.get('url') == game_url:
                     found_game_update_data = item
+                    found_game_in_initial_ongoing_check = True
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' FOUND in initial 'ongoing' check.")
                     break
         
-        has_primary_update = False
-        if found_game_update_data:
-            new_name = found_game_update_data.get('name') # Name from RSS via client
-            new_version = found_game_update_data.get('version') # Version from RSS title via client
+        if not found_game_in_initial_ongoing_check:
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' NOT FOUND in initial 'ongoing' check with search term '{search_term_for_rss}'. Will proceed to specific status checks.")
+
+        has_primary_update = False # For version/date changes
+        name_changed, version_changed, date_changed = False, False, False
+        new_name, new_version, new_author, new_image_url = None, None, None, None
+        new_rss_pub_date_str = None
+        new_rss_pub_date_dt = None # Initialize to None
+
+        if found_game_update_data: # Process if found in initial 'ongoing' check
+            new_name = found_game_update_data.get('name')
+            new_version = found_game_update_data.get('version')
             new_author = found_game_update_data.get('author')
             new_image_url = found_game_update_data.get('image_url')
-            new_rss_pub_date_str = found_game_update_data.get('rss_pub_date') # Get as string
+            new_rss_pub_date_str = found_game_update_data.get('rss_pub_date')
 
-            new_rss_pub_date_dt = None
-            if new_rss_pub_date_str:
+            # Robust date parsing for new_rss_pub_date_str
+            if new_rss_pub_date_str and isinstance(new_rss_pub_date_str, str):
                 try:
-                    # Try direct ISO format first
-                    dt_obj_new = datetime.fromisoformat(new_rss_pub_date_str.replace('Z', '+00:00'))
-                except ValueError:
-                    # Fallback to parsedate_to_datetime for standard RSS formats
-                    try:
-                        dt_obj_new = parsedate_to_datetime(new_rss_pub_date_str)
-                    except (TypeError, ValueError) as e_parse_new:
-                        logger.error(f"SCHEDULER: Could not parse new_rss_pub_date_str '{new_rss_pub_date_str}' for game '{current_name}': {e_parse_new}")
-                        dt_obj_new = None # Ensure it's None if parsing fails
-
-                    if dt_obj_new:
-                        # Ensure dt_obj is timezone-aware and UTC
-                        if dt_obj_new.tzinfo is None or dt_obj_new.tzinfo.utcoffset(dt_obj_new) is None:
-                            new_rss_pub_date_dt = dt_obj_new.replace(tzinfo=timezone.utc)
-                        else:
-                            new_rss_pub_date_dt = dt_obj_new.astimezone(timezone.utc)
-
-            current_rss_pub_date_dt = None
-            if current_rss_pub_date_str:
-                try:
-                    # Try direct ISO format first
-                    dt_obj_current = datetime.fromisoformat(current_rss_pub_date_str.replace('Z', '+00:00'))
-                except ValueError:
-                     # Fallback to parsedate_to_datetime for standard RSS formats
-                    try:
-                        dt_obj_current = parsedate_to_datetime(current_rss_pub_date_str)
-                    except (TypeError, ValueError) as e_parse_current:
-                        logger.error(f"SCHEDULER: Could not parse current_rss_pub_date_str '{current_rss_pub_date_str}' for game '{current_name}': {e_parse_current}")
-                        dt_obj_current = None
-                
-                if dt_obj_current:
-                    if dt_obj_current.tzinfo is None or dt_obj_current.tzinfo.utcoffset(dt_obj_current) is None:
-                         current_rss_pub_date_dt = dt_obj_current.replace(tzinfo=timezone.utc) #localize(dt_obj_current)
+                    # Remove 'Z' if present and ensure '+00:00' for fromisoformat
+                    iso_date_str = new_rss_pub_date_str
+                    if iso_date_str.endswith('Z'):
+                        iso_date_str = iso_date_str[:-1] + '+00:00'
+                    
+                    parsed_dt = datetime.fromisoformat(iso_date_str)
+                    if parsed_dt.tzinfo is None or parsed_dt.tzinfo.utcoffset(parsed_dt) is None:
+                        new_rss_pub_date_dt = parsed_dt.replace(tzinfo=timezone.utc)
                     else:
-                         current_rss_pub_date_dt = dt_obj_current.astimezone(timezone.utc)
+                        new_rss_pub_date_dt = parsed_dt.astimezone(timezone.utc)
+                except ValueError:
+                    try:
+                        parsed_dt = parsedate_to_datetime(new_rss_pub_date_str)
+                        if parsed_dt: # Check if parsed_dt is not None
+                            if parsed_dt.tzinfo is None or parsed_dt.tzinfo.utcoffset(parsed_dt) is None:
+                                new_rss_pub_date_dt = parsed_dt.replace(tzinfo=timezone.utc)
+                            else:
+                                new_rss_pub_date_dt = parsed_dt.astimezone(timezone.utc)
+                    except (TypeError, ValueError) as e_parse:
+                        logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Could not parse new_rss_pub_date_str '{new_rss_pub_date_str}' for {log_name_for_notification}: {e_parse}")
             
-            # Check for changes
+            # Robust date parsing for current_rss_pub_date_str (from DB)
+            current_rss_pub_date_dt = None
+            if current_rss_pub_date_str and isinstance(current_rss_pub_date_str, str):
+                try:
+                    iso_db_date_str = current_rss_pub_date_str
+                    if iso_db_date_str.endswith('Z'):
+                        iso_db_date_str = iso_db_date_str[:-1] + '+00:00'
+                    
+                    parsed_db_dt = datetime.fromisoformat(iso_db_date_str)
+                    if parsed_db_dt.tzinfo is None or parsed_db_dt.tzinfo.utcoffset(parsed_db_dt) is None:
+                        current_rss_pub_date_dt = parsed_db_dt.replace(tzinfo=timezone.utc)
+                    else:
+                        current_rss_pub_date_dt = parsed_db_dt.astimezone(timezone.utc)
+                except ValueError:
+                    try:
+                        parsed_db_dt = parsedate_to_datetime(current_rss_pub_date_str)
+                        if parsed_db_dt: # Check if parsed_db_dt is not None
+                            if parsed_db_dt.tzinfo is None or parsed_db_dt.tzinfo.utcoffset(parsed_db_dt) is None:
+                                current_rss_pub_date_dt = parsed_db_dt.replace(tzinfo=timezone.utc)
+                            else:
+                                current_rss_pub_date_dt = parsed_db_dt.astimezone(timezone.utc)
+                    except (TypeError, ValueError) as e_parse_db:
+                         logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Could not parse current_rss_pub_date_str (from DB) '{current_rss_pub_date_str}' for {log_name_for_notification}: {e_parse_db}")
+
             name_changed = new_name and new_name != current_name
-            version_changed = new_version and new_version != current_version
-            # Ensure new_rss_pub_date_dt is not None before comparison
-            date_changed = new_rss_pub_date_dt and current_rss_pub_date_dt and new_rss_pub_date_dt > current_rss_pub_date_dt
-            author_changed = new_author and new_author != game_data['author'] # game_data has original author
-            image_changed = new_image_url and new_image_url != game_data['image_url'] # game_data has original image
+            version_changed = new_version and current_version and new_version.lower() != current_version.lower()
+            
+            if new_rss_pub_date_dt and current_rss_pub_date_dt:
+                if new_rss_pub_date_dt > current_rss_pub_date_dt:
+                    date_changed = True
+            elif new_rss_pub_date_dt and not current_rss_pub_date_dt:
+                date_changed = True
+
+            author_changed = new_author and new_author != game_data['author']
+            image_changed = new_image_url and new_image_url != game_data['image_url']
 
             if name_changed or version_changed or date_changed or author_changed or image_changed:
                 has_primary_update = True
-                new_rss_pub_date_iso_for_logging_and_db = new_rss_pub_date_dt.isoformat() if new_rss_pub_date_dt else 'N/A'
-                
-                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Primary update found for '{original_name_for_notification}'. OldVer: {original_version_for_notification}, NewVer: {new_version}. OldDate: {current_rss_pub_date_str}, NewDate: {new_rss_pub_date_iso_for_logging_and_db}")
-                
-                pushover_update_message_parts = []
-                if name_changed and new_name: pushover_update_message_parts.append(f"Name: {original_name_for_notification} -> {new_name}")
-                if version_changed and new_version: pushover_update_message_parts.append(f"Version: {original_version_for_notification} -> {new_version}")
-                if date_changed and new_rss_pub_date_dt: pushover_update_message_parts.append(f"RSS Date Updated") # Simpler message for date
-                # Author/image changes less critical for primary notification, can be logged.
+            
+            # If game was found in the initial "ongoing" check, its status should be considered ONGOING
+            # unless it was already COMPLETED/ABANDONED/ON_HOLD (which "ongoing" feed should exclude).
+            # If it was UNKNOWN, it now becomes ONGOING.
+            if current_status == "UNKNOWN":
+                current_status = "ONGOING" 
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' was UNKNOWN and found in 'ongoing' check. Setting status to ONGOING.")
+            elif current_status != "COMPLETED" and current_status != "ABANDONED" and current_status != "ON_HOLD":
+                # If it's some other status or already ONGOING, confirm it as ONGOING if found in this feed.
+                current_status = "ONGOING"
 
-                update_fields = {}
-                if name_changed: update_fields['name'] = new_name
-                if version_changed: update_fields['version'] = new_version
-                if date_changed: update_fields['rss_pub_date'] = new_rss_pub_date_dt.isoformat() # Store ISO string
-                if author_changed: update_fields['author'] = new_author
-                if image_changed: update_fields['image_url'] = new_image_url
-                
-                if update_fields:
-                    set_clause = ", ".join([f"{key} = ?" for key in update_fields.keys()])
-                    params = list(update_fields.values())
-                    params.append(datetime.now(timezone.utc).isoformat()) # last_updated_in_db
-                    params.append(game_id)
-                    
-                    try:
-                        # Corrected params build directly into final_params
-                        final_params = list(update_fields.values()) + [datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), game_id]
 
-                        # Use only the corrected execution
-                        cursor.execute(f"UPDATE games SET {set_clause}, last_updated_in_db = ?, last_seen_on_rss = ? WHERE id = ?", final_params)
+        # --- Status Determination (only if not found in initial 'ongoing' check) ---
+        if not found_game_in_initial_ongoing_check:
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' not found in initial ongoing check. Proceeding to specific status (C/A/OH) checks.")
+            status_priority_checks = [
+                ("COMPLETED", "completed"),
+                ("ABANDONED", "abandoned"),
+                ("ON_HOLD", "on_hold")
+            ]
+            
+            new_determined_status_specific = None
+            for status_name, status_filter_key in status_priority_checks:
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Checking specific status '{status_name}' for game '{log_name_for_notification}' (ID: {game_id})")
+                if _determine_specific_game_status(f95_client, game_url, log_name_for_notification, status_filter_key):
+                    new_determined_status_specific = status_name
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) found as '{new_determined_status_specific}'.")
+                    break 
 
-                        conn.commit()
-                        logger.info(f"SCHEDULER/SYNC (User: {user_id}): Updated game details in DB for '{original_name_for_notification}'.")
-                        # Update current_name, current_version etc. if they were changed, for subsequent status checks
-                        if name_changed: current_name = new_name 
-                        if version_changed: current_version = new_version
-                        # current_status not updated here, but by specific status checks below.
+            if new_determined_status_specific:
+                current_status = new_determined_status_specific
+            elif current_status == "UNKNOWN": 
+                # If not found in C/A/OH and was UNKNOWN, default to ONGOING
+                # This implies it's not in terminal states and wasn't in the general "ongoing" feed explicitly
+                # (though the initial check for "ongoing" was already done and failed to find it).
+                # This state (not in ongoing, not in C/A/OH) means it's likely truly not on RSS right now or very new.
+                current_status = "ONGOING" 
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) was UNKNOWN and not found in C/A/OH feeds. Defaulting status to ONGOING.")
+            else:
+                # If it had a status like ON_HOLD, and wasn't found in C/A/OH, it remains ON_HOLD.
+                 logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) not found in C/A/OH feeds. Retaining previous status '{current_status}'.")
+        else: # Game was found in initial "ongoing" check
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' was found in initial 'ongoing' check. Status is '{current_status}'. Skipping specific C/A/OH checks.")
+            # The status current_status was already updated to ONGOING if it was UNKNOWN or not a terminal one.
 
-                        # Send Pushover notification for game update if enabled
-                        if pushover_update_message_parts and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True': # Pass user_id
-                            # Construct the message with newlines for Pushover
-                            # Start with the header
-                            message_lines = ["Game updated:"]
-                            # Add each part from pushover_update_message_parts as a new line
-                            message_lines.extend(pushover_update_message_parts)
-                            # Join all lines with a newline character
-                            final_pushover_message = "\n".join(message_lines)
+        # --- Prepare for DB Update and Notification ---
+        update_fields = {}
+        pushover_message_parts = []
 
-                            send_pushover_notification(
-                                db_path,
-                                user_id=user_id, # Pass user_id
-                                title=f"Update: {new_name if new_name else original_name_for_notification}",
-                                message=final_pushover_message, # Use the message with proper newlines
-                                url=game_url,
-                                url_title=f"View {new_name if new_name else original_name_for_notification} on F95Zone"
-                            )
-                    except sqlite3.Error as e_update:
-                         logger.error(f"SCHEDULER/SYNC (User: {user_id}): DB error updating game '{original_name_for_notification}': {e_update}")
-                         has_primary_update = False # If DB update fails, treat as no primary update for status logic
+        if name_changed:
+            update_fields['name'] = new_name
+            pushover_message_parts.append(f"Name: {original_name_for_notification} -> {new_name}")
+        if version_changed:
+            update_fields['version'] = new_version
+            pushover_message_parts.append(f"Version: {original_version_for_notification} -> {new_version}")
+        if date_changed:
+            update_fields['rss_pub_date'] = new_rss_pub_date_dt.isoformat()
+            pushover_message_parts.append(f"RSS Date Updated")
+        if author_changed:
+            update_fields['author'] = new_author
+            pushover_message_parts.append(f"Author: {original_version_for_notification} -> {new_author}")
+        if image_changed:
+            update_fields['image_url'] = new_image_url
+            pushover_message_parts.append(f"Image URL: {original_version_for_notification} -> {new_image_url}")
+
+        if update_fields:
+            set_clause = ", ".join([f"{key} = ?" for key in update_fields.keys()])
+            params = list(update_fields.values())
+            params.append(datetime.now(timezone.utc).isoformat()) # last_updated_in_db
+            params.append(game_id)
+            
+            try:
+                # Corrected params build directly into final_params
+                final_params = list(update_fields.values()) + [datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), game_id]
+
+                # Use only the corrected execution
+                cursor.execute(f"UPDATE games SET {set_clause}, last_updated_in_db = ?, last_seen_on_rss = ? WHERE id = ?", final_params)
+
+                conn.commit()
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Updated game details in DB for '{original_name_for_notification}'.")
+                # Update current_name, current_version etc. if they were changed, for subsequent status checks
+                if name_changed: current_name = new_name 
+                if version_changed: current_version = new_version
+                # current_status not updated here, but by specific status checks below.
+
+                # Send Pushover notification for game update if enabled
+                if pushover_message_parts and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True': # Pass user_id
+                    # Construct the message with newlines for Pushover
+                    # Start with the header
+                    message_lines = ["Game updated:"]
+                    # Add each part from pushover_message_parts as a new line
+                    message_lines.extend(pushover_message_parts)
+                    # Join all lines with a newline character
+                    final_pushover_message = "\n".join(message_lines)
+
+                    send_pushover_notification(
+                        db_path,
+                        user_id=user_id, # Pass user_id
+                        title=f"Update: {new_name if new_name else original_name_for_notification}",
+                        message=final_pushover_message, # Use the message with proper newlines
+                        url=game_url,
+                        url_title=f"View {new_name if new_name else original_name_for_notification} on F95Zone"
+                    )
+            except sqlite3.Error as e_update:
+                 logger.error(f"SCHEDULER/SYNC (User: {user_id}): DB error updating game '{original_name_for_notification}': {e_update}")
+                 has_primary_update = False # If DB update fails, treat as no primary update for status logic
 
         # Status checking logic
         new_status_determined = None
