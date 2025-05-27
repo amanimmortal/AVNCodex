@@ -1288,9 +1288,13 @@ def get_first_significant_word(name_str: str) -> str:
     name_str_cleaned_parentheses = re.sub(r'\s*\(.*?\)\s*', ' ', name_str_cleaned_brackets).strip()
     logger.debug(f"get_first_significant_word: After bracket/parenthesis removal: '{name_str_cleaned_parentheses}'")
 
+    # Specifically remove possessive 's
+    name_str_cleaned_possessive = re.sub(r"\'s\b", "", name_str_cleaned_parentheses, flags=re.IGNORECASE).strip()
+    logger.debug(f"get_first_significant_word: After possessive \'s removal: '{name_str_cleaned_possessive}'")
+
     # Remove common punctuation that might stick to words or be standalone
     # Keep alphanumeric, spaces, and hyphens if they are part of a word
-    name_str_final_cleaned = re.sub(r'[^\w\s-]', '', name_str_cleaned_parentheses)
+    name_str_final_cleaned = re.sub(r'[^\w\s-]', '', name_str_cleaned_possessive)
     logger.debug(f"get_first_significant_word: After punctuation removal: '{name_str_final_cleaned}'")
     
     words = name_str_final_cleaned.split()
@@ -1489,11 +1493,10 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                     params.append(game_id)
                     
                     try:
-                        cursor.execute(f"UPDATE games SET {set_clause}, last_updated_in_db = ?, last_seen_on_rss = ? WHERE id = ?", params) # last_seen_on_rss is also now
-                        # The last param for last_seen_on_rss should be the current timestamp as well
-                        # Corrected params:
+                        # Corrected params build directly into final_params
                         final_params = list(update_fields.values()) + [datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), game_id]
 
+                        # Use only the corrected execution
                         cursor.execute(f"UPDATE games SET {set_clause}, last_updated_in_db = ?, last_seen_on_rss = ? WHERE id = ?", final_params)
 
                         conn.commit()
