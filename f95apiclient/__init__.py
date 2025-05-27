@@ -196,29 +196,32 @@ class F95ApiClient:
         for attempt in range(self.max_attempts):
             self.logger.debug(f"Request attempt {attempt + 1}/{self.max_attempts} to {method.upper()} {url}")
             
-            current_proxies_for_request = None # Start with no proxy for the attempt by default
-
-            if self.use_proxies and self.available_proxies and attempt_with_proxy_activated:
-                self.logger.info(f"Attempt {attempt + 1}: Proxy usage activated. Setting a random proxy.")
-                if self._set_random_proxy(): # This updates self.session.proxies
+            # Determine proxies for this attempt
+            use_this_attempt_proxy = False
+            if attempt == 0 and not attempt_with_proxy_activated:
+                self.logger.info(f"Attempt {attempt + 1}: Initial attempt will be direct (no proxy).")
+                current_proxies_for_request = {}
+            elif attempt_with_proxy_activated and self.use_proxies and self.available_proxies:
+                if self._set_random_proxy(): # This sets self.session.proxies
                     current_proxies_for_request = self.session.proxies # Use the newly set proxy
+                    self.logger.info(f"Attempt {attempt + 1}: Using new proxy: {current_proxies_for_request.get('http')}")
+                    use_this_attempt_proxy = True
                 else:
-                    self.logger.warning("Failed to set a new proxy (none available or error). Proceeding without proxy for this attempt.")
-                    self.session.proxies = {} # Ensure no proxy is used
-                    current_proxies_for_request = None
-            elif attempt == 0:
-                 self.logger.info(f"Attempt {attempt + 1}: Initial attempt will be direct (no proxy).")
-                 self.session.proxies = {} # Ensure no proxy on first true attempt
-                 current_proxies_for_request = None
-            elif not self.use_proxies or not self.available_proxies:
-                self.logger.debug(f"Attempt {attempt + 1}: Proxies disabled or none available. Attempt will be direct.")
-                self.session.proxies = {}
-                current_proxies_for_request = None
-            # If attempt_with_proxy_activated is False and it's not the first attempt, it means previous direct attempts didn't trigger proxy usage
-            # So, this attempt will also be direct. This state is covered by current_proxies_for_request remaining None.
+                    self.logger.warning(f"Attempt {attempt + 1}: Failed to set a new random proxy, attempting direct.")
+                    current_proxies_for_request = {}
+            else: # Fallback to direct
+                log_reason = "proxies not yet activated"
+                if attempt_with_proxy_activated: # if this is true, then use_proxies or available_proxies must be false
+                    log_reason = "proxy use disabled" if not self.use_proxies else "no proxies available"
+                
+                self.logger.info(f"Attempt {attempt + 1}: Attempting direct connection ({log_reason}).")
+                current_proxies_for_request = {}
 
-
-            log_proxy_info = f"proxy {current_proxies_for_request}" if current_proxies_for_request else "direct connection"
+            # Explicitly log what proxies are being used for this exact request call
+            if current_proxies_for_request and current_proxies_for_request.get('http'):
+                self.logger.info(f"==> Making request with proxy: {current_proxies_for_request['http']}")
+            else:
+                self.logger.info("==> Making request directly (no proxy configured for this attempt).")
 
             try:
                 response = self.session.request(
@@ -276,7 +279,13 @@ class F95ApiClient:
                 if e.response.status_code == 429 or e.response.status_code >= 500:
                     if attempt < self.max_attempts - 1:
                         self.logger.info(f"HTTPError {e.response.status_code} is retryable. Continuing to attempt {attempt + 2}/{self.max_attempts}.")
-                        continue
+                        attempt_with_proxy_activated = True
+                        if attempt < self.max_attempts - 1:
+                            self.logger.info(f"HTTPError {e.response.status_code} is retryable. Continuing to attempt {attempt + 2}/{self.max_attempts}.")
+                            time.sleep(self.retry_delay_seconds * (1 + (e.response.status_code == 429))) # Slightly longer for 429
+                            continue
+                        else:
+                            self.logger.error(f"All {self.max_attempts} attempts failed. Last HTTPError: {e.response.status_code}")
                     else:
                         self.logger.error(f"All {self.max_attempts} attempts failed. Last HTTPError: {e.response.status_code}")
                 else:
