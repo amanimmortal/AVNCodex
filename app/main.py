@@ -136,21 +136,44 @@ def initialize_database(db_path):
         # Check and add missing columns to user_played_games for older databases
         cursor.execute("PRAGMA table_info(user_played_games)")
         upg_columns = [column[1] for column in cursor.fetchall()]
+        print(f"DEBUG_INIT_DB: Columns in user_played_games before alter: {upg_columns}", file=sys.stderr)
 
         if 'user_acknowledged_version' not in upg_columns:
+            print("DEBUG_INIT_DB: Attempting to add user_acknowledged_version.", file=sys.stderr)
             cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_version TEXT")
-            conn.commit() # Commit immediately after this ALTER
+            conn.commit()
             logger.info("Added 'user_acknowledged_version' column to 'user_played_games' table.")
+            print("DEBUG_INIT_DB: Committed user_acknowledged_version.", file=sys.stderr)
         
         if 'user_acknowledged_rss_pub_date' not in upg_columns:
+            print("DEBUG_INIT_DB: Attempting to add user_acknowledged_rss_pub_date.", file=sys.stderr)
             cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_rss_pub_date TEXT")
-            conn.commit() # Commit immediately after this ALTER
+            conn.commit()
             logger.info("Added 'user_acknowledged_rss_pub_date' column to 'user_played_games' table.")
+            print("DEBUG_INIT_DB: Committed user_acknowledged_rss_pub_date.", file=sys.stderr)
 
         if 'user_acknowledged_completion_status' not in upg_columns:
-            cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_completion_status TEXT")
-            conn.commit() # Commit immediately after this ALTER
-            logger.info("Added 'user_acknowledged_completion_status' column to 'user_played_games' table.")
+            print("DEBUG_INIT_DB: 'user_acknowledged_completion_status' NOT FOUND in columns.", file=sys.stderr)
+            print("DEBUG_INIT_DB: Attempting to add user_acknowledged_completion_status.", file=sys.stderr)
+            try:
+                cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_completion_status TEXT")
+                print("DEBUG_INIT_DB: Executed ALTER TABLE for user_acknowledged_completion_status.", file=sys.stderr)
+                conn.commit()
+                logger.info("Added 'user_acknowledged_completion_status' column to 'user_played_games' table.")
+                print("DEBUG_INIT_DB: Committed user_acknowledged_completion_status.", file=sys.stderr)
+            except sqlite3.Error as e_alter:
+                print(f"DEBUG_INIT_DB: SQLITE ERROR during ALTER TABLE for user_acknowledged_completion_status: {e_alter}", file=sys.stderr)
+                logger.error(f"SQLITE ERROR during ALTER TABLE for user_acknowledged_completion_status: {e_alter}")
+            except Exception as e_alter_generic:
+                print(f"DEBUG_INIT_DB: GENERIC ERROR during ALTER TABLE for user_acknowledged_completion_status: {e_alter_generic}", file=sys.stderr)
+                logger.error(f"GENERIC ERROR during ALTER TABLE for user_acknowledged_completion_status: {e_alter_generic}")
+        else:
+            print("DEBUG_INIT_DB: 'user_acknowledged_completion_status' ALREADY FOUND in columns.", file=sys.stderr)
+        
+        # Refresh column list to see if it was added
+        cursor.execute("PRAGMA table_info(user_played_games)")
+        upg_columns_after = [column[1] for column in cursor.fetchall()]
+        print(f"DEBUG_INIT_DB: Columns in user_played_games AFTER alter attempts: {upg_columns_after}", file=sys.stderr)
         
         # Create app_settings table
         cursor.execute("""

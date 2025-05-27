@@ -35,6 +35,8 @@ from app.main import (
     check_single_game_update_and_status, # Added for manual sync
     get_user_played_game_urls, # Added for checking existing games in search
     sync_all_my_games_for_user, # Added for manual sync all
+    process_rss_feed, # Added for process_rss_feed
+    update_completion_statuses, # Added for update_completion_statuses
 )
 
 # APScheduler imports
@@ -175,12 +177,78 @@ scheduler_job_id = "f95_update_check_job"
 
 def run_scheduled_update_job():
     with scheduler.app.app_context():
-        print("INFO_SCHEDULER: Triggering scheduled games update check...", file=sys.stderr)
+        current_time_utc = datetime.now(timezone.utc)
+        flask_app.logger.info(f"APScheduler: Evaluating scheduled job run at {current_time_utc.isoformat()}.")
+        
+        primary_admin_id = get_primary_admin_user_id(DB_PATH)
+        last_sync_completed_at_str = None
+        if primary_admin_id:
+            last_sync_completed_at_str = get_setting(DB_PATH, 'last_master_data_sync_completed_at', user_id=primary_admin_id)
+        
+        current_schedule_hours_str = '24' # Default
+        if primary_admin_id:
+            current_schedule_hours_str = get_setting(DB_PATH, 'update_schedule_hours_global', default_value='24', user_id=primary_admin_id)
+        
+        perform_full_sync = True # Default to performing the sync
+        schedule_interval_hours = 24 # Default
+
         try:
-            scheduled_games_update_check(DB_PATH, f95_client)
-            print("INFO_SCHEDULER: Scheduled job run completed.", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR_SCHEDULER_JOB_EXEC: {e}", file=sys.stderr)
+            schedule_config_value = int(current_schedule_hours_str)
+            if schedule_config_value == -5: # 5 minutes testing interval
+                schedule_interval_hours = 5 / 60.0 
+            elif schedule_config_value > 0:
+                schedule_interval_hours = float(schedule_config_value)
+            else: # Manual or disabled, job should ideally not be running if <0, but as a safeguard.
+                flask_app.logger.info(f"APScheduler: Schedule is {schedule_config_value} (manual/disabled). Job should not run.")
+                return # Do not run if schedule is manual/disabled
+
+        except ValueError:
+            flask_app.logger.warning(f"APScheduler: Could not parse schedule hours '{current_schedule_hours_str}'. Using default {schedule_interval_hours}h.")
+
+        if last_sync_completed_at_str:
+            try:
+                last_sync_time = datetime.fromisoformat(last_sync_completed_at_str)
+                time_since_last_sync = current_time_utc - last_sync_time
+                # Skip if the last sync was completed more recently than 90% of the configured interval
+                # This prevents rapid re-syncs on restart if the interval is, e.g., 12 hours and it just ran 1 hour ago.
+                if time_since_last_sync < timedelta(hours=schedule_interval_hours * 0.90):
+                    flask_app.logger.info(f"APScheduler: Skipping full sync. Last sync at {last_sync_completed_at_str} is too recent "
+                                          f"(within {schedule_interval_hours * 0.90:.2f}h of interval {schedule_interval_hours}h). "
+                                          f"Time since last: {time_since_last_sync}")
+                    perform_full_sync = False
+                else:
+                    flask_app.logger.info(f"APScheduler: Proceeding with sync. Last sync was at {last_sync_completed_at_str}. "
+                                          f"Time since last: {time_since_last_sync} vs interval: {schedule_interval_hours}h.")
+            except ValueError:
+                flask_app.logger.warning(f"APScheduler: Could not parse last_master_data_sync_completed_at: '{last_sync_completed_at_str}'. Proceeding with sync.")
+        else:
+            flask_app.logger.info("APScheduler: No record of last master data sync. Proceeding with initial sync.")
+
+        if perform_full_sync:
+            flask_app.logger.info("APScheduler: Performing full master data sync (process_rss_feed, update_completion_statuses)...")
+            try:
+                process_rss_feed(DB_PATH, f95_client) 
+                update_completion_statuses(DB_PATH, f95_client)
+                
+                if primary_admin_id:
+                    set_setting(DB_PATH, 'last_master_data_sync_completed_at', datetime.now(timezone.utc).isoformat(), user_id=primary_admin_id)
+                flask_app.logger.info("APScheduler: Master data sync tasks completed.")
+            except Exception as e_global_sync:
+                flask_app.logger.error(f"APScheduler: Error during global master data sync: {e_global_sync}", exc_info=True)
+                # Decide if we should still proceed with user-specific checks if global fails
+                # For now, let's assume global failure means we might not want to proceed.
+                # return # Optionally uncomment to stop if global sync fails
+        
+        # Always run user-specific checks after attempting/evaluating global sync, unless global sync critically failed and returned.
+        # This allows user syncs to occur even if the global sync was skipped due to timing.
+        flask_app.logger.info("APScheduler: Proceeding with user-specific game update checks (scheduled_games_update_check)...")
+        try:
+            scheduled_games_update_check(DB_PATH, f95_client) 
+            flask_app.logger.info("APScheduler: User-specific game update checks completed.")
+        except Exception as e_user_sync:
+            flask_app.logger.error(f"APScheduler: Error during user-specific scheduled_games_update_check: {e_user_sync}", exc_info=True)
+        
+        flask_app.logger.info("APScheduler: Full scheduled job evaluation and execution finished.")
 
 def start_or_reschedule_scheduler(app_instance):
     global scheduler 
