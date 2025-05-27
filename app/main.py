@@ -1414,46 +1414,71 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
             new_version = found_game_update_data.get('version') # Version from RSS title via client
             new_author = found_game_update_data.get('author')
             new_image_url = found_game_update_data.get('image_url')
-            new_rss_pub_date = found_game_update_data.get('rss_pub_date') # This is a datetime object from client
+            new_rss_pub_date_str = found_game_update_data.get('rss_pub_date') # Get as string
+
+            new_rss_pub_date_dt = None
+            if new_rss_pub_date_str:
+                try:
+                    # Try direct ISO format first
+                    dt_obj_new = datetime.fromisoformat(new_rss_pub_date_str.replace('Z', '+00:00'))
+                except ValueError:
+                    # Fallback to parsedate_to_datetime for standard RSS formats
+                    try:
+                        dt_obj_new = parsedate_to_datetime(new_rss_pub_date_str)
+                    except (TypeError, ValueError) as e_parse_new:
+                        logger.error(f"SCHEDULER: Could not parse new_rss_pub_date_str '{new_rss_pub_date_str}' for game '{current_name}': {e_parse_new}")
+                        dt_obj_new = None # Ensure it's None if parsing fails
+
+                    if dt_obj_new:
+                        # Ensure dt_obj is timezone-aware and UTC
+                        if dt_obj_new.tzinfo is None or dt_obj_new.tzinfo.utcoffset(dt_obj_new) is None:
+                            new_rss_pub_date_dt = dt_obj_new.replace(tzinfo=timezone.utc)
+                        else:
+                            new_rss_pub_date_dt = dt_obj_new.astimezone(timezone.utc)
 
             current_rss_pub_date_dt = None
             if current_rss_pub_date_str:
                 try:
-                    # Ensure it's timezone-aware for comparison with new_rss_pub_date (which is timezone-aware UTC from client)
-                    dt_obj = datetime.fromisoformat(current_rss_pub_date_str.replace('Z', '+00:00'))
-                    if dt_obj.tzinfo is None:
-                         current_rss_pub_date_dt = timezone.utc.localize(dt_obj) # Should not happen if fromisoformat worked with Z/offset
-                    else:
-                         current_rss_pub_date_dt = dt_obj.astimezone(timezone.utc)
+                    # Try direct ISO format first
+                    dt_obj_current = datetime.fromisoformat(current_rss_pub_date_str.replace('Z', '+00:00'))
                 except ValueError:
-                    try: # Fallback for other common RSS date formats if fromisoformat fails
-                        dt_obj = datetime.strptime(current_rss_pub_date_str, '%a, %d %b %Y %H:%M:%S %z')
-                        current_rss_pub_date_dt = dt_obj.astimezone(timezone.utc)
-                    except ValueError as e_parse:
-                        logger.error(f"SCHEDULER: Could not parse current_rss_pub_date '{current_rss_pub_date_str}' for game '{current_name}': {e_parse}")
+                     # Fallback to parsedate_to_datetime for standard RSS formats
+                    try:
+                        dt_obj_current = parsedate_to_datetime(current_rss_pub_date_str)
+                    except (TypeError, ValueError) as e_parse_current:
+                        logger.error(f"SCHEDULER: Could not parse current_rss_pub_date_str '{current_rss_pub_date_str}' for game '{current_name}': {e_parse_current}")
+                        dt_obj_current = None
+                
+                if dt_obj_current:
+                    if dt_obj_current.tzinfo is None or dt_obj_current.tzinfo.utcoffset(dt_obj_current) is None:
+                         current_rss_pub_date_dt = dt_obj_current.replace(tzinfo=timezone.utc) #localize(dt_obj_current)
+                    else:
+                         current_rss_pub_date_dt = dt_obj_current.astimezone(timezone.utc)
             
             # Check for changes
             name_changed = new_name and new_name != current_name
             version_changed = new_version and new_version != current_version
-            # Ensure new_rss_pub_date is not None before comparison
-            date_changed = new_rss_pub_date and current_rss_pub_date_dt and new_rss_pub_date > current_rss_pub_date_dt
+            # Ensure new_rss_pub_date_dt is not None before comparison
+            date_changed = new_rss_pub_date_dt and current_rss_pub_date_dt and new_rss_pub_date_dt > current_rss_pub_date_dt
             author_changed = new_author and new_author != game_data['author'] # game_data has original author
             image_changed = new_image_url and new_image_url != game_data['image_url'] # game_data has original image
 
             if name_changed or version_changed or date_changed or author_changed or image_changed:
                 has_primary_update = True
-                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Primary update found for '{original_name_for_notification}'. OldVer: {original_version_for_notification}, NewVer: {new_version}. OldDate: {current_rss_pub_date_str}, NewDate: {new_rss_pub_date.isoformat() if new_rss_pub_date else 'N/A'}")
+                new_rss_pub_date_iso_for_logging_and_db = new_rss_pub_date_dt.isoformat() if new_rss_pub_date_dt else 'N/A'
+                
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Primary update found for '{original_name_for_notification}'. OldVer: {original_version_for_notification}, NewVer: {new_version}. OldDate: {current_rss_pub_date_str}, NewDate: {new_rss_pub_date_iso_for_logging_and_db}")
                 
                 pushover_update_message_parts = []
                 if name_changed and new_name: pushover_update_message_parts.append(f"Name: {original_name_for_notification} -> {new_name}")
                 if version_changed and new_version: pushover_update_message_parts.append(f"Version: {original_version_for_notification} -> {new_version}")
-                if date_changed and new_rss_pub_date: pushover_update_message_parts.append(f"RSS Date Updated") # Simpler message for date
+                if date_changed and new_rss_pub_date_dt: pushover_update_message_parts.append(f"RSS Date Updated") # Simpler message for date
                 # Author/image changes less critical for primary notification, can be logged.
 
                 update_fields = {}
                 if name_changed: update_fields['name'] = new_name
                 if version_changed: update_fields['version'] = new_version
-                if date_changed: update_fields['rss_pub_date'] = new_rss_pub_date.isoformat()
+                if date_changed: update_fields['rss_pub_date'] = new_rss_pub_date_dt.isoformat() # Store ISO string
                 if author_changed: update_fields['author'] = new_author
                 if image_changed: update_fields['image_url'] = new_image_url
                 
