@@ -86,6 +86,7 @@ class F95ApiClient:
         self.request_timeout = request_timeout
         self.use_proxies = use_proxies
         self.available_proxies = [] # Will store tuples of (proxy_url_str, scheme_for_requests_dict)
+        self.current_proxy = None # Initialize current_proxy
 
         if self.use_proxies:
             self._load_proxies()
@@ -173,6 +174,7 @@ class F95ApiClient:
             "http": selected_proxy_url,  # Use this proxy for http:// URLs
             "https": selected_proxy_url  # And also for https:// URLs
         }
+        self.current_proxy = selected_proxy_url # Store the currently used proxy
         self.logger.info(f"Session configured to use proxy: {selected_proxy_url} (type derived from its scheme: {scheme})")
         return True
 
