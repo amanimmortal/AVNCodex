@@ -139,14 +139,17 @@ def initialize_database(db_path):
 
         if 'user_acknowledged_version' not in upg_columns:
             cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_version TEXT")
+            conn.commit() # Commit immediately after this ALTER
             logger.info("Added 'user_acknowledged_version' column to 'user_played_games' table.")
         
         if 'user_acknowledged_rss_pub_date' not in upg_columns:
             cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_rss_pub_date TEXT")
+            conn.commit() # Commit immediately after this ALTER
             logger.info("Added 'user_acknowledged_rss_pub_date' column to 'user_played_games' table.")
 
         if 'user_acknowledged_completion_status' not in upg_columns:
             cursor.execute("ALTER TABLE user_played_games ADD COLUMN user_acknowledged_completion_status TEXT")
+            conn.commit() # Commit immediately after this ALTER
             logger.info("Added 'user_acknowledged_completion_status' column to 'user_played_games' table.")
         
         # Create app_settings table
@@ -1435,6 +1438,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                 if item.get('url') == game_url:
                     found_game_update_data = item
                     found_game_in_initial_ongoing_check = True
+                    # Single log for this event
                     logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' FOUND in initial 'ongoing' check.")
                     break
         
@@ -1524,11 +1528,39 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                 current_status = "ONGOING" 
                 logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' was UNKNOWN and found in 'ongoing' check. Setting status to ONGOING.")
             elif current_status != "COMPLETED" and current_status != "ABANDONED" and current_status != "ON_HOLD":
-                # If it's some other status or already ONGOING, confirm it as ONGOING if found in this feed.
                 current_status = "ONGOING"
+                # Removed a redundant log here, the one above covers the "found and set to ongoing" case.
+                # If it was already ongoing, no need to log "set to ongoing" again.
 
+        # --- Status Determination and DB Update Block ---
+        update_fields = {}
+        pushover_message_parts = []
+        is_newly_completed_for_notification = False # Initialize this flag
 
-        # --- Status Determination (only if not found in initial 'ongoing' check) ---
+        # Populate update_fields based on primary data changes (name, version, date, etc.)
+        # This part is fine and should run if found_game_update_data exists.
+        if name_changed:
+            update_fields['name'] = new_name
+            pushover_message_parts.append(f"Name: {original_name_for_notification} -> {new_name}")
+        if version_changed:
+            update_fields['version'] = new_version
+            pushover_message_parts.append(f"Version: {original_version_for_notification} -> {new_version}")
+        if date_changed and new_rss_pub_date_dt: # Ensure new_rss_pub_date_dt is not None
+            update_fields['rss_pub_date'] = new_rss_pub_date_dt.isoformat()
+            pushover_message_parts.append(f"RSS Date Updated")
+        if author_changed: # Check if new_author has a value
+            update_fields['author'] = new_author
+            pushover_message_parts.append(f"Author updated: {new_author}") # Simplified message
+        if image_changed: # Check if new_image_url has a value
+            update_fields['image_url'] = new_image_url
+            pushover_message_parts.append(f"Image URL updated") # Simplified message
+        
+        # Store the status determined from the initial 'ongoing' check if the game was found there.
+        # This status will be compared against original_status_for_notification later.
+        status_after_ongoing_check = current_status if found_game_in_initial_ongoing_check else original_status_for_notification
+
+        # --- Specific Status Checks (COMPLETED, ABANDONED, ON_HOLD) ---
+        # This entire block should ONLY run if the game was NOT found in the initial 'ongoing' check.
         if not found_game_in_initial_ongoing_check:
             logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' not found in initial ongoing check. Proceeding to specific status (C/A/OH) checks.")
             status_priority_checks = [
@@ -1546,159 +1578,104 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                     break 
 
             if new_determined_status_specific:
-                current_status = new_determined_status_specific
+                current_status = new_determined_status_specific # This is the new status from C/A/OH checks
             elif current_status == "UNKNOWN": 
-                # If not found in C/A/OH and was UNKNOWN, default to ONGOING
-                # This implies it's not in terminal states and wasn't in the general "ongoing" feed explicitly
-                # (though the initial check for "ongoing" was already done and failed to find it).
-                # This state (not in ongoing, not in C/A/OH) means it's likely truly not on RSS right now or very new.
                 current_status = "ONGOING" 
                 logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) was UNKNOWN and not found in C/A/OH feeds. Defaulting status to ONGOING.")
             else:
-                # If it had a status like ON_HOLD, and wasn't found in C/A/OH, it remains ON_HOLD.
                  logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) not found in C/A/OH feeds. Retaining previous status '{current_status}'.")
-        else: # Game was found in initial "ongoing" check
-            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' was found in initial 'ongoing' check. Status is '{current_status}'. Skipping specific C/A/OH checks.")
-            # The status current_status was already updated to ONGOING if it was UNKNOWN or not a terminal one.
+        else: 
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' was found in initial 'ongoing' check. Current status before DB update: '{status_after_ongoing_check}'. Skipping specific C/A/OH checks.")
+            current_status = status_after_ongoing_check # Ensure current_status reflects the result of the 'ongoing' check path
 
-        # --- Prepare for DB Update and Notification ---
-        update_fields = {}
-        pushover_message_parts = []
+        # --- Determine if Status Changed and Update DB ---
+        # Compare the determined current_status (from either ongoing check or specific C/A/OH checks)
+        # with the original status at the beginning of the function.
+        if current_status != original_status_for_notification:
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Status change for '{log_name_for_notification}' (ID: {game_id}): {original_status_for_notification} -> {current_status}")
+            update_fields['completed_status'] = current_status
+            pushover_message_parts.append(f"Status: {original_status_for_notification} -> {current_status}")
+            if current_status == "COMPLETED" and original_status_for_notification != "COMPLETED":
+                is_newly_completed_for_notification = True
+        else:
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Status for '{log_name_for_notification}' (ID: {game_id}) remains '{current_status}'. No status change to DB.")
+        
+        # Update database if any primary fields (name, version etc.) or status changed.
+        if update_fields: # update_fields now includes 'completed_status' if it changed
+            # Add last_updated_in_db and last_seen_on_rss for any update
+            update_fields['last_updated_in_db'] = datetime.now(timezone.utc).isoformat()
+            update_fields['last_seen_on_rss'] = datetime.now(timezone.utc).isoformat() # Also update last_seen if details changed
 
-        if name_changed:
-            update_fields['name'] = new_name
-            pushover_message_parts.append(f"Name: {original_name_for_notification} -> {new_name}")
-        if version_changed:
-            update_fields['version'] = new_version
-            pushover_message_parts.append(f"Version: {original_version_for_notification} -> {new_version}")
-        if date_changed:
-            update_fields['rss_pub_date'] = new_rss_pub_date_dt.isoformat()
-            pushover_message_parts.append(f"RSS Date Updated")
-        if author_changed:
-            update_fields['author'] = new_author
-            pushover_message_parts.append(f"Author: {original_version_for_notification} -> {new_author}")
-        if image_changed:
-            update_fields['image_url'] = new_image_url
-            pushover_message_parts.append(f"Image URL: {original_version_for_notification} -> {new_image_url}")
-
-        if update_fields:
-            set_clause = ", ".join([f"{key} = ?" for key in update_fields.keys()])
-            params = list(update_fields.values())
-            params.append(datetime.now(timezone.utc).isoformat()) # last_updated_in_db
-            params.append(game_id)
+            set_clause_parts = [f"{key} = ?" for key in update_fields.keys()]
+            set_clause = ", ".join(set_clause_parts)
+            
+            final_params = list(update_fields.values()) + [game_id]
             
             try:
-                # Corrected params build directly into final_params
-                final_params = list(update_fields.values()) + [datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), game_id]
-
-                # Use only the corrected execution
-                cursor.execute(f"UPDATE games SET {set_clause}, last_updated_in_db = ?, last_seen_on_rss = ? WHERE id = ?", final_params)
-
+                cursor.execute(f"UPDATE games SET {set_clause} WHERE id = ?", tuple(final_params))
                 conn.commit()
-                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Updated game details in DB for '{original_name_for_notification}'.")
-                # Update current_name, current_version etc. if they were changed, for subsequent status checks
-                if name_changed: current_name = new_name 
-                if version_changed: current_version = new_version
-                # current_status not updated here, but by specific status checks below.
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Updated game details/status in DB for '{original_name_for_notification}'. Fields: {list(update_fields.keys())}")
 
-                # Send Pushover notification for game update if enabled
-                if pushover_message_parts and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True': # Pass user_id
-                    # Construct the message with newlines for Pushover
-                    # Start with the header
-                    message_lines = ["Game updated:"]
-                    # Add each part from pushover_message_parts as a new line
-                    message_lines.extend(pushover_message_parts)
-                    # Join all lines with a newline character
-                    final_pushover_message = "\n".join(message_lines)
-
-                    send_pushover_notification(
-                        db_path,
-                        user_id=user_id, # Pass user_id
-                        title=f"Update: {new_name if new_name else original_name_for_notification}",
-                        message=final_pushover_message, # Use the message with proper newlines
-                        url=game_url,
-                        url_title=f"View {new_name if new_name else original_name_for_notification} on F95Zone"
-                    )
+                # Update local variables if they were part of the update, for notification consistency
+                if 'name' in update_fields: original_name_for_notification = update_fields['name'] # Use new name for notification if changed
+                if 'version' in update_fields: original_version_for_notification = update_fields['version']
+                
             except sqlite3.Error as e_update:
                  logger.error(f"SCHEDULER/SYNC (User: {user_id}): DB error updating game '{original_name_for_notification}': {e_update}")
-                 has_primary_update = False # If DB update fails, treat as no primary update for status logic
-
-        # Status checking logic
-        new_status_determined = None
-        status_change_notification_message = None
-
-        if has_primary_update:
-            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Primary update for '{current_name}'. Checking for 'COMPLETED' status.")
-            # Only check for completed if the game is not already marked as such
-            if original_status_for_notification != "COMPLETED": # Use original status for this check
-                status_check_result = _determine_specific_game_status(f95_client, game_url, current_name, "completed")
-                if status_check_result == "COMPLETED":
-                    new_status_determined = "COMPLETED"
-                    if get_setting(db_path, 'notify_on_status_change_completed', 'False', user_id=user_id) == 'True': # Pass user_id
-                        status_change_notification_message = f"'{current_name}' status changed: {original_status_for_notification} -> COMPLETED"
-            elif original_status_for_notification == "COMPLETED": 
-                status_check_result = _determine_specific_game_status(f95_client, game_url, current_name, "completed")
-                if status_check_result != "COMPLETED":
-                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' was COMPLETED, but no longer found in completed feed after update. Setting to ONGOING.")
-                    new_status_determined = "ONGOING" # Reverted from COMPLETED
-                    # Decide if this reversion warrants a notification based on 'notify_on_game_update' or a new toggle
-                    if get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True': # Pass user_id; Treat as a general update
-                         status_change_notification_message = f"'{current_name}' status changed: COMPLETED -> ONGOING"
-                else:
-                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{current_name}' confirmed still COMPLETED after update.")
-
-        else: # No primary update detected (or general search failed / DB update failed)
-            logger.info(f"SCHEDULER/SYNC (User: {user_id}): No primary update for '{current_name}'. Checking for 'ABANDONED' or 'ON-HOLD'.")
-            if original_status_for_notification not in ["COMPLETED", "ABANDONED"]:
-                status_check_result = _determine_specific_game_status(f95_client, game_url, current_name, "abandoned")
-                if status_check_result == "ABANDONED":
-                    new_status_determined = "ABANDONED"
-                    if get_setting(db_path, 'notify_on_status_change_abandoned', 'False', user_id=user_id) == 'True': # Pass user_id
-                        status_change_notification_message = f"'{current_name}' status changed: {original_status_for_notification} -> ABANDONED"
-                elif original_status_for_notification not in ["ON_HOLD"]: 
-                     status_check_result_onhold = _determine_specific_game_status(f95_client, game_url, current_name, "on_hold")
-                     if status_check_result_onhold == "ON_HOLD":
-                         new_status_determined = "ON_HOLD"
-                         if get_setting(db_path, 'notify_on_status_change_on_hold', 'False', user_id=user_id) == 'True': # Pass user_id
-                            status_change_notification_message = f"'{current_name}' status changed: {original_status_for_notification} -> ON_HOLD"
         
-        if new_status_determined and new_status_determined != original_status_for_notification: # Compare with original status
-            try:
-                cursor.execute("UPDATE games SET completed_status = ?, last_updated_in_db = ?, last_seen_on_rss = ? WHERE id = ?", 
-                               (new_status_determined, datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), game_id))
-                conn.commit()
-                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Status for '{current_name}' (ID: {game_id}) changed from '{original_status_for_notification}' to '{new_status_determined}'.")
-                
-                # Send Pushover for status change if message was prepared and not already sent by primary update
-                if status_change_notification_message and not (has_primary_update and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True'): # Pass user_id
-                    send_pushover_notification(
-                        db_path,
-                        user_id=user_id, # Pass user_id
-                        title=f"Status Change: {current_name}",
-                        message=status_change_notification_message,
-                        url=game_url,
-                        url_title=f"View {current_name} on F95Zone"
-                    )
-                # If it was a primary update AND a status change, and primary update notifications are on,
-                # the status change might already be part of that broader update context or could be sent separately.
-                # Current logic might send two if primary update + specific status change toggle are both on.
-                # Let's refine: only send specific status change if no primary update notif was sent.
-                elif status_change_notification_message and has_primary_update and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'False': # Pass user_id
-                     # Primary update occurred, but its notification toggle is off.
-                     # So, if this specific status change toggle is on, send it.
-                     send_pushover_notification(
-                        db_path,
-                        user_id=user_id, # Pass user_id
-                        title=f"Status Change: {current_name}",
-                        message=status_change_notification_message,
-                        url=game_url,
-                        url_title=f"View {current_name} on F95Zone"
-                    )
-
-            except sqlite3.Error as e_status_update:
-                logger.error(f"SCHEDULER/SYNC (User: {user_id}): DB error updating status for '{current_name}': {e_status_update}")
+        # --- Send Notifications ---
+        # Notification for primary updates (name, version, date etc.)
+        # Check if pushover_message_parts has reasons *other than* just a status change if status change is handled separately
+        primary_update_reasons = [reason for reason in pushover_message_parts if not reason.startswith("Status:")]
         
-        # Update last_checked_at regardless of updates found, to show it was processed
+        if primary_update_reasons and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True':
+            message_lines = ["Game updated:"]
+            message_lines.extend(primary_update_reasons)
+            # If status also changed and is part of this batch, include it.
+            status_change_reason = next((reason for reason in pushover_message_parts if reason.startswith("Status:")), None)
+            if status_change_reason:
+                message_lines.append(status_change_reason)
+
+            final_pushover_message = "\\n".join(message_lines)
+            send_pushover_notification(
+                db_path, user_id=user_id,
+                title=f"Update: {original_name_for_notification}", # Use potentially updated name
+                message=final_pushover_message,
+                url=game_url, url_title=f"View {original_name_for_notification} on F95Zone"
+            )
+        
+        # Notification specifically for a status change to COMPLETED, if not already covered by primary update notification
+        # and if primary update notifications are OFF but completed status change notifications are ON.
+        elif is_newly_completed_for_notification and \
+             get_setting(db_path, 'notify_on_status_change_completed', 'False', user_id=user_id) == 'True' and \
+             not (primary_update_reasons and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True'):
+            send_pushover_notification(
+                db_path, user_id=user_id,
+                title=f"Status Change: {original_name_for_notification}",
+                message=f"'{original_name_for_notification}' status changed: {original_status_for_notification} -> COMPLETED",
+                url=game_url, url_title=f"View {original_name_for_notification} on F95Zone"
+            )
+        
+        # Simplified notification for other status changes (ABANDONED, ON_HOLD) if enabled
+        # And not already covered by a primary update notification that included status.
+        elif current_status != original_status_for_notification and \
+             not is_newly_completed_for_notification and \
+             not (primary_update_reasons and get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True'):
+            notify_toggle_key = None
+            if current_status == "ABANDONED":
+                notify_toggle_key = 'notify_on_status_change_abandoned'
+            elif current_status == "ON_HOLD":
+                notify_toggle_key = 'notify_on_status_change_on_hold'
+            
+            if notify_toggle_key and get_setting(db_path, notify_toggle_key, 'False', user_id=user_id) == 'True':
+                send_pushover_notification(
+                    db_path, user_id=user_id,
+                    title=f"Status Change: {original_name_for_notification}",
+                    message=f"'{original_name_for_notification}' status changed: {original_status_for_notification} -> {current_status}",
+                    url=game_url, url_title=f"View {original_name_for_notification} on F95Zone"
+                )
+
+        # Update last_checked_at regardless of updates found
         try:
             cursor.execute("UPDATE games SET last_checked_at = ? WHERE id = ?", (datetime.now(timezone.utc).isoformat(), game_id))
             conn.commit()
