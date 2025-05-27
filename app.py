@@ -47,7 +47,6 @@ from apscheduler.jobstores.base import JobLookupError
 # --- Early Initialization: Database Schema ---
 try:
     initialize_database(DB_PATH)
-    print("SUCCESS: Database schema initialization attempted.", file=sys.stderr)
 except Exception as e_init_db:
     print(f"CRITICAL_ERROR_INIT_DB_SCHEMA: {e_init_db}", file=sys.stderr)
     # Depending on severity, might sys.exit(1) or let Flask try to start and potentially fail later.
@@ -58,7 +57,6 @@ flask_app.secret_key = os.urandom(24) # Needed for flash messages
 
 # --- Global API Client ---
 f95_client = F95ApiClient()
-print("INFO: F95ApiClient instantiated.", file=sys.stderr)
 
 # --- Helper Function Definitions ---
 # These need to be defined before they are used by module-level calls or routes.
@@ -83,13 +81,13 @@ def create_user(username, password, is_admin=False):
         conn.commit()
         # Use flask_app.logger only if flask_app is fully configured for logging
         # For early startup, print might be more reliable if logger isn't ready
-        print(f"INFO: User '{username}' created successfully.", file=sys.stderr)
+        flask_app.logger.info(f"User '{username}' created successfully.")
         return True
     except sqlite3.IntegrityError:
-        print(f"WARNING: Attempted to create user '{username}', but username already exists.", file=sys.stderr)
+        flask_app.logger.warning(f"Attempted to create user '{username}', but username already exists.")
         return False
     except sqlite3.Error as e:
-        print(f"ERROR_DB_CREATE_USER: Database error creating user '{username}': {e}", file=sys.stderr)
+        flask_app.logger.error(f"Database error creating user '{username}': {e}")
         return False
     finally:
         if conn:
@@ -103,7 +101,7 @@ def get_user_by_username(username):
         return user
     except sqlite3.Error as e:
         # flask_app.logger might not be ready here if called too early by other startup tasks
-        print(f"ERROR_DB_GET_USER: Database error fetching user by username '{username}': {e}", file=sys.stderr)
+        flask_app.logger.error(f"Database error fetching user by username '{username}': {e}")
         return None
     finally:
         if conn:
@@ -117,7 +115,7 @@ def get_user_by_id(user_id):
         return user
     except sqlite3.Error as e:
         # flask_app.logger might not be ready here
-        print(f"ERROR_DB_GET_USER_ID: Database error fetching user by ID '{user_id}': {e}", file=sys.stderr)
+        flask_app.logger.error(f"Database error fetching user by ID '{user_id}': {e}")
         return None
     finally:
         if conn:
@@ -131,7 +129,7 @@ def get_user_count():
         return count
     except sqlite3.Error as e:
         # flask_app.logger might not be ready here
-        print(f"ERROR_DB_USER_COUNT: Database error getting user count: {e}", file=sys.stderr)
+        flask_app.logger.error(f"Database error getting user count: {e}")
         return 0
     finally:
         if conn:
@@ -147,11 +145,11 @@ def update_user_password(user_id, new_password_hash):
         )
         conn.commit()
         # flask_app.logger.info(f"Password updated for user_id {user_id}.") # Use logger once app confirmed stable
-        print(f"INFO: Password updated for user_id {user_id}.", file=sys.stderr)
+        flask_app.logger.info(f"Password updated for user_id {user_id}.")
         return True
     except sqlite3.Error as e:
         # flask_app.logger.error(f"Database error updating password for user_id {user_id}: {e}")
-        print(f"ERROR_DB_UPDATE_PW: Database error updating password for user_id {user_id}: {e}", file=sys.stderr)
+        flask_app.logger.error(f"Database error updating password for user_id {user_id}: {e}")
         return False
     finally:
         if conn:
@@ -164,11 +162,14 @@ def create_initial_admin_user_if_none_exists():
     if get_user_count() == 0:
         default_admin_username = "admin"
         default_admin_password = "admin" # CHANGE THIS IN PRODUCTION!
-        print("INFO: No users found in the database. Creating default admin user...", file=sys.stderr)
+        # print("INFO: No users found in the database. Creating default admin user...", file=sys.stderr)
+        flask_app.logger.info("No users found in the database. Creating default admin user...")
         if create_user(default_admin_username, default_admin_password, is_admin=True):
-            print(f"INFO: Default admin user '{default_admin_username}' created with password '{default_admin_password}'. PLEASE CHANGE THE PASSWORD IMMEDIATELY.", file=sys.stderr)
+            # print(f"INFO: Default admin user '{default_admin_username}' created with password '{default_admin_password}'. PLEASE CHANGE THE PASSWORD IMMEDIATELY.", file=sys.stderr)
+            flask_app.logger.info(f"Default admin user '{default_admin_username}' created with password '{default_admin_password}'. PLEASE CHANGE THE PASSWORD IMMEDIATELY.")
         else:
-            print("ERROR: Failed to create default admin user.", file=sys.stderr)
+            # print("ERROR: Failed to create default admin user.", file=sys.stderr)
+            flask_app.logger.error("Failed to create default admin user.")
 
 # APScheduler Setup Function Definitions
 scheduler = BackgroundScheduler(daemon=True)
@@ -244,7 +245,6 @@ def run_scheduled_update_job():
 
 def start_or_reschedule_scheduler(app_instance):
     global scheduler 
-    print("INFO_SCHEDULER: Attempting to start or reschedule...", file=sys.stderr)
     with app_instance.app_context():
         primary_admin_id = get_primary_admin_user_id(DB_PATH)
         current_schedule_hours_str = '24' 
@@ -254,43 +254,42 @@ def start_or_reschedule_scheduler(app_instance):
             if schedule_val is not None:
                  current_schedule_hours_str = schedule_val
         else:
-            print("WARNING_SCHEDULER: No primary admin found, using default schedule of 24 hours.", file=sys.stderr)
+            flask_app.logger.warning("WARNING_SCHEDULER: No primary admin found, using default schedule of 24 hours.")
         
         try:
             update_value = int(current_schedule_hours_str)
             if update_value == -5:
-                print("INFO_SCHEDULER: Update interval is 5 minutes (Testing).", file=sys.stderr)
+                flask_app.logger.info("INFO_SCHEDULER: Update interval is 5 minutes (Testing).")
                 trigger_args = {'minutes': 5}
             elif update_value <= 0:
-                print(f"INFO_SCHEDULER: Update interval is {update_value} (Manual/Disabled). Job will be removed if exists.", file=sys.stderr)
+                flask_app.logger.info(f"INFO_SCHEDULER: Update interval is {update_value} (Manual/Disabled). Job will be removed if exists.")
                 try:
                     if scheduler.get_job(scheduler_job_id):
                         scheduler.remove_job(scheduler_job_id)
-                        print(f"INFO_SCHEDULER: Removed job '{scheduler_job_id}'.", file=sys.stderr)
+                        flask_app.logger.info(f"INFO_SCHEDULER: Removed job '{scheduler_job_id}'.")
                 except JobLookupError:
-                    print(f"INFO_SCHEDULER: Job '{scheduler_job_id}' not found, nothing to remove.", file=sys.stderr)
+                    flask_app.logger.info(f"INFO_SCHEDULER: Job '{scheduler_job_id}' not found, nothing to remove.")
                 return 
             else: 
-                print(f"INFO_SCHEDULER: Update interval is {update_value} hours.", file=sys.stderr)
+                flask_app.logger.info(f"INFO_SCHEDULER: Update interval is {update_value} hours.")
                 trigger_args = {'hours': update_value}
         except ValueError:
-            print(f"ERROR_SCHEDULER_CONFIG: Could not parse update_schedule_hours: '{current_schedule_hours_str}'.", file=sys.stderr)
+            flask_app.logger.error(f"ERROR_SCHEDULER_CONFIG: Could not parse update_schedule_hours: '{current_schedule_hours_str}'.")
             return
 
     if not scheduler.running:
         try:
             scheduler.start()
-            print("INFO_SCHEDULER: Scheduler started.", file=sys.stderr)
-            atexit.register(lambda: scheduler.shutdown())
-        except Exception as e:
-            print(f"ERROR_SCHEDULER_START: {e}", file=sys.stderr)
-            return 
-    
+            flask_app.logger.info("INFO_SCHEDULER: Scheduler started.")
+            atexit.register(shutdown_scheduler_politely)
+        except Exception as e_sched_start:
+            flask_app.logger.error(f"ERROR_SCHEDULER: Failed to start scheduler: {e_sched_start}", exc_info=True)
+
     try:
         existing_job = scheduler.get_job(scheduler_job_id)
         if existing_job:
             scheduler.reschedule_job(scheduler_job_id, trigger=IntervalTrigger(**trigger_args))
-            print(f"INFO_SCHEDULER: Rescheduled job '{scheduler_job_id}'.", file=sys.stderr)
+            flask_app.logger.info(f"INFO_SCHEDULER: Rescheduled job '{scheduler_job_id}'.")
         else:
             scheduler.add_job(
                 func=run_scheduled_update_job,
@@ -300,21 +299,19 @@ def start_or_reschedule_scheduler(app_instance):
                 replace_existing=True, 
                 next_run_time=datetime.now() + timedelta(seconds=10) 
             )
-            print(f"INFO_SCHEDULER: Added job '{scheduler_job_id}'. First run in ~10s.", file=sys.stderr)
+            flask_app.logger.info(f"INFO_SCHEDULER: Added job '{scheduler_job_id}'. First run in ~10s.")
     except Exception as e:
-        print(f"ERROR_SCHEDULER_ADD_JOB: {e}", file=sys.stderr)
+        flask_app.logger.error(f"ERROR_SCHEDULER_ADD_JOB: {e}")
 
 # --- Module-Level Initialization Calls (after definitions and app instantiation) ---
 try:
     with flask_app.app_context():
         create_initial_admin_user_if_none_exists()
-    print("SUCCESS: Initial admin user check/creation attempted.", file=sys.stderr)
 except Exception as e_init_admin_call:
     print(f"CRITICAL_ERROR_CALL_INIT_ADMIN: {e_init_admin_call}", file=sys.stderr)
 
 try:
     start_or_reschedule_scheduler(flask_app)
-    print("SUCCESS: Scheduler startup sequence initiated.", file=sys.stderr)
 except Exception as e_init_scheduler_call:
     print(f"CRITICAL_ERROR_CALL_INIT_SCHEDULER: {e_init_scheduler_call}", file=sys.stderr)
 
@@ -796,6 +793,10 @@ def admin_users_route():
 # @flask_app.route('/update_played_game/<int:played_game_id>', methods=['GET', 'POST'])
 # def update_played_game_route(played_game_id): # Placeholder - comment out if not implemented
 #     pass
+
+def shutdown_scheduler_politely():
+    if scheduler.running:
+        scheduler.shutdown()
 
 if __name__ == '__main__':
     # initialize_database(DB_PATH) # Moved to top-level
