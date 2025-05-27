@@ -2,27 +2,29 @@
 
 /* General card action styling if needed */
 .card-actions {
-    /* Add any existing flex or layout properties if you want to refine them */
     /* display: flex; */
     /* justify-content: space-between; */
     /* align-items: center; */
+    /* flex-wrap: wrap; */ /* Added to help with spacing issues before hiding */
 }
 
-/* When acknowledgement is pending, hide the standard action buttons */
-.card-actions.acknowledgement-pending .standard-actions {
-    display: none;
+/* When acknowledgement is pending, HIDE the standard action buttons */
+/* Increased specificity and using !important as a fallback for testing if needed */
+.card.game-card div.card-actions.acknowledgement-pending div.standard-actions {
+    display: none !important; /* Force hide */
 }
 
-/* Ensure the acknowledge form itself is still visible */
-.card-actions.acknowledgement-pending .acknowledge-form {
-    display: inline-block; /* Or block, depending on desired layout */
-    width: 100%; /* Make it take full width if other buttons are hidden */
-    text-align: center; /* Center the button if it's the only one */
+/* Ensure the acknowledge form itself is still visible and centered */
+.card.game-card div.card-actions.acknowledgement-pending form.acknowledge-form {
+    display: block; /* Make it a block to take full width of its parent */
+    width: 100%; 
+    text-align: center; 
+    margin-top: 5px; /* Add some space if it's the only button */
 }
 
-.card-actions.acknowledgement-pending .acknowledge-form button {
-    width: auto; /* Or adjust as needed */
-    margin: 5px auto; /* Center button a bit */
+.card.game-card div.card-actions.acknowledgement-pending form.acknowledge-form button {
+    width: auto; 
+    /* margin: 0 auto; */ /* Center the button if it's block */
 }
 
 
@@ -42,19 +44,25 @@
 
 /* Optional: Style for the sync all button header area */
 .played-games-header {
-    display: flex; /* Use flexbox to align items */
-    justify-content: space-between; /* Puts h2 on left, buttons on right */
-    align-items: center; /* Vertically aligns items in the middle */
-    margin-bottom: 1rem; /* Space below the header */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
 }
 
 .played-games-header h2 {
-    margin-bottom: 0; /* Remove default bottom margin from h2 if any */
+    margin-bottom: 0;
+    margin-right: auto; /* Push h2 to the left, and header-actions to the right */
 }
 
-.played-games-header form,
-.played-games-header button {
-    margin-left: 0.5rem; /* Add some space between buttons */
+.played-games-header .header-actions {
+    display: flex; /* Align buttons in this group horizontally */
+    align-items: center;
+}
+
+.played-games-header .header-actions form,
+.played-games-header .header-actions button {
+    margin-left: 0.5rem;
 }
 
 /* Flash messages styling */

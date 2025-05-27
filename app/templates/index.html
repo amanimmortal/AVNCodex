@@ -41,19 +41,20 @@
     <section class="played-games-section">
         <div class="played-games-header">
             <h2>My Monitored Games ({{ played_games|length }})</h2>
-            {# Manual Sync All Button - Added here #}
-            <form action="{{ url_for('manual_sync_all_route') }}" method="POST" style="display: inline-block; margin-left: 10px;">
-                <button type="submit" class="btn btn-sm btn-info sync-all-btn">
-                    <span class="sync-text">Sync All Monitored</span>
-                    <span class="sync-spinner" style="display: none;">
-                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        Syncing All...
-                    </span>
+            <div class="header-actions">
+                <form action="{{ url_for('manual_sync_all_route') }}" method="POST" style="display: inline-block;">
+                    <button type="submit" class="btn btn-sm btn-info sync-all-btn">
+                        <span class="sync-text">Sync All Monitored</span>
+                        <span class="sync-spinner" style="display: none;">
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            Syncing All...
+                        </span>
+                    </button>
+                </form>
+                <button id="toggle-view-btn" class="btn btn-outline-secondary btn-sm" style="margin-left: 10px;">
+                    Switch to Grid View
                 </button>
-            </form>
-            <button id="toggle-view-btn" class="btn btn-outline-secondary btn-sm" style="margin-left: 10px;">
-                Switch to Grid View
-            </button>
+            </div>
         </div>
 
         <div id="played-games-list" class="list-view"> {# Default to list-view #}
