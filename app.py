@@ -10,7 +10,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '.')) # a
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, g
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g, send_from_directory, abort # Added send_from_directory and abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps # For login_required decorator
 from f95apiclient import F95ApiClient
@@ -57,6 +57,9 @@ flask_app.secret_key = os.urandom(24) # Needed for flash messages
 
 # --- Global API Client ---
 f95_client = F95ApiClient()
+
+# --- Image Cache Constants (consistent with f95apiclient) ---
+IMAGE_CACHE_DIR_FS = "/data/image_cache" # Filesystem path for Flask to find images
 
 # --- Helper Function Definitions ---
 # These need to be defined before they are used by module-level calls or routes.
@@ -798,6 +801,24 @@ def admin_users_route():
 # @flask_app.route('/update_played_game/<int:played_game_id>', methods=['GET', 'POST'])
 # def update_played_game_route(played_game_id): # Placeholder - comment out if not implemented
 #     pass
+
+# --- Route to serve cached images ---
+@flask_app.route('/cached_images/<path:filename>')
+@login_required # Optional: Add login_required if you want to protect cached images too
+def cached_image_route(filename):
+    # Security: Ensure the filename is safe and doesn't allow directory traversal.
+    # send_from_directory handles this reasonably well by design.
+    # flask_app.logger.debug(f"Attempting to serve cached image: {filename} from {IMAGE_CACHE_DIR_FS}")
+    try:
+        return send_from_directory(IMAGE_CACHE_DIR_FS, filename)
+    except FileNotFoundError:
+        flask_app.logger.warning(f"Cached image not found: {filename} in {IMAGE_CACHE_DIR_FS}")
+        # Optionally, you could return a default placeholder image here instead of a 404
+        # For now, let Flask handle it as a 404
+        abort(404)
+    except Exception as e:
+        flask_app.logger.error(f"Error serving cached image {filename}: {e}")
+        abort(500)
 
 if __name__ == '__main__':
     # initialize_database(DB_PATH) # Moved to top-level

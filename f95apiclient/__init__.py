@@ -10,6 +10,9 @@ import random # Added for random sampling and proxy selection
 import urllib.parse # Added for URL encoding
 import time # Added for retry delay
 from typing import Optional
+import os # Added for OS path operations
+import hashlib # Added for generating unique filenames
+from urllib.parse import urlparse # To get path and extension from URL
 
 # Setup basic logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -49,8 +52,12 @@ MSG_AUTH_SUCCESSFUL = "Authentication successful"
 
 # Metadata keys (from ot-metadata-values.ts in F95API, simplified for direct use) - REMOVED as no longer parsing pages
 # MD_KEY_VERSION = ["Version", "Game Version"]
-# MD_KEY_AUTHOR = ["Author", "Developer", "Creator"]
+MD_KEY_AUTHOR = ["Author", "Developer", "Creator"]
 # ... and other MD_KEY_* constants removed
+
+# --- Image Cache Constants ---
+IMAGE_CACHE_DIR = "/data/image_cache" # Filesystem path
+IMAGE_CACHE_WEB_PATH_PREFIX = "/cached_images/" # Web path prefix
 
 # Removed get_direct_text as it was used by _parse_handiwork_page
 
@@ -81,6 +88,8 @@ class F95ApiClient:
         self.logger = logging.getLogger(__name__)
         self.is_logged_in = False
 
+        self._ensure_cache_dir_exists() # Ensure cache directory exists on init
+
         self.max_attempts = max_attempts # Renamed from max_retries for clarity based on new logic
         self.retry_delay_seconds = retry_delay_seconds # Kept, but not used in the immediate proxy switch loop
         self.request_timeout = request_timeout
@@ -98,6 +107,44 @@ class F95ApiClient:
         else:
             self.logger.info("Proxy usage is disabled by configuration.")
             self.session.proxies = {}
+
+    def _ensure_cache_dir_exists(self):
+        """Ensures the image cache directory exists."""
+        try:
+            os.makedirs(IMAGE_CACHE_DIR, exist_ok=True)
+            self.logger.info(f"Image cache directory ensured at: {IMAGE_CACHE_DIR}")
+        except OSError as e:
+            self.logger.error(f"Could not create image cache directory {IMAGE_CACHE_DIR}: {e}")
+
+    def _get_cached_image_paths(self, original_image_url: str) -> Optional[dict]:
+        """
+        Generates filesystem and web paths for a cached image.
+        Returns a dict {'fs_path': ..., 'web_path': ...} or None if URL is invalid.
+        """
+        if not original_image_url:
+            return None
+        try:
+            parsed_url = urlparse(original_image_url)
+            # Get extension, ensure it's a common image type if needed, or just use it
+            _, extension = os.path.splitext(parsed_url.path)
+            if not extension: # Fallback if no extension in path (e.g. some dynamic URLs)
+                # We might need to rely on Content-Type later to determine true type
+                # For now, if no extension, we can't reliably save with one.
+                # Or, default to a common one like .img if we are sure it's an image
+                self.logger.debug(f"Image URL {original_image_url} has no extension. Filename might be incomplete.")
+                # Forcing a default extension might be risky if content type is unknown later
+                # For now, let's proceed but this could be a point of failure if server doesn't give good Content-Type
+
+            # Create a unique filename based on the hash of the URL
+            url_hash = hashlib.sha256(original_image_url.encode('utf-8')).hexdigest()
+            filename = f"{url_hash}{extension if extension else '.img'}" # Add default .img if no ext.
+
+            fs_path = os.path.join(IMAGE_CACHE_DIR, filename)
+            web_path = f"{IMAGE_CACHE_WEB_PATH_PREFIX}{filename}"
+            return {'fs_path': fs_path, 'web_path': web_path}
+        except Exception as e:
+            self.logger.error(f"Error generating cached image paths for {original_image_url}: {e}")
+            return None
 
     def _fetch_proxy_list(self, url, proxy_type_scheme):
         """Fetches a list of proxies from a URL and adds them to self.available_proxies."""
@@ -520,15 +567,60 @@ class F95ApiClient:
                 game_data['rss_pub_date'] = item.get("published") # Format: 'Sat, 18 May 2024 10:00:00 GMT'
 
                 # Extract image URL from description HTML using regex
-                image_url_rss = None
+                image_url_from_rss = None
                 if item.get("description", ""):
                     # More robust regex for src attribute, using hex escapes for quotes to avoid SyntaxError
                     img_match = re.search(r'<img[^>]+src\s*=\s*[\x22\x27]([^\x22\x27]+)[\x22\x27]', item.get("description", ""), re.IGNORECASE)
                     if img_match:
-                        image_url_rss = img_match.group(1)
-                
-                game_data['image_url'] = image_url_rss # Changed key from image_url_rss to image_url
+                        image_url_from_rss = img_match.group(1)
+                    
+                    # --- Start Image Caching Logic ---
+                    if image_url_from_rss:
+                        cached_paths = self._get_cached_image_paths(image_url_from_rss)
+                        if cached_paths:
+                            local_fs_path = cached_paths['fs_path']
+                            local_web_path = cached_paths['web_path']
 
+                            if os.path.exists(local_fs_path):
+                                game_data['image_url'] = local_web_path
+                                self.logger.debug(f"Using cached image for {image_url_from_rss} at {local_web_path}")
+                            else:
+                                self.logger.info(f"Attempting to download and cache image: {image_url_from_rss} to {local_fs_path}")
+                                try:
+                                    # Use a separate requests call for the image, not necessarily via proxy unless needed
+                                    # But using self.session is fine as it has user-agent etc.
+                                    # Timeout should be specific for image download
+                                    img_response = self.session.get(image_url_from_rss, stream=True, timeout=self.request_timeout, proxies={}) # Try direct first for images
+                                    
+                                    if img_response.status_code == 200:
+                                        content_type = img_response.headers.get('Content-Type', '').lower()
+                                        if content_type.startswith('image/'):
+                                            with open(local_fs_path, 'wb') as f:
+                                                for chunk in img_response.iter_content(1024):
+                                                    f.write(chunk)
+                                            game_data['image_url'] = local_web_path
+                                            self.logger.info(f"Successfully cached image {image_url_from_rss} to {local_fs_path} (Content-Type: {content_type})")
+                                        else:
+                                            self.logger.warning(f"Failed to cache image {image_url_from_rss}. Incorrect Content-Type: {content_type}. Expected 'image/...'.")
+                                            game_data['image_url'] = None # Explicitly set to None
+                                    else:
+                                        self.logger.warning(f"Failed to download image {image_url_from_rss}. Status: {img_response.status_code}")
+                                        game_data['image_url'] = None # Explicitly set to None
+                                except requests.exceptions.RequestException as img_e:
+                                    self.logger.error(f"Error downloading image {image_url_from_rss}: {img_e}")
+                                    game_data['image_url'] = None # Explicitly set to None
+                                except IOError as io_e:
+                                    self.logger.error(f"Error saving image {image_url_from_rss} to {local_fs_path}: {io_e}")
+                                    game_data['image_url'] = None # Explicitly set to None
+                        else:
+                            self.logger.warning(f"Could not generate cache paths for image URL: {image_url_from_rss}. Will not cache.")
+                            game_data['image_url'] = None # Cannot cache, set to None
+                    else: # image_url_from_rss was None or empty
+                        game_data['image_url'] = None
+                    # --- End Image Caching Logic ---
+                else: # No img_match
+                    game_data['image_url'] = None
+                
                 # Ensure essential fields are present
                 if game_data.get('name') and game_data.get('url'):
                     parsed_items_data.append(game_data)
