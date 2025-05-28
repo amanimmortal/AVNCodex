@@ -138,7 +138,7 @@
 }
 
 #played-games-list.list-view .game-card {
-    display: flex;
+    display: block; /* Changed from flex to block */
     flex-direction: column; /* Stack banner and content vertically */
     width: 100%; /* Make card take full available width */
     box-sizing: border-box; /* Include padding and border in the element's total width and height */
