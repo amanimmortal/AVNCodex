@@ -4,13 +4,14 @@ import sqlite3
 import logging # Added for scheduler logging
 import atexit # Added for scheduler shutdown
 from datetime import datetime, timezone, timedelta # Added for user created_at and next_run_time
+import threading # Added for background tasks
 
 # Add project root to sys.path to allow importing f95apiclient and app.main
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '.')) # app.py is in root
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, g, send_from_directory, abort # Added send_from_directory and abort
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g, send_from_directory, abort, current_app # Added current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps # For login_required decorator
 from f95apiclient import F95ApiClient
@@ -56,10 +57,40 @@ flask_app = Flask(__name__, template_folder='app/templates', static_folder='app/
 flask_app.secret_key = os.urandom(24) # Needed for flash messages
 
 # --- Global API Client ---
-f95_client = F95ApiClient()
+# No global F95ApiClient instance. Create locally where needed.
 
 # --- Image Cache Constants (consistent with f95apiclient) ---
 IMAGE_CACHE_DIR_FS = "/data/image_cache" # Filesystem path for Flask to find images
+
+# --- Background Task for Sync All ---
+def sync_all_for_user_background_task(app_context, user_id_to_sync, db_path_to_use):
+    with app_context.app_context():
+        # Create a new F95ApiClient instance for this thread
+        # This assumes F95ApiClient() can be instantiated without external state issues
+        # or that its state (like session cookies) is handled appropriately if needed for the task.
+        # For sync_all_my_games_for_user, it primarily needs to make new requests.
+        local_f95_client = F95ApiClient() 
+        flask_app.logger.info(f"Background sync: Starting for user_id {user_id_to_sync}.")
+        try:
+            processed_count, total_count = sync_all_my_games_for_user(
+                db_path=db_path_to_use, 
+                client=local_f95_client, 
+                user_id=user_id_to_sync
+            )
+            if total_count > 0:
+                flask_app.logger.info(f"Background sync: Completed for user_id {user_id_to_sync}. Synced {processed_count}/{total_count} games.")
+                # Optionally: Here you could use a different mechanism to notify the user,
+                # e.g., writing to a user-specific notifications table in the DB,
+                # or using Flask-SocketIO if you add real-time updates.
+                # For now, the user will see updates on next page load/refresh via standard notifications.
+            else:
+                flask_app.logger.info(f"Background sync: Completed for user_id {user_id_to_sync}. No relevant games found to sync.")
+        except Exception as e:
+            flask_app.logger.error(f"Background sync: Error for user_id {user_id_to_sync}: {e}", exc_info=True)
+        finally:
+            if local_f95_client:
+                local_f95_client.close_session()
+            flask_app.logger.info(f"Background sync: Task finished for user_id {user_id_to_sync}.")
 
 # --- Helper Function Definitions ---
 # These need to be defined before they are used by module-level calls or routes.
@@ -233,8 +264,10 @@ def run_scheduled_update_job():
 
         if perform_user_sync:
             flask_app.logger.info(f"APScheduler: Running scheduled user game update checks at {current_time_utc.isoformat()}.")
+            local_f95_client = None # Initialize to ensure finally block can check
             try:
-                scheduled_games_update_check(DB_PATH, f95_client)
+                local_f95_client = F95ApiClient() # Create client for this job
+                scheduled_games_update_check(DB_PATH, local_f95_client)
                 current_utc_timestamp_iso = datetime.now(timezone.utc).isoformat()
                 if set_setting(DB_PATH, 'last_user_specific_sync_completed_at', current_utc_timestamp_iso, user_id=primary_admin_id):
                     flask_app.logger.info(f"APScheduler: Successfully set last_user_specific_sync_completed_at to {current_utc_timestamp_iso} for admin user {primary_admin_id}.")
@@ -243,6 +276,9 @@ def run_scheduled_update_job():
                 flask_app.logger.info(f"APScheduler: User-specific game update checks completed at {datetime.now(timezone.utc).isoformat()}.")
             except Exception as e_user_sync:
                 flask_app.logger.error(f"APScheduler: Error during user-specific game update checks: {e_user_sync}", exc_info=True)
+            finally:
+                if local_f95_client:
+                    local_f95_client.close_session()
         
         flask_app.logger.info(f"APScheduler: Full scheduled job evaluation and execution finished at {datetime.now(timezone.utc).isoformat()}.")
 
@@ -473,41 +509,49 @@ def index():
 @flask_app.route('/search', methods=['GET', 'POST'])
 def search():
     search_term = None
-    results = [] # Default to empty list for GET request or empty search term
-    search_attempted = False # Flag to indicate if a search was actually made
+    results = [] 
+    search_attempted = False
+    local_f95_client = None # Initialize
 
     if request.method == 'POST':
         search_term = request.form.get('search_term', '').strip()
-        search_attempted = True # A POST request means a search was attempted
+        search_attempted = True
         
         user_played_urls = set()
         if g.user:
             user_played_urls = get_user_played_game_urls(DB_PATH, g.user['id'])
 
         if search_term:
-            api_results_raw = f95_client.get_latest_game_data_from_rss(search_term=search_term, limit=30)
-            
-            if api_results_raw is None: # This now signifies a complete failure in the client
-                flash('Search failed: Could not retrieve data from F95Zone after multiple attempts. Proxies might be failing or the site is down. Please try again later.', 'error')
-                results = None # Explicitly set to None to indicate failure to the template
-            else:
-                results = []
-                for game_data in api_results_raw:
-                    game_data['is_already_in_list'] = game_data.get('url') in user_played_urls
-                    results.append(game_data)
+            try:
+                local_f95_client = F95ApiClient() # Create client for this request
+                api_results_raw = local_f95_client.get_latest_game_data_from_rss(search_term=search_term, limit=30)
+                
+                if api_results_raw is None:
+                    flash('Search failed: Could not retrieve data from F95Zone after multiple attempts. Proxies might be failing or the site is down. Please try again later.', 'error')
+                    results = None 
+                else:
+                    results = []
+                    for game_data in api_results_raw:
+                        game_data['is_already_in_list'] = game_data.get('url') in user_played_urls
+                        results.append(game_data)
 
-                if not results: # Explicitly check if api_results was an empty list after processing
-                    flash('No games found matching your search criteria.', 'info') # Use info or warning
+                    if not results:
+                        flash('No games found matching your search criteria.', 'info')
+            except Exception as e_search:
+                flask_app.logger.error(f"Error during F95Zone search for '{search_term}': {e_search}", exc_info=True)
+                flash('An unexpected error occurred during search. Please try again later.', 'error')
+                results = None # Indicate error to template
         else:
             flash('Please enter a search term.', 'warning')
-            search_attempted = False # No term, so not a real search attempt for results display
-            results = [] # Keep results as empty list for no search term
+            search_attempted = False 
+            results = [] 
             
     return render_template('search.html', search_term=search_term, results=results, search_attempted=search_attempted)
 
 @flask_app.route('/add_game_to_list', methods=['POST'])
 @login_required
 def add_game_to_user_list():
+    local_f95_client = None # Initialize
     if request.method == 'POST':
         try:
             game_name = request.form['game_name']
@@ -533,11 +577,12 @@ def add_game_to_user_list():
             if not game_name or not f95_url:
                 flash('Game name and URL are required to add to list.', 'error')
                 return redirect(url_for('search')) 
-
+            
+            local_f95_client = F95ApiClient() # Create client for this request
             success, message = add_game_to_my_list(
                 db_path=DB_PATH, 
-                user_id=g.user['id'], # Pass user_id
-                client=f95_client, 
+                user_id=g.user['id'], 
+                client=local_f95_client, 
                 f95_url=f95_url,
                 name_override=game_name,
                 version_override=version,
@@ -546,7 +591,7 @@ def add_game_to_user_list():
                 rss_pub_date_override=rss_pub_date_str,
                 user_rating=user_rating, 
                 user_notes=user_notes, 
-                notify=True # This notify might become a user preference later
+                notify=True 
             )
 
             if success:
@@ -557,6 +602,9 @@ def add_game_to_user_list():
         except Exception as e:
             flask_app.logger.error(f"Error in add_game_to_user_list: {e}", exc_info=True)
             flash('An unexpected error occurred while adding the game.', 'error')
+        finally:
+            if local_f95_client:
+                local_f95_client.close_session()
 
     return redirect(url_for('search'))
 
@@ -638,21 +686,22 @@ def edit_details_route(played_game_id):
 def manual_sync_route(played_game_id):
     flask_app.logger.info(f"Manual sync requested by user {g.user['id']} for played_game_id: {played_game_id}")
     game_name_for_flash = "Selected Game"
+    local_f95_client = None # Initialize
     try:
-        game_details_before_sync = get_my_played_game_details(DB_PATH, user_id=g.user['id'], played_game_id=played_game_id) # Pass user_id
+        game_details_before_sync = get_my_played_game_details(DB_PATH, user_id=g.user['id'], played_game_id=played_game_id)
         if game_details_before_sync:
             game_name_for_flash = game_details_before_sync.get('name', game_name_for_flash)
 
-        # check_single_game_update_and_status already works on played_game_id, which is user-specific via user_played_games table
-        # However, its internal calls to get/set settings related to notifications might need user_id if those become user-specific settings.
-        # For now, assuming it primarily updates game details and user_played_games based on played_game_id.
-        # We will need to review check_single_game_update_and_status in app/main.py to ensure it correctly handles user context if it reads global settings for notifications.
-        check_single_game_update_and_status(DB_PATH, f95_client, played_game_row_id=played_game_id, user_id=g.user['id']) # Pass user_id
+        local_f95_client = F95ApiClient() # Create client for this request
+        check_single_game_update_and_status(DB_PATH, local_f95_client, played_game_row_id=played_game_id, user_id=g.user['id'])
         
         flash(f"Manual sync initiated for '{game_name_for_flash}'. Check notifications for any updates.", 'success')
     except Exception as e:
         flask_app.logger.error(f"Error during manual sync for user {g.user['id']}, played_game_id {played_game_id}: {e}", exc_info=True)
         flash(f"Manual sync failed for '{game_name_for_flash}'. Error: {str(e)[:100]}", 'error') 
+    finally:
+        if local_f95_client:
+            local_f95_client.close_session()
     return redirect(url_for('index'))
 
 @flask_app.route('/manual_sync_all', methods=['POST'])
@@ -660,14 +709,23 @@ def manual_sync_route(played_game_id):
 def manual_sync_all_route():
     flask_app.logger.info(f"Manual sync all requested by user {g.user['id']}")
     try:
-        processed_count, total_count = sync_all_my_games_for_user(DB_PATH, f95_client, user_id=g.user['id'])
-        if total_count > 0:
-            flash(f"Manual sync for all {processed_count}/{total_count} relevant games initiated. Check notifications for any updates.", 'success')
-        else:
-            flash("No relevant games found to sync based on your notification preferences and game statuses.", 'info')
+        # Get the current app object to pass its context to the thread
+        app_for_thread = current_app._get_current_object()
+        
+        # Create and start the background thread
+        # Pass DB_PATH explicitly as the app context in the thread might not have it readily available
+        # in the same way as the main thread during startup.
+        sync_thread = threading.Thread(
+            target=sync_all_for_user_background_task, 
+            args=(app_for_thread, g.user['id'], DB_PATH)
+        )
+        sync_thread.daemon = True # Allows main program to exit even if threads are still running (optional)
+        sync_thread.start()
+        
+        flash("Sync for all monitored games has been started in the background. Updates will appear in notifications once processing is complete.", 'info')
     except Exception as e:
-        flask_app.logger.error(f"Error during manual sync all for user {g.user['id']}: {e}", exc_info=True)
-        flash(f"Manual sync for all games failed. Error: {str(e)[:100]}", 'error') 
+        flask_app.logger.error(f"Error starting background sync all for user {g.user['id']}: {e}", exc_info=True)
+        flash("Failed to start the background sync process. Please check the logs.", 'error') 
     return redirect(url_for('index'))
 
 @flask_app.route('/settings', methods=['GET', 'POST'])

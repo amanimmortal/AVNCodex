@@ -1721,9 +1721,12 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
         if author_changed: # Check if new_author has a value
             update_fields['author'] = new_author
             pushover_message_parts.append(f"Author updated: {new_author}") # Simplified message
+        
+        # We still want to update the image_url in the database if it changed.
         if image_changed: # Check if new_image_url has a value
             update_fields['image_url'] = new_image_url
-            pushover_message_parts.append(f"Image URL updated") # Simplified message
+            # DO NOT add to pushover_message_parts for image_url change alone.
+            # logger.debug(f"SCHEDULER/SYNC (User: {user_id}): Image URL change detected for {log_name_for_notification} but will not be part of Pushover message unless other changes exist.")
         
         # Store the status determined from the initial 'ongoing' check if the game was found there.
         # This status will be compared against original_status_for_notification later.
