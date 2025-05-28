@@ -138,7 +138,7 @@
 }
 
 #played-games-list.list-view .game-card {
-    display: block; /* Changed from flex to block */
+    display: flex; /* Reverted from block back to flex */
     flex-direction: column; /* Stack banner and content vertically */
     width: 100%; /* Make card take full available width */
     box-sizing: border-box; /* Include padding and border in the element's total width and height */
@@ -158,8 +158,9 @@
 
 #played-games-list.list-view .card-image-banner {
     width: 100%;
-    height: 100%;
+    height: auto; /* Changed from 100% to auto */
     object-fit: cover; /* Was contain, changed to cover for banner effect */
+    display: block; /* Added to remove any potential whitespace issues with inline images */
 }
 
 #played-games-list.list-view .card-image-banner-placeholder {
