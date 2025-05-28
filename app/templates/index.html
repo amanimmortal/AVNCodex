@@ -88,7 +88,7 @@
                                      <p><strong>Added:</strong> {{ game.date_added_to_played_list.split('T')[0] if game.date_added_to_played_list else 'N/A'}}</p>
                                      <p><strong>Rating:</strong> {{ '%d'|format(game.user_rating|int) if game.user_rating is not none else 'Not Rated' }} / 5</p>
                                      <p><strong>Notes:</strong> {{ game.user_notes if game.user_notes else 'No notes.' }}</p>
-                                     <p class="text-muted">Notify: {{ 'Yes' if game.notify_for_updates else 'No' }}</p>
+                                     <p class="text-muted"><strong>Notify:</strong> {{ 'Yes' if game.notify_for_updates else 'No' }}</p>
                                 </div>
                                 <div class="card-actions {% if game.needs_acknowledgement_flag %}acknowledgement-pending{% endif %}">
                                     <div class="standard-actions">

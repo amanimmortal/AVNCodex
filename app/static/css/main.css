@@ -302,17 +302,22 @@
 }
 
 /* Game Card Specific Styles */
-.game-card .card-details p > strong,
-.game-card .card-content p > strong {
-    color: #FFFFFF; /* Pure white for headings */
+.game-card .card-details h3 a {
+    color: #FFFFFF; /* Pure white for game titles */
+    font-size: 1.4rem; /* Slightly larger font size for game titles */
 }
 
-/* Ensure specificity for text-muted if it overrides the strong tag color */
+.game-card .card-details p > strong,
+.game-card .card-content p > strong,
 .game-card .card-details p.text-muted > strong,
 .game-card .card-content p.text-muted > strong {
-    color: #FFFFFF; /* Ensure white even if parent is text-muted */
+    color: #FFFFFF !important; /* Pure white for all strong tag headings, ensure it applies */
 }
 
+/* Keep the value part of text-muted lines muted */
 .game-card p.text-muted {
-    color: #adb5bd !important; /* Keep the muted text for the value part, ensure it's applied */
+    /* The color is already set by a general .text-muted rule, 
+       but ensure the strong tag change above doesn't make the whole line white. 
+       The strong tag inside will be white due to the rule above. */
+    color: #adb5bd !important; 
 } 
