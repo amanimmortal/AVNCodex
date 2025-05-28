@@ -299,4 +299,20 @@
 
 .text-muted {
     color: #adb5bd !important; /* Lighter muted text on dark backgrounds */
+}
+
+/* Game Card Specific Styles */
+.game-card .card-details p > strong,
+.game-card .card-content p > strong {
+    color: #FFFFFF; /* Pure white for headings */
+}
+
+/* Ensure specificity for text-muted if it overrides the strong tag color */
+.game-card .card-details p.text-muted > strong,
+.game-card .card-content p.text-muted > strong {
+    color: #FFFFFF; /* Ensure white even if parent is text-muted */
+}
+
+.game-card p.text-muted {
+    color: #adb5bd !important; /* Keep the muted text for the value part, ensure it's applied */
 } 
