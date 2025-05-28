@@ -576,45 +576,81 @@ class F95ApiClient:
                     
                     # --- Start Image Caching Logic ---
                     if image_url_from_rss:
-                        cached_paths = self._get_cached_image_paths(image_url_from_rss)
-                        if cached_paths:
-                            local_fs_path = cached_paths['fs_path']
-                            local_web_path = cached_paths['web_path']
+                        # Generate hash once
+                        url_hash = hashlib.sha256(image_url_from_rss.encode('utf-8')).hexdigest()
+                        
+                        # Define a map for common image content types to extensions
+                        content_type_to_ext_map = {
+                            'image/jpeg': '.jpg',
+                            'image/png': '.png',
+                            'image/gif': '.gif',
+                            'image/webp': '.webp',
+                            'image/bmp': '.bmp',
+                            'image/tiff': '.tif' 
+                            # Add more if needed
+                        }
 
-                            if os.path.exists(local_fs_path):
-                                game_data['image_url'] = local_web_path
-                                self.logger.debug(f"Using cached image for {image_url_from_rss} at {local_web_path}")
-                            else:
-                                self.logger.info(f"Attempting to download and cache image: {image_url_from_rss} to {local_fs_path}")
-                                try:
-                                    # Use a separate requests call for the image, not necessarily via proxy unless needed
-                                    # But using self.session is fine as it has user-agent etc.
-                                    # Timeout should be specific for image download
-                                    img_response = self.session.get(image_url_from_rss, stream=True, timeout=self.request_timeout, proxies={}) # Try direct first for images
+                        # Try to determine the file path using a known extension from the map first,
+                        # to see if it's already cached correctly.
+                        # This part is tricky because we don't know the content type before download.
+                        # So, we'll first attempt download, then determine final path.
+
+                        self.logger.info(f"Attempting to download image for caching: {image_url_from_rss}")
+                        try:
+                            img_response = self.session.get(image_url_from_rss, stream=True, timeout=self.request_timeout, proxies={}) # Try direct first
+
+                            if img_response.status_code == 200:
+                                actual_content_type = img_response.headers.get('Content-Type', '').lower().split(';')[0].strip() # Get primary content type
+
+                                if actual_content_type.startswith('image/'):
+                                    final_extension = content_type_to_ext_map.get(actual_content_type)
                                     
-                                    if img_response.status_code == 200:
-                                        content_type = img_response.headers.get('Content-Type', '').lower()
-                                        if content_type.startswith('image/'):
-                                            with open(local_fs_path, 'wb') as f:
+                                    # Fallback to original URL extension if content type not in map, but it's still an image type
+                                    if not final_extension:
+                                        original_url_ext = os.path.splitext(urlparse(image_url_from_rss).path)[1].lower()
+                                        if original_url_ext in content_type_to_ext_map.values(): # Check if original ext is a known valid one
+                                            final_extension = original_url_ext
+                                            self.logger.debug(f"Using original URL extension '{final_extension}' for {image_url_from_rss} as Content-Type '{actual_content_type}' wasn't in explicit map.")
+                                    
+                                    if final_extension:
+                                        final_filename = f"{url_hash}{final_extension}"
+                                        final_fs_path = os.path.join(IMAGE_CACHE_DIR, final_filename)
+                                        final_web_path = f"{IMAGE_CACHE_WEB_PATH_PREFIX}{final_filename}"
+
+                                        if os.path.exists(final_fs_path):
+                                            game_data['image_url'] = final_web_path
+                                            self.logger.debug(f"Image already correctly cached: {final_fs_path} for {image_url_from_rss}")
+                                        else:
+                                            with open(final_fs_path, 'wb') as f:
                                                 for chunk in img_response.iter_content(1024):
                                                     f.write(chunk)
-                                            game_data['image_url'] = local_web_path
-                                            self.logger.info(f"Successfully cached image {image_url_from_rss} to {local_fs_path} (Content-Type: {content_type})")
-                                        else:
-                                            self.logger.warning(f"Failed to cache image {image_url_from_rss}. Incorrect Content-Type: {content_type}. Expected 'image/...'.")
-                                            game_data['image_url'] = None # Explicitly set to None
+                                            game_data['image_url'] = final_web_path
+                                            self.logger.info(f"Successfully cached image {image_url_from_rss} to {final_fs_path} (Content-Type: {actual_content_type})")
+                                            
+                                            # Cleanup old cached file if it used a different/default extension (e.g. .img)
+                                            # This requires knowing the old path generated by _get_cached_image_paths
+                                            old_cached_paths = self._get_cached_image_paths(image_url_from_rss) # Get potential old path
+                                            if old_cached_paths and old_cached_paths['fs_path'] != final_fs_path and os.path.exists(old_cached_paths['fs_path']):
+                                                try:
+                                                    os.remove(old_cached_paths['fs_path'])
+                                                    self.logger.info(f"Removed old cache file: {old_cached_paths['fs_path']}")
+                                                except OSError as e_remove:
+                                                    self.logger.warning(f"Could not remove old cache file {old_cached_paths['fs_path']}: {e_remove}")
                                     else:
-                                        self.logger.warning(f"Failed to download image {image_url_from_rss}. Status: {img_response.status_code}")
-                                        game_data['image_url'] = None # Explicitly set to None
-                                except requests.exceptions.RequestException as img_e:
-                                    self.logger.error(f"Error downloading image {image_url_from_rss}: {img_e}")
-                                    game_data['image_url'] = None # Explicitly set to None
-                                except IOError as io_e:
-                                    self.logger.error(f"Error saving image {image_url_from_rss} to {local_fs_path}: {io_e}")
-                                    game_data['image_url'] = None # Explicitly set to None
-                        else:
-                            self.logger.warning(f"Could not generate cache paths for image URL: {image_url_from_rss}. Will not cache.")
-                            game_data['image_url'] = None # Cannot cache, set to None
+                                        self.logger.warning(f"Could not determine a safe file extension for image {image_url_from_rss} with Content-Type: {actual_content_type}. Will not cache.")
+                                        game_data['image_url'] = None # Or image_url_from_rss to use original URL
+                                else:
+                                    self.logger.warning(f"Downloaded content for {image_url_from_rss} is not an image. Content-Type: {actual_content_type}. Expected 'image/...'.")
+                                    game_data['image_url'] = None
+                            else:
+                                self.logger.warning(f"Failed to download image {image_url_from_rss}. Status: {img_response.status_code}")
+                                game_data['image_url'] = None
+                        except requests.exceptions.RequestException as img_e:
+                            self.logger.error(f"Error downloading image {image_url_from_rss}: {img_e}")
+                            game_data['image_url'] = None
+                        except IOError as io_e: # Covers file write errors
+                            self.logger.error(f"Error saving image {image_url_from_rss}: {io_e}")
+                            game_data['image_url'] = None
                     else: # image_url_from_rss was None or empty
                         game_data['image_url'] = None
                     # --- End Image Caching Logic ---
