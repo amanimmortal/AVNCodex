@@ -82,7 +82,7 @@
                                     </h3>
                                     <p><strong>Version:</strong> {{ game.version if game.version else 'N/A' }}</p>
                                     <p><strong>Author:</strong> {{ game.author if game.author else 'N/A' }}</p>
-                                    <p class="text-muted">Last Updated: {{ game.rss_pub_date if game.rss_pub_date else 'N/A' }}</p>
+                                    <p class="text-muted"><strong>Last Updated:</strong> {{ game.rss_pub_date if game.rss_pub_date else 'N/A' }}</p>
                                 </div>
                                 <div class="card-content">
                                      <p><strong>Added:</strong> {{ game.date_added_to_played_list.split('T')[0] if game.date_added_to_played_list else 'N/A'}}</p>
