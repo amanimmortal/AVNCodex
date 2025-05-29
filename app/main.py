@@ -491,7 +491,7 @@ def send_pushover_notification(db_path: str, user_id: int, title: str, message: 
 
 # --- User-Specific Game Management Functions ---
 
-def search_games_for_user(client: F95ApiClient, search_term: str, limit: int = 10) -> list[dict]:
+def search_games_for_user(client: F95ApiClient, search_term: str, limit: int = 90) -> list[dict]:
     """
     Searches the F95Zone RSS feed for games matching the search term.
     Returns a list of game data dictionaries (not yet saved to any user list).
@@ -1624,7 +1624,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
         logger.info(f"SCHEDULER/SYNC (User: {user_id}): Performing initial 'ongoing' check for '{current_name}' using search term '{search_term_for_rss}'")
         latest_data_items = f95_client.get_latest_game_data_from_rss(
             search_term=search_term_for_rss, 
-            limit=10, # Small limit for this check
+            limit=90, # Small limit for this check
             completion_status_filter='ongoing' # Ensures we get latest, not specific C/A/OH items
         )
 

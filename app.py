@@ -524,7 +524,10 @@ def search():
         if search_term:
             try:
                 local_f95_client = F95ApiClient() # Create client for this request
-                api_results_raw = local_f95_client.get_latest_game_data_from_rss(search_term=search_term, limit=30)
+                # Use the new function that also gets user's existing game URLs
+                user_game_urls = get_user_played_game_urls(DB_PATH, user_id=g.user['id'])
+
+                api_results_raw = local_f95_client.get_latest_game_data_from_rss(search_term=search_term, limit=90)
                 
                 if api_results_raw is None:
                     flash('Search failed: Could not retrieve data from F95Zone after multiple attempts. Proxies might be failing or the site is down. Please try again later.', 'error')
