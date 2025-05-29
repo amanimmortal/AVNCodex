@@ -147,7 +147,6 @@
     border-radius: 0.25rem;
     background-color: #2c2c2c; /* Slightly lighter than page background */
     overflow: hidden; /* Ensures banner corners match card radius */
-    align-items: flex-start; /* Prevent cross-axis stretching */
 }
 
 #played-games-list.list-view .card-banner-area {
@@ -157,6 +156,7 @@
     margin-bottom: 0.75rem; /* Space below banner */
     box-sizing: border-box; /* Ensure consistent box model */
     min-height: 0;          /* Help flex item respect aspect-ratio */
+    flex-grow: 0;           /* Explicitly prevent growing */
     flex-shrink: 0;         /* Prevent shrinking to enforce aspect-ratio height */
 }
 
