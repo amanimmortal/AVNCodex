@@ -159,9 +159,9 @@
 
 #played-games-list.list-view .card-image-banner {
     width: 100%;
-    height: auto; /* Changed from 100% to auto */
-    object-fit: cover; /* Was contain, changed to cover for banner effect */
-    display: block; /* Added to remove any potential whitespace issues with inline images */
+    height: 100%; /* Reverted from auto back to 100% */
+    object-fit: cover; 
+    display: block; 
 }
 
 #played-games-list.list-view .card-image-banner-placeholder {
