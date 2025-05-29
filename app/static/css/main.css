@@ -154,8 +154,6 @@
     aspect-ratio: 4 / 1; /* Maintain a 4:1 aspect ratio */
     overflow: hidden;
     margin-bottom: 0.75rem; /* Space below banner */
-    min-height: 0; /* Added to help flex item respect aspect-ratio */
-    flex-shrink: 0; /* Prevent shrinking, to further enforce aspect-ratio height */
 }
 
 #played-games-list.list-view .card-image-banner {
