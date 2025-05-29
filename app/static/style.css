@@ -433,13 +433,14 @@ body {
     width: 100%; /* Banner area takes full width of the card */
     margin-bottom: 0.75rem; /* Space between banner and card body */
     /* max-height: 125px; -- Removing fixed max-height, relying on aspect ratio and card width */
+    aspect-ratio: 4 / 1; /* Ensure aspect ratio is defined on the container */
 }
 
 #played-games-list.list-view .card-image-banner {
     display: block; 
     width: 100%;
-    height: auto; 
-    aspect-ratio: 4 / 1;
+    height: 100%; /* Image should fill the container height */
+    /* aspect-ratio: 4 / 1; -- Removed, as parent .card-banner-area handles aspect ratio */
     object-fit: cover; 
     background-color: #444; 
 }
