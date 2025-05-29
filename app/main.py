@@ -1718,7 +1718,33 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                 date_changed = True
             # Ensure author_changed and image_changed are based on whether new values are present and different
             author_changed = bool(new_author and new_author != game_data['author'])
-            image_changed = bool(new_image_url and new_image_url != game_data['image_url'])
+            # image_changed = bool(new_image_url and new_image_url != game_data['image_url']) # Old logic
+
+            # --- New Image Caching and Update Logic for check_single_game_update_and_status ---
+            newly_cached_image_path = None
+            db_image_url = game_data['image_url'] # This is the currently stored cached path or None
+            image_changed = False # Initialize image_changed
+
+            if new_image_url: # An original image URL was found in the RSS feed data
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Original image URL from RSS for '{current_name}' is {new_image_url}. Current DB image is {db_image_url}.")
+                if new_image_url != db_image_url: # Avoid re-caching if the original URL is somehow already the stored (likely incorrect) path
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Attempting to re-cache image from {new_image_url} for '{current_name}'.")
+                    newly_cached_image_path = f95_client.cache_image_from_url(new_image_url) # Use the passed client instance
+                    if newly_cached_image_path:
+                        logger.info(f"SCHEDULER/SYNC (User: {user_id}): Successfully re-cached image for '{current_name}' to {newly_cached_image_path}.")
+                        if newly_cached_image_path != db_image_url:
+                            image_changed = True # Mark as changed only if the new cached path is different from old one
+                        else:
+                            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Re-cached path {newly_cached_image_path} is same as DB path {db_image_url}. No image update needed.")
+                    else:
+                        logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Failed to re-cache image from {new_image_url} for '{current_name}'. DB image URL will not be updated.")
+                else:
+                     logger.info(f"SCHEDULER/SYNC (User: {user_id}): Original image URL from RSS ({new_image_url}) is the same as the currently stored DB image path. No re-caching needed unless forced.")       
+            elif db_image_url: # RSS has no image, but DB does
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Image URL removed from RSS for '{current_name}'. DB had {db_image_url}. Setting to None.")
+                image_changed = True # Mark as changed to remove the image
+                newly_cached_image_path = None # Ensure it's None to clear DB field
+            # --- End New Image Caching Logic ---
 
             if name_changed or version_changed or date_changed or author_changed or image_changed:
                 has_primary_update = True
@@ -1756,7 +1782,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
         
         # We still want to update the image_url in the database if it changed.
         if image_changed: # Check if new_image_url has a value
-            update_fields['image_url'] = new_image_url
+            update_fields['image_url'] = newly_cached_image_path # Use the newly_cached_image_path
             # DO NOT add to pushover_message_parts for image_url change alone.
             # logger.debug(f"SCHEDULER/SYNC (User: {user_id}): Image URL change detected for {log_name_for_notification} but will not be part of Pushover message unless other changes exist.")
         
