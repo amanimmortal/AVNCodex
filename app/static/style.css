@@ -588,8 +588,10 @@ body {
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); /* Adjusted */
     }
     #played-games-list.list-view .card-banner-area {
-        flex: 0 0 150px; 
-        max-height: 100px;
+        /* flex: 0 0 150px; -- Removed to maintain 4:1 aspect ratio */
+        /* max-height: 100px; -- Removed to maintain 4:1 aspect ratio */
+        width: 100%; /* Ensuring it takes full width to calculate aspect ratio correctly */
+        aspect-ratio: 4 / 1; /* Explicitly ensure aspect ratio here if not inherited reliably */
     }
 }
 
@@ -626,12 +628,13 @@ body {
         width: 100%;
         margin-right: 0;
         margin-bottom: 0.5rem; 
-        max-height: none; /* Let aspect ratio fully control height here */
+        max-height: none; /* This is good, it ensures any previous max-height is cleared */
+        aspect-ratio: 4 / 1; /* Explicitly ensure aspect ratio */
     }
     #played-games-list.list-view .card-image-banner,
     #played-games-list.grid-view .card-image-banner {
         /* aspect-ratio: 4 / 1; Ensure this is still set, should be inherited */
-         max-height: 150px; /* Cap height on mobile if needed, but primary control is AR */
+         /* max-height: 150px; -- Removed to maintain 4:1 aspect ratio */
     }
     .card-actions .btn,
     .card-actions form button.btn {
@@ -679,7 +682,8 @@ body {
 @media (max-width: 576px) { /* Extra small devices (portrait phones, less than 576px) */
     #played-games-list.list-view .card-banner-area,
     #played-games-list.grid-view .card-banner-area {
-        max-height: 120px; /* Further reduce banner height */
+        /* max-height: 120px; -- Removed to maintain 4:1 aspect ratio */
+        aspect-ratio: 4 / 1; /* Ensure aspect ratio is maintained */
     }
     .card-details h3 {
         font-size: 1.1rem;
