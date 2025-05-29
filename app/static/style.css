@@ -440,6 +440,7 @@ body {
     display: block; 
     width: 100%;
     height: 100%; /* Image should fill the container height */
+    max-height: 100%; /* Explicitly set max-height to fill parent, overriding general rule */
     /* aspect-ratio: 4 / 1; -- Removed, as parent .card-banner-area handles aspect ratio */
     object-fit: cover; 
     background-color: #444; 
