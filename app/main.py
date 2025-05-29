@@ -316,10 +316,21 @@ def process_rss_feed(db_path, client):
             name_rss = item.get('name_rss')
             version_rss = item.get('version_rss')
             author_rss = item.get('author_rss')
-            image_url_rss = item.get('image_url_rss')
+            original_image_url = item.get('image_url_rss') # This is now the original URL
             pub_date_rss = item.get('pub_date_rss')
 
-            cursor.execute("SELECT version, rss_pub_date FROM games WHERE f95_url = ?", (f95_url,))
+            cached_image_web_path = None
+            if original_image_url:
+                cached_image_web_path = client.cache_image_from_url(original_image_url)
+                if cached_image_web_path:
+                    logger.info(f"Image for '{name_rss}' cached to {cached_image_web_path}")
+                else:
+                    logger.warning(f"Failed to cache image for '{name_rss}' from {original_image_url}. Will store original URL or None.")
+                    # Decide: store original_image_url or None if caching fails? 
+                    # For now, if caching fails, we will store None for image_url to avoid broken links to external sites if they go down.
+                    # If original_image_url should be used as fallback, change 'cached_image_web_path' assignment here.
+
+            cursor.execute("SELECT version, rss_pub_date, image_url FROM games WHERE f95_url = ?", (f95_url,))
             row = cursor.fetchone()
 
             if row is None:
@@ -328,34 +339,44 @@ def process_rss_feed(db_path, client):
                     INSERT INTO games (f95_url, name, version, author, image_url, rss_pub_date, 
                                      first_added_to_db, last_seen_on_rss, last_updated_in_db)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (f95_url, name_rss, version_rss, author_rss, image_url_rss, pub_date_rss,
+                """, (f95_url, name_rss, version_rss, author_rss, cached_image_web_path, pub_date_rss,
                       current_timestamp, current_timestamp, current_timestamp))
                 conn.commit()
                 logger.info(f"New game added: '{name_rss}' (Version: {version_rss}) from URL: {f95_url}")
             else:
                 # Existing game
-                db_version, db_rss_pub_date = row
+                db_version, db_rss_pub_date, db_image_url = row
                 updated = False
+                image_to_store = db_image_url # By default, keep existing image
 
                 # Check for updates
-                # Note: Direct string comparison for versions and dates might not be robust for all cases
-                # but is a starting point. More sophisticated version/date parsing could be added.
                 if version_rss is not None and version_rss != db_version:
                     updated = True
-                elif pub_date_rss is not None and pub_date_rss != db_rss_pub_date: # Simplistic date check, assumes newer date string is 'greater'
-                    # A more robust check would parse dates into datetime objects
+                elif pub_date_rss is not None and pub_date_rss != db_rss_pub_date:
                     updated = True 
                 
+                # If item from RSS has an image URL, and it's different from DB, or DB has no image, try to cache/update.
+                if original_image_url:
+                    if cached_image_web_path and cached_image_web_path != db_image_url:
+                        image_to_store = cached_image_web_path
+                        updated = True # Force update if image changed, even if version/date didn't
+                    elif not db_image_url and cached_image_web_path: # DB had no image, but now we have one
+                        image_to_store = cached_image_web_path
+                        updated = True # Force update
+                elif not original_image_url and db_image_url: # RSS has no image, but DB did (e.g. image removed from source)
+                    image_to_store = None # Remove image from DB
+                    updated = True # Force update
+
                 if updated:
                     cursor.execute("""
                         UPDATE games 
                         SET name = ?, version = ?, author = ?, image_url = ?, rss_pub_date = ?, 
                             last_seen_on_rss = ?, last_updated_in_db = ?
                         WHERE f95_url = ?
-                    """, (name_rss, version_rss, author_rss, image_url_rss, pub_date_rss,
+                    """, (name_rss, version_rss, author_rss, image_to_store, pub_date_rss,
                           current_timestamp, current_timestamp, f95_url))
                     conn.commit()
-                    logger.info(f"Game updated: '{name_rss}' to Version: {version_rss} (Old ver: {db_version}, Old pub: {db_rss_pub_date}, New pub: {pub_date_rss}) URL: {f95_url}")
+                    logger.info(f"Game updated: '{name_rss}' to Version: {version_rss} (Old ver: {db_version}, Old pub: {db_rss_pub_date}, New pub: {pub_date_rss}) Image: {image_to_store} URL: {f95_url}")
                 else:
                     # No version/date change, just update last_seen_on_rss
                     cursor.execute("UPDATE games SET last_seen_on_rss = ? WHERE f95_url = ?", 
@@ -495,16 +516,16 @@ def add_game_to_my_list(db_path: str,
                         name_override: str = None,
                         version_override: str = None,
                         author_override: str = None,
-                        image_url_override: str = None,
+                        image_url_override: str = None, # This is expected to be an ORIGINAL URL if provided
                         rss_pub_date_override: str = None,
-                        game_data: dict = None, # Kept for potential internal use, but overrides take precedence
+                        game_data: dict = None, # game_data['image_url'] is expected to be an ORIGINAL URL
                         user_notes: str = None, 
                         user_rating: float = None, 
                         notify: bool = True) -> tuple[bool, str]:
     """
     Adds a game to the user's played list.
     First, ensures the game exists in the main 'games' table (adding/updating it if necessary
-    using provided overrides or data from game_data).
+    using provided overrides or data from game_data, and caching its image).
     Then, adds its reference to the 'user_played_games' table.
 
     Args:
@@ -532,8 +553,23 @@ def add_game_to_my_list(db_path: str,
     name_to_use = name_override if name_override is not None else (game_data.get('name_rss') if game_data else "Unknown Name")
     version_to_use = version_override if version_override is not None else (game_data.get('version_rss') if game_data else "Unknown Version")
     author_to_use = author_override if author_override is not None else (game_data.get('author_rss') if game_data else "Unknown Author")
-    image_to_use = image_url_override if image_url_override is not None else (game_data.get('image_url_rss') if game_data else None)
+    
+    # Determine the original image URL to process
+    original_image_url_to_process = image_url_override # Favors explicit override
+    if original_image_url_to_process is None and game_data and 'image_url' in game_data: # image_url from RSS/client is now original
+        original_image_url_to_process = game_data['image_url']
+
     pub_date_to_use = rss_pub_date_override if rss_pub_date_override is not None else (game_data.get('pub_date_rss') if game_data else None)
+
+    # Attempt to cache the image if an original URL is available
+    final_image_path_to_store = None
+    if original_image_url_to_process:
+        logger.info(f"Original image URL for '{name_to_use}' is {original_image_url_to_process}. Attempting to cache.")
+        final_image_path_to_store = client.cache_image_from_url(original_image_url_to_process)
+        if final_image_path_to_store:
+            logger.info(f"Image for '{name_to_use}' (to be added/updated in user list) cached to {final_image_path_to_store}")
+        else:
+            logger.warning(f"Failed to cache image for '{name_to_use}' from {original_image_url_to_process} during add_game_to_my_list. No image will be stored.")
 
     # Determine initial completion status
     # This requires fetching the game's current status when adding it to the list.
@@ -551,7 +587,7 @@ def add_game_to_my_list(db_path: str,
         current_game_completed_status = "UNKNOWN" # Default
 
         # Try to get the game from the main 'games' table
-        cursor.execute("SELECT id, version, rss_pub_date, completed_status FROM games WHERE f95_url = ?", (f95_url,))
+        cursor.execute("SELECT id, version, rss_pub_date, completed_status, image_url FROM games WHERE f95_url = ?", (f95_url,))
         game_row = cursor.fetchone()
 
         if game_row:
@@ -559,33 +595,28 @@ def add_game_to_my_list(db_path: str,
             current_game_version = game_row[1] if game_row[1] is not None else version_to_use
             current_game_rss_pub_date = game_row[2] if game_row[2] is not None else pub_date_to_use
             current_game_completed_status = game_row[3] if game_row[3] is not None else "UNKNOWN"
+            db_image_url = game_row[4] # This can be None
             
-            # Update existing game entry if overrides are provided or if fetched data is newer
-            # For simplicity, always update with provided/fetched info if it differs.
-            # A more sophisticated logic would compare dates/versions to decide if an update is warranted.
             update_fields = []
             update_values = []
 
-            if name_to_use != "Unknown Name" and name_to_use != (game_row[0] if len(game_row) > 4 else None): # Assuming name was part of an extended select if we had it
-                 # Need to re-query if name is not in game_row, or assume it won't change often once added
-                 pass # For now, don't update name, version, author etc. in games table here, focus on adding to user list
-
+            # Placeholder for other field updates (name, author, version, pub_date)
+            # Ensure these are handled according to desired logic if overrides are present
             if version_to_use != "Unknown Version" and version_to_use != current_game_version:
                 update_fields.append("version = ?")
                 update_values.append(version_to_use)
-                current_game_version = version_to_use
-            if author_to_use != "Unknown Author" and author_to_use != (game_row[0] if len(game_row) > 5 else None): # Placeholder for author
-                # update_fields.append("author = ?")
-                # update_values.append(author_to_use)
-                pass
-            if image_to_use is not None and image_to_use != (game_row[0] if len(game_row) > 6 else None): # Placeholder for image
-                # update_fields.append("image_url = ?")
-                # update_values.append(image_to_use)
-                pass
+                current_game_version = version_to_use 
             if pub_date_to_use is not None and pub_date_to_use != current_game_rss_pub_date:
                 update_fields.append("rss_pub_date = ?")
                 update_values.append(pub_date_to_use)
                 current_game_rss_pub_date = pub_date_to_use
+            # Add similar checks for name_to_use and author_to_use if they should be updated here
+
+            # Update image_url in 'games' table if the new cached path is different from the one in DB
+            if final_image_path_to_store != db_image_url:
+                update_fields.append("image_url = ?")
+                update_values.append(final_image_path_to_store) # This could be None
+                logger.info(f"Updating image_url for game ID {game_id_in_db} in 'games' table from '{db_image_url}' to '{final_image_path_to_store}'.")
 
             if update_fields:
                 update_fields.append("last_updated_in_db = ?")
@@ -657,10 +688,11 @@ def add_game_to_my_list(db_path: str,
                 INSERT INTO games (f95_url, name, version, author, image_url, rss_pub_date, completed_status,
                                  first_added_to_db, last_seen_on_rss, last_updated_in_db)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (f95_url, name_to_use, version_to_use, author_to_use, image_to_use, pub_date_to_use, current_game_completed_status,
+            """, (f95_url, name_to_use, version_to_use, author_to_use, final_image_path_to_store, # Use final_image_path_to_store
+                  pub_date_to_use, current_game_completed_status,
                   current_timestamp, current_timestamp, current_timestamp))
             game_id_in_db = cursor.lastrowid
-            logger.info(f"Added new game to 'games' table: ID {game_id_in_db} - {name_to_use} with status {current_game_completed_status}")
+            logger.info(f"Added new game to 'games' table: ID {game_id_in_db} - {name_to_use} with status {current_game_completed_status} and image '{final_image_path_to_store}'.")
 
         # Now, add to user_played_games
         if game_id_in_db:
