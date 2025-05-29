@@ -30,6 +30,7 @@ A Python-based web application to track and check for game updates from F95Zone.
 *   **F95Zone Interaction**: Uses a custom `F95APIClient` to fetch game data primarily via F95Zone's RSS feeds.
     *   The client can search by game name and filter by completion status.
     *   It includes basic proxy support to help with request reliability.
+    *   The application is configured to request a larger number of items (90) from RSS feeds where possible, as F95Zone's RSS `rows` parameter defaults to a smaller number (30) if an unsupported value is provided. This aims to improve the comprehensiveness of search results and status checks.
 *   **Scheduling**: APScheduler is used for background task scheduling (checking for game updates).
 *   **Deployment**: Designed for Docker, but can also be run directly for development.
 
@@ -152,6 +153,7 @@ The application uses an SQLite database (`f95_games.db`) with the following main
 ## Notes on F95Zone Interaction
 
 *   This application relies on F95Zone's RSS feeds. Changes to their site structure or RSS feed availability can break functionality.
+*   The F95Zone RSS feeds have a parameter (often referred to as `rows` or similar, corresponding to `limit` in the `F95APIClient`) that controls the number of results. While the API might accept various values, it typically defaults to 30 items if an unsupported number is requested. The application now attempts to use a limit of 90 items for its RSS queries to maximize the data retrieved in a single request.
 *   The `F95APIClient` includes mechanisms to cycle through public proxies to improve request success rates, as direct requests can be rate-limited or blocked. The reliability of these public proxies can vary.
 *   No direct web scraping of HTML pages for game data is performed by default for update checks; it primarily uses structured RSS data. 
 

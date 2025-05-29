@@ -74,7 +74,7 @@ def sync_all_for_user_background_task(app_context, user_id_to_sync, db_path_to_u
         try:
             processed_count, total_count = sync_all_my_games_for_user(
                 db_path=db_path_to_use, 
-                client=local_f95_client, 
+                f95_client=local_f95_client, 
                 user_id=user_id_to_sync
             )
             if total_count > 0:
