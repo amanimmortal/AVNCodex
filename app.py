@@ -5,6 +5,7 @@ import logging # Added for scheduler logging
 import atexit # Added for scheduler shutdown
 from datetime import datetime, timezone, timedelta # Added for user created_at and next_run_time
 import threading # Added for background tasks
+import json # Added for JSON handling
 
 # Add project root to sys.path to allow importing f95apiclient and app.main
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '.')) # app.py is in root
@@ -642,47 +643,83 @@ def acknowledge_update_route(played_game_id):
 @flask_app.route('/edit_details/<int:played_game_id>', methods=['GET', 'POST'])
 @login_required
 def edit_details_route(played_game_id):
-    game_details = get_my_played_game_details(DB_PATH, user_id=g.user['id'], played_game_id=played_game_id) # Pass user_id
+    user_id = session.get('user_id')
+    game_details = get_my_played_game_details(DB_PATH, played_game_id, user_id)
+
     if not game_details:
-        flash('Game not found in your list.', 'error')
+        flash("Game not found or you do not have permission to edit it.", "error")
         return redirect(url_for('index'))
 
+    # Convert game_details (which might be a sqlite3.Row) to a dictionary
+    # to make it easier to work with and add/modify keys for the template.
+    game_data_for_template = dict(game_details)
+
     if request.method == 'POST':
-        user_notes = request.form.get('user_notes', '')
-        user_rating_str = request.form.get('user_rating', '') 
-        notify_for_updates_str = request.form.get('notify_for_updates')
+        user_notes = request.form.get('user_notes')
+        user_rating_str = request.form.get('user_rating')
+        notify_for_updates = 'notify_for_updates' in request.form
 
-        user_rating = None 
-        if user_rating_str: 
-            try:
-                rating_val = int(user_rating_str) 
-                if 0 <= rating_val <= 5:
-                    user_rating = rating_val
-                else:
-                    flash('Invalid rating value submitted. Rating not changed.', 'warning')
-                    user_rating = game_details.get('user_rating') 
-            except ValueError:
-                flash('Invalid rating format. Rating not changed.', 'warning')
-                user_rating = game_details.get('user_rating') 
+        user_rating = None
+        if user_rating_str and user_rating_str.isdigit():
+            user_rating = int(user_rating_str)
+            if not (0 <= user_rating <= 5): # Validate rating range
+                flash("Invalid rating value.", "error")
+                user_rating = game_data_for_template.get('user_rating') # Revert to original if invalid
+        elif user_rating_str == "": # Explicit "Not Rated"
+             user_rating = None
+        else: # Invalid or unexpected value
+            user_rating = game_data_for_template.get('user_rating') # Revert
 
-        notify_for_updates = True if notify_for_updates_str == 'on' else False
-
-        update_result = update_my_played_game_details(
+        success = update_my_played_game_details(
             db_path=DB_PATH,
-            user_id=g.user['id'], # Pass user_id
             played_game_id=played_game_id,
+            user_id=user_id,
             user_notes=user_notes,
             user_rating=user_rating,
             notify_for_updates=notify_for_updates
         )
-
-        if update_result.get('success'):
-            flash('Game details updated successfully!', 'success')
+        if success:
+            flash("Game details updated successfully!", "success")
+            # Update game_data_for_template with new values for immediate reflection if staying on page
+            game_data_for_template['user_notes'] = user_notes
+            game_data_for_template['user_rating'] = user_rating
+            game_data_for_template['notify_for_updates'] = notify_for_updates
+            # Optionally, redirect back to index or the same page:
+            return redirect(url_for('edit_details_route', played_game_id=played_game_id))
         else:
-            flash(f"Failed to update game details: {update_result.get('message', 'Unknown error')}", 'error')
-        return redirect(url_for('index')) 
+            flash("Failed to update game details.", "error")
 
-    return render_template('edit_game.html', game=game_details)
+    # For GET request or after a failed POST, prepare data for template display
+    # Ensure all necessary scraped fields are present, defaulting if not found in DB record yet.
+    # The get_my_played_game_details should ideally return these. If it might not,
+    # we add defaults here to prevent template errors.
+    scraped_fields = [
+        'description', 'changelog_text', 'engine', 'language', 'censorship', 
+        'tags_json', 'download_links_json', 'scraper_last_run_at'
+    ]
+    for field in scraped_fields:
+        if field not in game_data_for_template:
+            game_data_for_template[field] = "Not yet scraped" if field != 'tags_json' and field != 'download_links_json' else "[]" 
+            # Default tags/downloads to empty JSON strings for consistency if that's how they're stored.
+            # Or handle this directly in the template with `if game.tags_json and game.tags_json != '[]'`
+
+    # Attempt to parse JSON fields for easier use in template
+    # If they are already Python lists/dicts from get_my_played_game_details, this won't hurt.
+    # If they are strings, this will parse them.
+    try:
+        tags_data = game_data_for_template.get('tags_json', "[]")
+        game_data_for_template['tags'] = json.loads(tags_data if tags_data else "[]")
+    except json.JSONDecodeError:
+        game_data_for_template['tags'] = ["Error decoding tags"] # Or some other error indicator
+        
+    try:
+        downloads_data = game_data_for_template.get('download_links_json', "[]")
+        game_data_for_template['download_links'] = json.loads(downloads_data if downloads_data else "[]")
+    except json.JSONDecodeError:
+        game_data_for_template['download_links'] = [{"text": "Error decoding download links", "url": "#"}]
+
+
+    return render_template('edit_game.html', game=game_data_for_template, title_override=f"Details for {game_data_for_template.get('name', 'Game')}")
 
 @flask_app.route('/manual_sync/<int:played_game_id>', methods=['POST'])
 @login_required
@@ -734,82 +771,67 @@ def manual_sync_all_route():
 @flask_app.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings_route():
+    user_id = session.get('user_id')
+    is_current_user_admin = session.get('is_admin', False)
+    primary_admin_id = get_primary_admin_user_id(DB_PATH)
+    # Global settings are editable only by the primary admin
+    can_edit_global_settings = (user_id == primary_admin_id and is_current_user_admin)
+
     if request.method == 'POST':
-        # Handle global update schedule change (admin only)
-        update_schedule_hours_str = request.form.get('update_schedule_hours')
-        if update_schedule_hours_str is not None: 
-            flask_app.logger.info(f"User {g.user['username']} (ID: {g.user['id']}) attempting to set schedule. Admin status: {g.user['is_admin']} (Type: {type(g.user['is_admin'])})") # DEBUGGING
-            if g.user and g.user['is_admin']:
-                try:
-                    new_schedule_hours = int(update_schedule_hours_str)
-                    if set_setting(DB_PATH, 'update_schedule_hours_global', str(new_schedule_hours), user_id=g.user['id']):
-                        flask_app.logger.info(f"Admin user {g.user['id']} changed global update schedule to: {new_schedule_hours} hours.")
-                        start_or_reschedule_scheduler(flask_app) 
-                    else:
-                        flash('Failed to save global update schedule.', 'error')
-                except ValueError:
-                    flash('Invalid schedule value provided. Must be a number.', 'error')
+        # User-specific settings
+        set_setting(DB_PATH, 'pushover_user_key', request.form.get('pushover_user_key', ''), user_id=user_id)
+        set_setting(DB_PATH, 'pushover_api_key', request.form.get('pushover_api_key', ''), user_id=user_id)
+        set_setting(DB_PATH, 'notify_on_game_add', 'True' if request.form.get('notify_on_game_add') else 'False', user_id=user_id)
+        set_setting(DB_PATH, 'notify_on_game_delete', 'True' if request.form.get('notify_on_game_delete') else 'False', user_id=user_id)
+        set_setting(DB_PATH, 'notify_on_game_update', 'True' if request.form.get('notify_on_game_update') else 'False', user_id=user_id)
+        set_setting(DB_PATH, 'notify_on_status_change_completed', 'True' if request.form.get('notify_on_status_change_completed') else 'False', user_id=user_id)
+        set_setting(DB_PATH, 'notify_on_status_change_abandoned', 'True' if request.form.get('notify_on_status_change_abandoned') else 'False', user_id=user_id)
+        set_setting(DB_PATH, 'notify_on_status_change_on_hold', 'True' if request.form.get('notify_on_status_change_on_hold') else 'False', user_id=user_id)
+        
+        # F95zone credentials - store under primary admin ID as they are global for the scraper
+        if can_edit_global_settings:
+            set_setting(DB_PATH, 'f95_username', request.form.get('f95_username', ''), user_id=primary_admin_id)
+            set_setting(DB_PATH, 'f95_password', request.form.get('f95_password', ''), user_id=primary_admin_id)
+        elif request.form.get('f95_username') or request.form.get('f95_password'):
+            # Non-admin tried to change admin-only settings
+            flash("You do not have permission to change F95zone credentials.", "warning")
+
+        # Global settings (only if current user is the primary admin)
+        if can_edit_global_settings:
+            new_schedule_hours = request.form.get('update_schedule_hours')
+            if new_schedule_hours is not None:
+                current_schedule_hours = get_setting(DB_PATH, 'update_schedule_hours_global', default_value='24', user_id=primary_admin_id)
+                if new_schedule_hours != current_schedule_hours:
+                    set_setting(DB_PATH, 'update_schedule_hours_global', new_schedule_hours, user_id=primary_admin_id)
+                    # Reschedule the job with the new interval
+                    start_or_reschedule_scheduler(current_app._get_current_object()) # Pass the Flask app instance
+                    flash(f"Update schedule changed to every {new_schedule_hours} hours and scheduler restarted.", "success")
+                else:
+                    flash("Settings saved. Update schedule was not changed.", "success") # Schedule not changed, no restart needed
             else:
-                # Non-admin user attempted to change schedule, flash warning.
-                # Only flash if a value was actually submitted for this field.
-                flash('Update schedule can only be set by an admin.', 'warning')
+                flash("Settings saved.", "success")
+        else:
+             flash("User-specific settings saved.", "success") # Non-admin saved their settings
 
-        # Handle user-specific settings (Pushover, notification toggles)
-        pushover_user_key = request.form.get('pushover_user_key', '')
-        pushover_api_key = request.form.get('pushover_api_key', '')
-        set_setting(DB_PATH, 'pushover_user_key', pushover_user_key, user_id=g.user['id']) # Pass user_id
-        set_setting(DB_PATH, 'pushover_api_key', pushover_api_key, user_id=g.user['id']) # Pass user_id
-
-        notify_settings_keys = [
-            'notify_on_game_add', 'notify_on_game_delete', 'notify_on_game_update',
-            'notify_on_status_change_completed', 'notify_on_status_change_abandoned',
-            'notify_on_status_change_on_hold'
-        ]
-        for key in notify_settings_keys:
-            value = request.form.get(key) == 'on'
-            set_setting(DB_PATH, key, str(value), user_id=g.user['id']) # Pass user_id
-
-        flash('Settings saved successfully!', 'success') 
         return redirect(url_for('settings_route'))
 
-    # GET request - Fetch all settings for the current user
+    # GET request: Fetch current settings to display
     current_settings = {
-        # For update_schedule_hours, we show the global schedule value.
-        # Only admins can change it, but all users see the current effective schedule.
-        'update_schedule_hours': '24', # Default
-        'pushover_user_key': get_setting(DB_PATH, 'pushover_user_key', '', user_id=g.user['id']),
-        'pushover_api_key': get_setting(DB_PATH, 'pushover_api_key', '', user_id=g.user['id']),
-        'notify_on_game_add': get_setting(DB_PATH, 'notify_on_game_add', 'True', user_id=g.user['id']) == 'True',
-        'notify_on_game_delete': get_setting(DB_PATH, 'notify_on_game_delete', 'True', user_id=g.user['id']) == 'True',
-        'notify_on_game_update': get_setting(DB_PATH, 'notify_on_game_update', 'True', user_id=g.user['id']) == 'True',
-        'notify_on_status_change_completed': get_setting(DB_PATH, 'notify_on_status_change_completed', 'True', user_id=g.user['id']) == 'True',
-        'notify_on_status_change_abandoned': get_setting(DB_PATH, 'notify_on_status_change_abandoned', 'True', user_id=g.user['id']) == 'True',
-        'notify_on_status_change_on_hold': get_setting(DB_PATH, 'notify_on_status_change_on_hold', 'True', user_id=g.user['id']) == 'True'
+        'pushover_user_key': get_setting(DB_PATH, 'pushover_user_key', '', user_id=user_id),
+        'pushover_api_key': get_setting(DB_PATH, 'pushover_api_key', '', user_id=user_id),
+        'notify_on_game_add': get_setting(DB_PATH, 'notify_on_game_add', 'False', user_id=user_id) == 'True',
+        'notify_on_game_delete': get_setting(DB_PATH, 'notify_on_game_delete', 'False', user_id=user_id) == 'True',
+        'notify_on_game_update': get_setting(DB_PATH, 'notify_on_game_update', 'False', user_id=user_id) == 'True',
+        'notify_on_status_change_completed': get_setting(DB_PATH, 'notify_on_status_change_completed', 'False', user_id=user_id) == 'True',
+        'notify_on_status_change_abandoned': get_setting(DB_PATH, 'notify_on_status_change_abandoned', 'False', user_id=user_id) == 'True',
+        'notify_on_status_change_on_hold': get_setting(DB_PATH, 'notify_on_status_change_on_hold', 'False', user_id=user_id) == 'True',
+        # F95zone credentials - fetched for primary admin
+        'f95_username': get_setting(DB_PATH, 'f95_username', '', user_id=primary_admin_id) if primary_admin_id else "",
+        'f95_password': get_setting(DB_PATH, 'f95_password', '', user_id=primary_admin_id) if primary_admin_id else "",
+        # Global settings
+        'update_schedule_hours': get_setting(DB_PATH, 'update_schedule_hours_global', default_value='24', user_id=primary_admin_id) if primary_admin_id else '24'
     }
-    
-    primary_admin_id_for_schedule = get_primary_admin_user_id(DB_PATH)
-    if primary_admin_id_for_schedule is not None:
-        global_schedule_val = get_setting(DB_PATH, 'update_schedule_hours_global', default_value='24', user_id=primary_admin_id_for_schedule)
-        if global_schedule_val is not None:
-            current_settings['update_schedule_hours'] = global_schedule_val
-    else:
-        # If no admin, implies fresh setup, keep default or log warning
-        flask_app.logger.warning("Settings page: No primary admin found for global schedule display, showing default.")
-
-    schedule_options = [
-        {'value': '-5', 'label': 'Every 5 Minutes (Testing)'},
-        {'value': '-1', 'label': 'Manual Only'}, 
-        {'value': '1', 'label': 'Every Hour'},
-        {'value': '3', 'label': 'Every 3 Hours'},
-        {'value': '6', 'label': 'Every 6 Hours'},
-        {'value': '12', 'label': 'Every 12 Hours'},
-        {'value': '24', 'label': 'Every 24 Hours'},
-        {'value': '48', 'label': 'Every 48 Hours'}
-    ]
-    # Only admin can see/edit schedule options for global scheduler
-    can_edit_schedule = g.user['is_admin'] if g.user else False # Changed to dictionary access and added g.user check
-
-    return render_template('settings.html', current_settings=current_settings, schedule_options=schedule_options, can_edit_schedule=can_edit_schedule)
+    return render_template('settings.html', current_settings=current_settings, can_edit_global_settings=can_edit_global_settings)
 
 @flask_app.route('/change_password', methods=['GET', 'POST'])
 @login_required

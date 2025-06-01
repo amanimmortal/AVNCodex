@@ -1,6 +1,7 @@
 import sys
 import os
 import time # Added for rate limiting
+import json # Added for JSON serialization
 
 # Add project root to sys.path to allow importing f95apiclient
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -14,6 +15,7 @@ from datetime import datetime, timezone, timedelta # Ensure all are imported
 from email.utils import parsedate_to_datetime # Added for RSS date parsing
 from dotenv import load_dotenv
 from f95apiclient import F95ApiClient # Assuming f95apiclient is in PYTHONPATH or installed
+from app.f95_web_scraper import extract_game_data # Added for web scraping
 from typing import Optional, Set # Added Set
 import re # Added for regex in get_first_significant_word
 from pushover import Client as PushoverClient # Added for Pushover
@@ -102,15 +104,39 @@ def initialize_database(db_path):
                 first_added_to_db TEXT NOT NULL,
                 last_seen_on_rss TEXT NOT NULL,
                 last_updated_in_db TEXT NOT NULL,
-                last_checked_at TEXT DEFAULT NULL 
+                last_checked_at TEXT DEFAULT NULL,
+                -- New fields for scraper data
+                description TEXT DEFAULT NULL,
+                changelog_text TEXT DEFAULT NULL,
+                engine TEXT DEFAULT NULL,
+                language TEXT DEFAULT NULL,
+                censorship TEXT DEFAULT NULL,
+                tags_json TEXT DEFAULT NULL, -- For storing tags as a JSON list
+                download_links_json TEXT DEFAULT NULL, -- For storing download links as JSON
+                scraper_last_run_at TEXT DEFAULT NULL -- Timestamp of the last successful scrape
             )
         """)
         
         cursor.execute("PRAGMA table_info(games)")
         columns = [column[1] for column in cursor.fetchall()]
-        if 'last_checked_at' not in columns:
-            cursor.execute("ALTER TABLE games ADD COLUMN last_checked_at TEXT DEFAULT NULL")
-            logger.info("Added 'last_checked_at' column to 'games' table.")
+        
+        new_columns_to_add = {
+            'last_checked_at': "TEXT DEFAULT NULL",
+            'description': "TEXT DEFAULT NULL",
+            'changelog_text': "TEXT DEFAULT NULL",
+            'engine': "TEXT DEFAULT NULL",
+            'language': "TEXT DEFAULT NULL",
+            'censorship': "TEXT DEFAULT NULL",
+            'tags_json': "TEXT DEFAULT NULL",
+            'download_links_json': "TEXT DEFAULT NULL",
+            'scraper_last_run_at': "TEXT DEFAULT NULL"
+        }
+
+        for col_name, col_def in new_columns_to_add.items():
+            if col_name not in columns:
+                cursor.execute(f"ALTER TABLE games ADD COLUMN {col_name} {col_def}")
+                logger.info(f"Added '{col_name}' column to 'games' table.")
+                columns.append(col_name) # Add to known columns to prevent re-adding in same run if logic expands
 
         # Create user_played_games table
         cursor.execute("""
@@ -300,11 +326,27 @@ def process_rss_feed(db_path, client):
 
     logger.info(f"Fetched {len(game_items)} items from RSS feed.")
 
+    # TODO: Determine the correct user_id for fetching credentials in a global context.
+    # For now, attempting to fetch as global or assuming primary admin if get_setting supports it.
+    # This will likely require f95_username and f95_password to be stored under the primary admin user ID.
+    primary_admin_id = get_primary_admin_user_id(db_path) # Get primary admin ID
+    f95_username = None
+    f95_password = None
+    if primary_admin_id is not None:
+        f95_username = get_setting(db_path, 'f95_username', user_id=primary_admin_id)
+        f95_password = get_setting(db_path, 'f95_password', user_id=primary_admin_id)
+    else:
+        logger.warning("No primary admin user ID found. Cannot fetch F95zone credentials for scraper.")
+
+    if not f95_username or not f95_password:
+        logger.warning("F95zone username or password not configured in settings. Scraping will be anonymous.")
+
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         current_timestamp = datetime.now(timezone.utc).isoformat()
+        scraper_debounce_days = 7 # Added: Don't rescrape if last run was within this many days
 
         for item in game_items:
             f95_url = item.get('url')
@@ -342,10 +384,60 @@ def process_rss_feed(db_path, client):
                 """, (f95_url, name_rss, version_rss, author_rss, cached_image_web_path, pub_date_rss,
                       current_timestamp, current_timestamp, current_timestamp))
                 conn.commit()
-                logger.info(f"New game added: '{name_rss}' (Version: {version_rss}) from URL: {f95_url}")
+                game_id = cursor.lastrowid
+                logger.info(f"New game added: '{name_rss}' (Version: {version_rss}) from URL: {f95_url} with ID: {game_id}")
+
+                # Scrape data for new game
+                try:
+                    logger.info(f"Attempting to scrape additional data for new game: {name_rss} ({f95_url})")
+                    scraped_data = extract_game_data(f95_url, username=f95_username, password=f95_password)
+                    if scraped_data:
+                        tags_json = json.dumps(scraped_data.get('tags')) if scraped_data.get('tags') else None
+                        download_links_json = json.dumps(scraped_data.get('download_links')) if scraped_data.get('download_links') else None
+                        
+                        # Log the types and values being inserted
+                        logger.debug(f"Scraped data for {name_rss}:")
+                        logger.debug(f"  Description: {scraped_data.get('full_description')} (Type: {type(scraped_data.get('full_description'))})")
+                        logger.debug(f"  Changelog: {scraped_data.get('changelog')} (Type: {type(scraped_data.get('changelog'))})")
+                        logger.debug(f"  Engine: {scraped_data.get('engine')} (Type: {type(scraped_data.get('engine'))})")
+                        logger.debug(f"  Language: {scraped_data.get('language')} (Type: {type(scraped_data.get('language'))})")
+                        logger.debug(f"  Censorship: {scraped_data.get('censorship')} (Type: {type(scraped_data.get('censorship'))})")
+                        logger.debug(f"  Tags JSON: {tags_json} (Type: {type(tags_json)})")
+                        logger.debug(f"  Download Links JSON: {download_links_json} (Type: {type(download_links_json)})")
+
+                        cursor.execute("""
+                            UPDATE games
+                            SET description = ?, changelog_text = ?, engine = ?, language = ?, 
+                                censorship = ?, tags_json = ?, download_links_json = ?, 
+                                scraper_last_run_at = ?
+                            WHERE id = ?
+                        """, (
+                            scraped_data.get('full_description'), 
+                            scraped_data.get('changelog'),
+                            scraped_data.get('engine'), 
+                            scraped_data.get('language'),
+                            scraped_data.get('censorship'), 
+                            tags_json, 
+                            download_links_json,
+                            current_timestamp,
+                            game_id 
+                        ))
+                        conn.commit()
+                        logger.info(f"Successfully scraped and stored additional data for new game: {name_rss}")
+                    else:
+                        logger.warning(f"Scraping returned no data for new game: {name_rss}")
+                except Exception as e_scrape:
+                    logger.error(f"Error scraping data for new game {name_rss} ({f95_url}): {e_scrape}", exc_info=True)
             else:
                 # Existing game
-                db_version, db_rss_pub_date, db_image_url = row
+                db_version, db_rss_pub_date, db_image_url = row # Original fields
+                
+                # Fetch scraper_last_run_at and game_id for existing game for rescraping logic
+                cursor.execute("SELECT id, scraper_last_run_at FROM games WHERE f95_url = ?", (f95_url,))
+                game_info_row = cursor.fetchone()
+                game_id = game_info_row[0] if game_info_row else None
+                scraper_last_run_at_str = game_info_row[1] if game_info_row and game_info_row[1] else None
+
                 updated = False
                 image_to_store = db_image_url # By default, keep existing image
 
@@ -383,6 +475,66 @@ def process_rss_feed(db_path, client):
                                    (current_timestamp, f95_url))
                     conn.commit()
                     logger.debug(f"No update for game: '{name_rss}'. Last seen updated. URL: {f95_url}")
+
+                # Re-scraping logic for existing games (if updated or not scraped recently)
+                should_scrape_existing = False
+                if updated: # If core RSS data changed, consider re-scraping
+                    logger.info(f"Game '{name_rss}' was updated via RSS. Considering re-scrape.")
+                    should_scrape_existing = True
+                
+                if not scraper_last_run_at_str:
+                    logger.info(f"Game '{name_rss}' has not been scraped before. Scheduling scrape.")
+                    should_scrape_existing = True
+                else:
+                    try:
+                        # Ensure scraper_last_run_at_str is in correct ISO format for parsing
+                        # It should be if stored by current_timestamp = datetime.now(timezone.utc).isoformat()
+                        last_run_dt = datetime.fromisoformat(scraper_last_run_at_str)
+                        if datetime.now(timezone.utc) - last_run_dt > timedelta(days=scraper_debounce_days):
+                            logger.info(f"Game '{name_rss}' last scraped on {scraper_last_run_at_str}. Re-scraping due to age.")
+                            should_scrape_existing = True
+                        else:
+                            logger.info(f"Game '{name_rss}' last scraped on {scraper_last_run_at_str}. Skipping re-scrape due to debounce ({scraper_debounce_days} days).")
+                    except ValueError as e_date_parse:
+                        logger.warning(f"Could not parse scraper_last_run_at_str '{scraper_last_run_at_str}' for game '{name_rss}'. Error: {e_date_parse}. Will attempt to re-scrape.")
+                        should_scrape_existing = True # If date is unparseable, better to try scraping
+
+                if should_scrape_existing and game_id:
+                    try:
+                        logger.info(f"Attempting to scrape/re-scrape additional data for existing game: {name_rss} ({f95_url})")
+                        scraped_data = extract_game_data(f95_url, username=f95_username, password=f95_password)
+                        if scraped_data:
+                            tags_json = json.dumps(scraped_data.get('tags')) if scraped_data.get('tags') else None
+                            download_links_json = json.dumps(scraped_data.get('download_links')) if scraped_data.get('download_links') else None
+                            
+                            # Log the types and values being inserted for existing game
+                            logger.debug(f"Scraped data for existing game {name_rss}:")
+                            logger.debug(f"  Description: {scraped_data.get('full_description')} (Type: {type(scraped_data.get('full_description'))})")
+                            # Add more debug logs if needed for other fields
+
+                            cursor.execute("""
+                                UPDATE games
+                                SET description = ?, changelog_text = ?, engine = ?, language = ?, 
+                                    censorship = ?, tags_json = ?, download_links_json = ?, 
+                                    scraper_last_run_at = ?
+                                WHERE id = ?
+                            """, (
+                                scraped_data.get('full_description'), 
+                                scraped_data.get('changelog'),
+                                scraped_data.get('engine'), 
+                                scraped_data.get('language'),
+                                scraped_data.get('censorship'), 
+                                tags_json, 
+                                download_links_json,
+                                current_timestamp, # Update scraper_last_run_at timestamp
+                                game_id 
+                            ))
+                            conn.commit()
+                            logger.info(f"Successfully scraped/re-scraped and stored additional data for existing game: {name_rss}")
+                        else:
+                            logger.warning(f"Scraping returned no data for existing game: {name_rss}")
+                    except Exception as e_scrape_existing:
+                        logger.error(f"Error scraping data for existing game {name_rss} ({f95_url}): {e_scrape_existing}", exc_info=True)
         
         logger.info("Finished processing RSS feed items against the database.")
 

@@ -74,14 +74,20 @@
                                 <div class="card-details">
                                     <h3>
                                         <a href="{{ game.f95_url }}" target="_blank">{{ game.name }}</a>
-                                        {% if game.completed_status %}
-                                            <span class="game-status-tag status-{{ game.completed_status.lower().replace(' ', '_') }}">
-                                                {{ game.completed_status.replace('_', ' ')|title }}
+                                        {# Use game.status (scraped) if available, otherwise fall back to game.completed_status (from RSS/manual) #}
+                                        {% set display_status = game.status if game.status and game.status not in ['Not found', 'Not yet scraped'] else game.completed_status %}
+                                        {% if display_status %}
+                                            <span class="game-status-tag status-{{ display_status.lower().replace(' ', '_').replace('-', '_') }}">
+                                                {{ display_status | replace('_', ' ') | title }}
                                             </span>
                                         {% endif %}
                                     </h3>
                                     <p><strong>Version:</strong> {{ game.version if game.version else 'N/A' }}</p>
                                     <p><strong>Author:</strong> {{ game.author if game.author else 'N/A' }}</p>
+                                    {# Add Engine if available and not 'Not found' #}
+                                    {% if game.engine and game.engine not in ['Not found', 'Not yet scraped'] %}
+                                    <p><strong>Engine:</strong> {{ game.engine }}</p>
+                                    {% endif %}
                                     <p class="text-muted"><strong>Last Updated:</strong> {{ game.rss_pub_date if game.rss_pub_date else 'N/A' }}</p>
                                 </div>
                                 <div class="card-content">

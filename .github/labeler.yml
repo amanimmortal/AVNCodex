@@ -7,7 +7,15 @@ resources:
 language: resources/lang/*
 documentation: docs/**/*
 
-backend: app/electron/**/*
+backend:
+  - app/**/*.py
+  - app/main.py
+  - f95apiclient/**/*
+  - requirements.txt
+  - Dockerfile
+  - docker-compose.yml
+  - docker-compose.windows.yml
+
 frontend:
 - any: ['app/src/**/*.html', 'app/src/**/*.css']
 

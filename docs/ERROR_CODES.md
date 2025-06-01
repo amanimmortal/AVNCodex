@@ -7,7 +7,6 @@ The error codes are structured as follows:
 ## Types of scripts:
 | Code |      Script      |                     Description                    |
 |:----:|:----------------:|:--------------------------------------------------:|
-|   0  |  Preload script  | Scripts used as preload by Electron                |
 |   1  |  Renderer script | Scripts used to interact with the user             |
 |   2  | Component script | Scripts used to manage the behavior of a component |
 |   3  |  Generic script  | Generic scripts                                    |
@@ -46,3 +45,11 @@ The error codes are structured as follows:
 |  28  |   url-input-renderer.js  |
 |  29  |       user-info.js       |
 |  30  |     window-creator.js    |
+
+| Code | Component        | Description                                        |
+| :--- | :--------------- | :------------------------------------------------- |
+| General Errors (app.py & Flask) |||
+| 1    | Config           | Error loading or validating `config.py`            |
+| Specific Function Errors (app.py) |||
+| 20   | `/search` route  | Error during F95zone search processing             |
+| 21   | `/add` route     | Error adding a game to the monitored list          |

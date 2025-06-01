@@ -9,3 +9,4 @@ feedparser>=6.0.1
 PySocks 
 APScheduler 
 python-pushover2 
+playwright 

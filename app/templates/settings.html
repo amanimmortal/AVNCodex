@@ -17,17 +17,18 @@
     {% endwith %}
 
     <form method="POST" action="{{ url_for('settings_route') }}" class="mt-3">
-        <h4>Update Checker Settings</h4>
+        <h4>F95zone Credentials (Global - Admin Only)</h4>
+        <p class="text-muted">These credentials are used by the system to log in and scrape detailed game information. Only the primary admin can change these.</p>
         <div class="mb-3">
-            <label for="update_schedule_hours" class="form-label">Automatic Update Check Interval:</label>
-            <select class="form-select" id="update_schedule_hours" name="update_schedule_hours">
-                {% for option in schedule_options %}
-                    <option value="{{ option.value }}" {% if option.value == current_settings.update_schedule_hours %}selected{% endif %}>
-                        {{ option.label }}
-                    </option>
-                {% endfor %}
-            </select>
-            <div class="form-text">How often the application should automatically check for game updates.</div>
+            <label for="f95_username" class="form-label">F95zone Username</label>
+            <input type="text" class="form-control" id="f95_username" name="f95_username" value="{{ current_settings.f95_username }}" {{ '' if can_edit_global_settings else 'disabled' }}>
+        </div>
+        <div class="mb-3">
+            <label for="f95_password" class="form-label">F95zone Password</label>
+            <input type="password" class="form-control" id="f95_password" name="f95_password" value="{{ current_settings.f95_password }}" {{ '' if can_edit_global_settings else 'disabled' }}>
+            {% if not can_edit_global_settings %}
+            <small class="form-text text-muted">Only the primary admin can modify F95zone credentials.</small>
+            {% endif %}
         </div>
         
         <hr class="my-4">
@@ -72,6 +73,26 @@
         <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" id="notify_on_status_change_on_hold" name="notify_on_status_change_on_hold" {% if current_settings.notify_on_status_change_on_hold %}checked{% endif %}>
             <label class="form-check-label" for="notify_on_status_change_on_hold">Status Change: On Hold</label>
+        </div>
+
+        <hr class="my-4">
+        <h4>Global Update Schedule (Admin Only)</h4>
+        <p class="text-muted">Configure how often the system checks all users' followed games for updates and status changes. This is a global setting managed by the primary admin.</p>
+        <div class="mb-3">
+            <label for="update_schedule_hours" class="form-label">Master Update Check Interval</label>
+            <select class="form-select" id="update_schedule_hours" name="update_schedule_hours" {{ '' if can_edit_global_settings else 'disabled' }}>
+                <option value="-5" {% if current_settings.update_schedule_hours == '-5' %}selected{% endif %}>Every 5 Minutes (Testing)</option>
+                <option value="-1" {% if current_settings.update_schedule_hours == '-1' %}selected{% endif %}>Manual Only (Background task disabled)</option>
+                <option value="1" {% if current_settings.update_schedule_hours == '1' %}selected{% endif %}>Every Hour</option>
+                <option value="3" {% if current_settings.update_schedule_hours == '3' %}selected{% endif %}>Every 3 Hours</option>
+                <option value="6" {% if current_settings.update_schedule_hours == '6' %}selected{% endif %}>Every 6 Hours</option>
+                <option value="12" {% if current_settings.update_schedule_hours == '12' %}selected{% endif %}>Every 12 Hours</option>
+                <option value="24" {% if current_settings.update_schedule_hours == '24' %}selected{% endif %}>Every 24 Hours</option>
+                <option value="48" {% if current_settings.update_schedule_hours == '48' %}selected{% endif %}>Every 48 Hours</option>
+            </select>
+            {% if not can_edit_global_settings %}
+            <small class="form-text text-muted">Only the primary admin can modify the global update schedule.</small>
+            {% endif %}
         </div>
 
         <div class="mt-4">
