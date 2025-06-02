@@ -3,6 +3,10 @@ from bs4 import BeautifulSoup
 import time # Added for potential waits
 from playwright.sync_api import sync_playwright # Added for Playwright
 import re # Added for regular expressions
+import logging
+
+# Create a logger specific to this module
+logger_scraper = logging.getLogger(__name__) # Use __name__ for module-level logger
 
 # --- Playwright Login Function ---
 def login_to_f95zone(page, username, password):
@@ -11,79 +15,80 @@ def login_to_f95zone(page, username, password):
     Assumes the page is already navigated to the login page or a page that redirects to login.
     """
     try:
-        print("Attempting to log in...")
+        logger_scraper.info("Login Attempt: Initiated.")
         page.fill("input[name='login']", username)
-        print("Filled username.")
+        logger_scraper.info("Login Attempt: Filled username.")
         page.fill("input[name='password']", password)
-        print("Filled password.")
+        logger_scraper.info("Login Attempt: Filled password.")
 
         login_button = page.locator("button.button--primary", has_text="Log in")
         
         if not login_button or login_button.count() == 0: 
-            print("Primary login button (.button--primary with text 'Log in') not found. Trying fallback selector for form button...")
+            logger_scraper.warning("Login Attempt: Primary login button not found. Trying fallback selector for form button...")
             login_button = page.locator("form.block[action='/login/login'] button[type='submit']")
         
         if not login_button or login_button.count() == 0:
-            print("Fallback form button not found. Trying get_by_role('button', name=re.compile(r'log in', re.IGNORECASE))...")
+            logger_scraper.warning("Login Attempt: Fallback form button not found. Trying get_by_role('button', name=re.compile(r'log in', re.IGNORECASE))...")
             login_button = page.get_by_role("button", name=re.compile(r"log in", re.IGNORECASE))
 
         if login_button.count() > 0:
             button_to_click = login_button.first
             try:
-                print(f"Found login button. Waiting for it to be visible and enabled...")
+                logger_scraper.info(f"Login Attempt: Found login button. Waiting for it to be visible and enabled...")
                 button_to_click.wait_for(state="visible", timeout=5000) 
                 button_to_click.wait_for(state="enabled", timeout=5000) 
-                print(f"Login button is visible and enabled. Attempting click now...")
-                button_to_click.click(timeout=25000) # Increased timeout to 25 seconds for the click action
-                print("Playwright click() call for login button completed. Page should have navigated or updated.")
+                logger_scraper.info(f"Login Attempt: Login button is visible and enabled. Attempting click now...")
+                button_to_click.click(timeout=25000) 
+                logger_scraper.info("Login Attempt: Playwright click() call for login button completed.")
             except Exception as e_click_wait:
-                print(f"LOGIN ERROR: Error while waiting for login button state or during the click action itself: {e_click_wait}")
+                logger_scraper.error(f"LOGIN ERROR: Error while waiting for login button state or during the click action itself: {e_click_wait}")
                 return False
         else:
-            print("LOGIN ERROR: Could not find a clickable login button on the page after all fallbacks.")
-            print(f"Current URL when failing to find login button: {page.url}")
+            logger_scraper.error("LOGIN ERROR: Could not find a clickable login button on the page after all fallbacks.")
+            logger_scraper.error(f"LOGIN ERROR: Current URL when failing to find login button: {page.url}")
             return False
 
-        print("Waiting for login result (e.g., navigation, specific elements changing)...")
+        logger_scraper.info("Login Attempt: Waiting for login result indicator...")
         try:
             page.wait_for_selector(
                 "a[href='/logout/'], .blockMessage.blockMessage--error, a.p-navgroup-link--username", 
                 timeout=15000
             )
-            print(f"Login result indicator found. Current URL: {page.url}")
+            logger_scraper.info(f"Login Attempt: Login result indicator found. Current URL: {page.url}")
         except Exception as e_wait_indicator:
-            print(f"Timeout or error waiting for login result indicator. Error: {e_wait_indicator}")
-            print(f"Current URL after login click attempt and wait for indicator: {page.url}")
+            logger_scraper.warning(f"Login Attempt: Timeout or error waiting for login result indicator. Error: {e_wait_indicator}")
+            logger_scraper.info(f"Login Attempt: Current URL after login click attempt and wait for indicator: {page.url}")
 
         if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
-            print("Login check: Logout link or account element or username link found. Login appears successful.")
-            print(f"Current URL after login attempt: {page.url}")
+            logger_scraper.info("Login Attempt: Logout link or account element or username link found. Login appears successful.")
+            logger_scraper.info(f"Login Attempt: Current URL after successful login check: {page.url}")
             return True
         else:
-            print(f"Login failed. No specific error message or success indicator found on page. URL after attempt: {page.url}")
+            logger_scraper.error(f"Login Attempt: Login failed. No specific error message or success indicator found. URL after attempt: {page.url}")
             return False
 
     except Exception as e:
-        print(f"An error occurred during login: {e}")
+        logger_scraper.error(f"LOGIN ERROR: An unexpected error occurred during login: {e}", exc_info=True)
         return False
 
 def get_page_html_with_playwright(page, url):
     """Fetches HTML from a URL using an existing Playwright page object and returns its content."""
     try:
-        print(f"Navigating to {url} with Playwright...")
+        logger_scraper.info(f"Playwright Nav: Navigating to {url}...")
         page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        print(f"Successfully navigated to {url}. Current Playwright page URL: {page.url}. Waiting for page to settle.")
-        page.wait_for_timeout(3000)
+        logger_scraper.info(f"Playwright Nav: Successfully navigated to {url}. Current URL: {page.url}. Waiting for page to settle.")
+        page.wait_for_timeout(3000) # Give page time for JS rendering after DOM load
         html_content = page.content()
         if not html_content:
-            print(f"Warning: Fetched empty HTML content from {url}")
+            logger_scraper.warning(f"Playwright Nav: Fetched empty HTML content from {url}")
         return html_content
     except Exception as e:
-        print(f"Error fetching URL {url} with Playwright: {e}")
+        logger_scraper.error(f"Playwright Nav: Error fetching URL {url}: {e}", exc_info=True)
         return None
 
 def get_soup(url):
-    """Fetches HTML from a URL and returns a BeautifulSoup object."""
+    # This function is not currently used when Playwright is active for the main extraction.
+    # Kept for potential direct BS4 usage or other utilities.
     try:
         headers = { # Mimic a browser to avoid potential blocks
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -92,7 +97,7 @@ def get_soup(url):
         response.raise_for_status()  # Raises an HTTPError for bad responses (4XX or 5XX)
         return BeautifulSoup(response.content, 'html.parser')
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching URL {url}: {e}")
+        logger_scraper.error(f"Error fetching URL {url}: {e}", exc_info=True)
         return None
 
 def extract_game_data(game_thread_url, username=None, password=None):
@@ -100,7 +105,11 @@ def extract_game_data(game_thread_url, username=None, password=None):
     Extracts detailed information from an F95zone game thread page.
     Uses Playwright for navigation and login if credentials are provided.
     """
-    print(f"Starting extraction for: {game_thread_url}")
+    # CRITICAL LOG: Log the received game_thread_url AT THE VERY START
+    logger_scraper.info(f"EXTRACT_GAME_DATA: Entered function. Initial game_thread_url='{game_thread_url}', Username provided: {'Yes' if username else 'No'}.")
+    
+    # This log was previously print(), now using logger.
+    logger_scraper.info(f"EXTRACT_GAME_DATA: Starting extraction for: {game_thread_url}")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -112,103 +121,92 @@ def extract_game_data(game_thread_url, username=None, password=None):
         logged_in = False
         if username and password:
             try:
-                print("Navigating to login page for authentication...")
+                logger_scraper.info("EXTRACT_GAME_DATA: Navigating to login page for authentication...")
                 page.goto("https://f95zone.to/login/login", wait_until="domcontentloaded", timeout=30000)
-                print(f"On login page. Current URL: {page.url}")
+                logger_scraper.info(f"EXTRACT_GAME_DATA: On login page. Current URL: {page.url}")
                 if login_to_f95zone(page, username, password):
-                    print("LOGIN_F95_WEB_SCRAPER: Login function returned True.")
+                    logger_scraper.info("EXTRACT_GAME_DATA: Login function returned True.")
                     logged_in = True
                 else:
-                    print("LOGIN_F95_WEB_SCRAPER: Login function returned False. Scraping will proceed without authentication, which may fail for some content.")
+                    logger_scraper.warning("EXTRACT_GAME_DATA: Login function returned False. Scraping will proceed without authentication.")
             except Exception as e_login_nav:
-                print(f"Error navigating to login page or during login process: {e_login_nav}")
-                print("Scraping will proceed without authentication.")
+                logger_scraper.error(f"EXTRACT_GAME_DATA: Error navigating to login page or during login process: {e_login_nav}", exc_info=True)
+                logger_scraper.warning("EXTRACT_GAME_DATA: Scraping will proceed without authentication.")
         else:
-            print("No credentials provided. Scraping as anonymous user.")
+            logger_scraper.info("EXTRACT_GAME_DATA: No credentials provided. Scraping as anonymous user.")
 
-        print(f"Attempting to fetch game thread URL: {game_thread_url}")
-        # html_content = get_page_html_with_playwright(page, game_thread_url) # Moved after spoiler clicks
-        # print(f"After navigating to game thread. Current Playwright page URL: {page.url}")
-
-        # Navigate to the game thread page first
+        logger_scraper.info(f"EXTRACT_GAME_DATA: Attempting to fetch game thread URL: {game_thread_url}")
+        
         try:
-            print(f"Navigating to {game_thread_url} with Playwright before spoiler clicks...")
+            logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to {game_thread_url} with Playwright before spoiler clicks...")
             page.goto(game_thread_url, wait_until="domcontentloaded", timeout=30000)
-            print(f"Successfully navigated to {game_thread_url}. Current URL: {page.url}")
-            page.wait_for_timeout(2000) # Give page a moment to settle
+            logger_scraper.info(f"EXTRACT_GAME_DATA: Successfully navigated to {game_thread_url}. Current URL: {page.url}")
+            page.wait_for_timeout(2000) 
         except Exception as e_nav_game_page:
-            print(f"Error navigating to game page {game_thread_url} before spoiler interaction: {e_nav_game_page}")
+            logger_scraper.error(f"EXTRACT_GAME_DATA: Error navigating to game page {game_thread_url} before spoiler interaction: {e_nav_game_page}", exc_info=True)
             browser.close()
             return None
 
-        # Attempt to click all spoiler buttons to reveal content
-        print("Attempting to find and click spoiler buttons...")
+        logger_scraper.info("EXTRACT_GAME_DATA: Attempting to find and click spoiler buttons...")
         spoiler_buttons_selector = "button.bbCodeSpoiler-button"
         try:
             spoiler_buttons = page.query_selector_all(spoiler_buttons_selector)
-            print(f"Found {len(spoiler_buttons)} spoiler buttons.")
+            logger_scraper.info(f"EXTRACT_GAME_DATA: Found {len(spoiler_buttons)} spoiler buttons.")
             for i, button_element in enumerate(spoiler_buttons):
                 try:
                     if button_element.is_visible() and button_element.is_enabled():
-                        # print(f"Attempting to click spoiler button {i+1}") # Optional: Keep for super-detailed debugging
-                        button_element.click(timeout=2000) # Click with a short timeout for the action itself
-                        # print(f"Clicked spoiler button {i+1}.") # REDUCED VERBOSITY
+                        button_element.click(timeout=2000) 
+                        # Minimal logging for spoiler clicks unless debugging specific spoiler issues
+                        # logger_scraper.debug(f"EXTRACT_GAME_DATA: Clicked spoiler button {i+1}.")
                         
                         spoiler_container = button_element.query_selector("xpath=ancestor::div[contains(@class, 'bbCodeSpoiler')]")
                         if spoiler_container:
                             content_area = spoiler_container.query_selector("div.bbCodeSpoiler-content")
                             if content_area:
                                 page.wait_for_timeout(750) 
-                                # content_text = content_area.inner_text(timeout=1000) # REDUCED VERBOSITY
-                                # print(f"  Spoiler {i+1} content snippet after click & wait: {(content_text[:70] + '...') if content_text and len(content_text) > 70 else content_text}") # REDUCED VERBOSITY
-                            # else: # Optional: Keep for debugging specific spoiler structure issues
-                                # print(f"  Could not find content area for spoiler {i+1} after click.")
-                        # else: # Optional: Keep for debugging specific spoiler structure issues
-                            # print(f"  Could not find parent spoiler container for button {i+1}.")
-                            page.wait_for_timeout(500) # Fallback general pause if specific content area isn't found by the above logic
-
-                    else:
-                        # print(f"Spoiler button {i+1} is not visible or enabled, skipping.") # REDUCED VERBOSITY
-                        pass 
+                            # else:
+                                # logger_scraper.debug(f"  Could not find content area for spoiler {i+1} after click.")
+                        # else:
+                            # logger_scraper.debug(f"  Could not find parent spoiler container for button {i+1}.")
+                            page.wait_for_timeout(500) 
+                    # else:
+                        # logger_scraper.debug(f"EXTRACT_GAME_DATA: Spoiler button {i+1} is not visible or enabled, skipping.")
                 except Exception as e_click_spoiler:
-                    print(f"Could not click or process spoiler button {i+1}: {e_click_spoiler}")
-            print("Finished attempting to click spoiler buttons.")
+                    logger_scraper.warning(f"EXTRACT_GAME_DATA: Could not click or process spoiler button {i+1}: {e_click_spoiler}")
+            logger_scraper.info("EXTRACT_GAME_DATA: Finished attempting to click spoiler buttons.")
         except Exception as e_find_spoilers:
-            print(f"Error finding or interacting with spoiler buttons: {e_find_spoilers}")
+            logger_scraper.error(f"EXTRACT_GAME_DATA: Error finding or interacting with spoiler buttons: {e_find_spoilers}", exc_info=True)
 
-        # Add a more substantial overall wait here for any final JS updates after all spoiler interactions
-        # print("Waiting a bit longer for all spoiler content to potentially load (increased wait)...") # REDUCED VERBOSITY
-        page.wait_for_timeout(2500) # Reduced from 5000, individual waits are now more targeted
+        page.wait_for_timeout(2500) 
 
-        # Now get the HTML content after attempting to click spoilers
-        # print(f"Getting HTML content after spoiler clicks. Current URL: {page.url}") # REDUCED VERBOSITY
+        logger_scraper.debug(f"EXTRACT_GAME_DATA: Getting HTML content after spoiler clicks. Current URL: {page.url}")
         html_content = page.content()
         
         if not html_content:
-            print(f"Failed to get HTML content for {game_thread_url} using Playwright.")
+            logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to get HTML content for {game_thread_url} using Playwright.")
             browser.close()
             return None
 
         soup = BeautifulSoup(html_content, 'html.parser')
         browser.close()
+        logger_scraper.info(f"EXTRACT_GAME_DATA: Browser closed for {game_thread_url}.")
+
 
         data = {
-            "url": game_thread_url,
+            "url": game_thread_url, # Store the URL that was *actually processed* by this instance
             "title": None, "version": None, "author": None, "tags": [],
             "full_description": None, "changelog": None, "download_links": [],
             "engine": None, "language": None, "status": None, "censorship": None,
         }
 
-        # --- Title ---
         if title_tag := soup.find('h1', class_='p-title-value'):
             data['title'] = title_tag.get_text(strip=True)
         elif page_title_element := soup.find('title'):
             data['title'] = page_title_element.get_text(strip=True).replace(" | F95zone", "")
-        # print(f"SCRAPER_DEBUG: Extracted title: {data['title']}") # REDUCED VERBOSITY
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted title: {data['title']}")
 
-        # --- Author (Thread Starter) ---
-        # data['author'] is initialized to None in the data dictionary.
-        first_post_article = soup.find('article', class_='message--post') # Find the first post
+
+        first_post_article = soup.find('article', class_='message--post') 
         if first_post_article:
             user_details_div = first_post_article.find('div', class_='message-userDetails')
             if user_details_div:
@@ -216,22 +214,18 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 if author_link_tag:
                     data['author'] = author_link_tag.get_text(strip=True)
                 else:
-                    print(f"Warning: For URL {game_thread_url}, author link not found within first post's userDetails.")
+                    logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Author link not found within first post's userDetails.")
             else:
-                print(f"Warning: For URL {game_thread_url}, userDetails div not found in the first post.")
+                logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): userDetails div not found in the first post.")
         else:
-            print(f"Warning: For URL {game_thread_url}, first post article not found for author extraction.")
+            logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): First post article not found for author extraction.")
         
-        # Fallback or alternative author scraping logic (from dt/dd pairs) is handled later in the script.
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted author (after first post check): {data['author']}")
 
-        # print(f"SCRAPER_DEBUG: Extracted author (after first post check): {data['author']}") # REDUCED VERBOSITY
-
-        # --- Main content of the first post ---
         first_post_article_content = soup.find('article', class_='message--post')
         bb_wrapper = first_post_article_content.find('div', class_='bbWrapper') if first_post_article_content else None
 
         if bb_wrapper:
-            # --- Full Game Description/Overview ---
             desc_elements = []
             for elem in bb_wrapper.children:
                 if elem.name and (elem.name.startswith('h') or (elem.name == 'div' and 'Spoiler' in elem.get('class', []))):
@@ -246,11 +240,9 @@ def extract_game_data(game_thread_url, username=None, password=None):
             data['full_description'] = "\n".join(filter(None, desc_elements)).strip() or \
                                        bb_wrapper.get_text(separator='\n', strip=True)
 
-            # Limit description length for logging to avoid flooding logs
-            # description_snippet = (data['full_description'][:200] + '...') if data['full_description'] and len(data['full_description']) > 200 else data['full_description'] # REDUCED VERBOSITY
-            # print(f"SCRAPER_DEBUG: Description snippet: {description_snippet}") # REDUCED VERBOSITY
+            description_snippet_log = (data['full_description'][:200] + '...') if data['full_description'] and len(data['full_description']) > 200 else data['full_description']
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Description snippet: {description_snippet_log}")
 
-            # --- Changelog ---
             changelog_text_parts = []
             possible_changelog_headers = ['changelog', "what\'s new", "update notes", "version history"]
             spoilers = bb_wrapper.find_all('div', class_='bbCodeSpoiler')
@@ -276,8 +268,9 @@ def extract_game_data(game_thread_url, username=None, password=None):
                     if changelog_text_parts:
                         break
             data['changelog'] = "\n---\n".join(changelog_text_parts) or "Not clearly identified"
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted changelog (first 100 chars): {data['changelog'][:100] if data['changelog'] else 'None'}")
 
-            # --- Download Links ---
+
             links = bb_wrapper.find_all('a', href=True)
             for link in links:
                 href = link['href']
@@ -311,8 +304,8 @@ def extract_game_data(game_thread_url, username=None, password=None):
                          data['download_links'].append({"text": button.get_text(strip=True), "url": url_in_onclick})
                 except IndexError:
                     pass 
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found {len(data['download_links'])} download links.")
 
-        # --- Tags/Categories ---
         if tags_container := soup.find('div', class_='tagGroup'):
             tag_links = tags_container.find_all('a', class_='tagItem')
             for tag_link in tag_links:
@@ -322,8 +315,9 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 tag_links = tags_dd.find_all('a')
                 for tag_link in tag_links:
                     data['tags'].append(tag_link.get_text(strip=True))
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted tags: {data['tags']}")
 
-        # --- Game Engine, Language, Status, Censorship ---
+
         prefix_elements = soup.find_all('span', class_=lambda x: x and x.startswith('label'))
         for prefix_el in prefix_elements:
             text = prefix_el.get_text(strip=True).lower()
@@ -350,10 +344,13 @@ def extract_game_data(game_thread_url, username=None, password=None):
                     data['status'] = dd_text
                 elif 'censorship' in dt_text and not data['censorship']:
                     data['censorship'] = dd_text
-                elif 'developer' in dt_text and not data['author']:
+                elif 'developer' in dt_text and not data['author']: # Prioritize author from first post
                     data['author'] = dd_text
                 elif 'version' in dt_text and not data['version']:
                      data['version'] = dd_text
+        
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): After dls - Engine: {data['engine']}, Lang: {data['language']}, Status: {data['status']}, Cens: {data['censorship']}, Author: {data['author']}, Version: {data['version']}")
+
 
         if isinstance(data['tags'], list):
             for tag_text_lower in [t.lower() for t in data['tags']]:
@@ -372,6 +369,9 @@ def extract_game_data(game_thread_url, username=None, password=None):
                         if original_tag.lower() == tag_text_lower:
                             data['censorship'] = original_tag
                             break
+        
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): After tags inference - Engine: {data['engine']}, Status: {data['status']}, Cens: {data['censorship']}")
+
 
         for key, value in data.items():
             if value is None:
@@ -379,46 +379,51 @@ def extract_game_data(game_thread_url, username=None, password=None):
             elif isinstance(value, list) and not value:
                 data[key] = ["Not found"] if key in ["tags", "download_links"] else "Not found"
 
-    print(f"SCRAPER_DEBUG: Final data dictionary before return: {data}")
+    # CRITICAL LOG: Final dictionary to be returned, ensure it includes the URL it was for.
+    logger_scraper.info(f"SCRAPER_RETURN (URL: {game_thread_url}): Final data dictionary: {data}")
     return data
 
 if __name__ == '__main__':
     import os
+    # Setup basic logging for standalone script testing
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(message)s', handlers=[logging.StreamHandler()])
+    
     f95_username = os.environ.get("F95ZONE_USERNAME")
     f95_password = os.environ.get("F95ZONE_PASSWORD")
 
     if not (f95_username and f95_password):
-        print("WARNING: F95ZONE_USERNAME and/or F95ZONE_PASSWORD environment variables not set.")
-        print("Login functionality will not be tested. Scraping will be anonymous.")
+        logger_scraper.warning("WARNING: F95ZONE_USERNAME and/or F95ZONE_PASSWORD environment variables not set for standalone test.")
+        logger_scraper.warning("Login functionality will not be tested. Scraping will be anonymous.")
 
     example_urls = [
         "https://f95zone.to/threads/takeis-journey-v0-30-ferrum.82236/",
+        # "https://f95zone.to/threads/eternum-v0-7-public-caribdis.93340/" # Example of another URL
     ]
 
     all_games_data = []
-    print(f"Attempting to scrape {len(example_urls)} game pages.\n")
+    logger_scraper.info(f"STANDALONE_TEST: Attempting to scrape {len(example_urls)} game pages.\n")
 
     for i, url in enumerate(example_urls):
-        print(f"--- Processing game {i+1}/{len(example_urls)} ---")
+        logger_scraper.info(f"--- STANDALONE_TEST: Processing game {i+1}/{len(example_urls)} ---")
         extracted_info = extract_game_data(url, username=f95_username, password=f95_password)
         if extracted_info:
             all_games_data.append(extracted_info)
             for key, value in extracted_info.items():
                 display_key = key.replace('_', ' ').title()
                 if isinstance(value, list):
-                    print(f"{display_key}:")
+                    logger_scraper.info(f"{display_key}:")
                     if not value or value == ["Not found"]:
-                        print("  - Not found")
+                        logger_scraper.info("  - Not found")
                     else:
                         for item in value:
                             if isinstance(item, dict):
-                                print(f"  - Text: {item.get('text', 'N/A')}, URL: {item.get('url', 'N/A')}")
+                                logger_scraper.info(f"  - Text: {item.get('text', 'N/A')}, URL: {item.get('url', 'N/A')}")
                             else:
-                                print(f"  - {item}")
+                                logger_scraper.info(f"  - {item}")
                 else:
-                    print(f"{display_key}: {value}")
-            print("=" * 70 + "\n")
+                    logger_scraper.info(f"{display_key}: {value}")
+            logger_scraper.info("=" * 70 + "\n")
     
-    print(f"\nSuccessfully processed {len(all_games_data)} games.")
+    logger_scraper.info(f"\nSTANDALONE_TEST: Successfully processed {len(all_games_data)} games.")
     if len(all_games_data) < len(example_urls):
-        print(f"Note: {len(example_urls) - len(all_games_data)} game(s) could not be processed (check for network errors above).") 
+        logger_scraper.warning(f"STANDALONE_TEST: Note: {len(example_urls) - len(all_games_data)} game(s) could not be processed.") 

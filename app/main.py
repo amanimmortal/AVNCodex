@@ -2189,8 +2189,23 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                     # Ensure F95ApiClient is instantiated for scraping if not already available or if scoped differently
                     # For this function, f95_client is passed in, so we should use it.
                     scraped_data = extract_game_data(game_url, username=f95_username_scraper, password=f95_password_scraper)
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Raw scraped_data received from extract_game_data for '{log_name_for_notification}': {scraped_data}") # DEBUG LOG
                     if scraped_data:
                         logger.info(f"SCHEDULER/SYNC (User: {user_id}): Successfully scraped data for '{log_name_for_notification}'. Adding to update_fields.")
+                        
+                        # DEBUG LOG: Log each piece of scraped data as it's prepared for update_fields
+                        fields_to_log = [
+                            ('description', scraped_data.get('full_description')),
+                            ('changelog_text', scraped_data.get('changelog')),
+                            ('engine', scraped_data.get('engine')),
+                            ('language', scraped_data.get('language')),
+                            ('censorship', scraped_data.get('censorship')),
+                            ('tags_json', json.dumps(scraped_data.get('tags')) if scraped_data.get('tags') else None),
+                            ('download_links_json', json.dumps(scraped_data.get('download_links')) if scraped_data.get('download_links') else None)
+                        ]
+                        for field_name, field_val in fields_to_log:
+                            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Preparing for update_fields - {field_name}: {str(field_val)[:200]}") # Truncate long values for logging
+
                         update_fields['description'] = scraped_data.get('full_description')
                         update_fields['changelog_text'] = scraped_data.get('changelog')
                         update_fields['engine'] = scraped_data.get('engine')
@@ -2237,46 +2252,52 @@ def scheduled_games_update_check(db_path: str, f95_client: F95ApiClient):
         # For now, assuming f95_client passed in is okay, or create one here if needed.
         # Re-using the passed f95_client might be fine if it's stateless or its state is managed globally.
         # However, to be safe and ensure no cross-user state issues (if any were introduced to client):
-        user_specific_f95_client = F95ApiClient()
-
-        conn = None
-        games_to_check_for_this_user_count = 0
+        user_specific_f95_client = None # Initialize to None
         try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                SELECT upg.id 
-                FROM user_played_games upg
-                JOIN games g ON upg.game_id = g.id
-                WHERE upg.user_id = ? 
-                  AND upg.notify_for_updates = 1 
-                  AND (g.completed_status IS NULL OR g.completed_status NOT IN ('COMPLETED', 'ABANDONED')) 
-            """, (user_id_to_check,)) # Added user_id filter, also don't re-check ABANDONED
-            
-            played_game_ids_for_user = [row[0] for row in cursor.fetchall()]
-            games_to_check_for_this_user_count = len(played_game_ids_for_user)
-            
-            if not played_game_ids_for_user:
-                logger.info(f"SCHEDULER: No games to check for user_id {user_id_to_check} based on preferences and status.")
-                continue
+            user_specific_f95_client = F95ApiClient()
 
-            logger.info(f"SCHEDULER: Found {games_to_check_for_this_user_count} games to check for user_id {user_id_to_check}.")
+            conn = None
+            games_to_check_for_this_user_count = 0
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
             
-            for i, played_game_row_id in enumerate(played_game_ids_for_user):
-                logger.info(f"SCHEDULER (User: {user_id_to_check}): Processing game {i+1}/{games_to_check_for_this_user_count} (PlayedID: {played_game_row_id})")
-                check_single_game_update_and_status(db_path, user_specific_f95_client, played_game_row_id, user_id_to_check) # Pass user_specific_f95_client
-                total_games_checked_for_all_users +=1
-                # Optional: time.sleep(1) 
+                cursor.execute("""
+                    SELECT upg.id 
+                    FROM user_played_games upg
+                    JOIN games g ON upg.game_id = g.id
+                    WHERE upg.user_id = ? 
+                      AND upg.notify_for_updates = 1 
+                      AND (g.completed_status IS NULL OR g.completed_status NOT IN ('COMPLETED', 'ABANDONED')) 
+                """, (user_id_to_check,)) # Added user_id filter, also don't re-check ABANDONED
+            
+                played_game_ids_for_user = [row[0] for row in cursor.fetchall()]
+                games_to_check_for_this_user_count = len(played_game_ids_for_user)
+            
+                if not played_game_ids_for_user:
+                    logger.info(f"SCHEDULER: No games to check for user_id {user_id_to_check} based on preferences and status.")
+                    continue # Move to the next user_id
+
+                logger.info(f"SCHEDULER: Found {games_to_check_for_this_user_count} games to check for user_id {user_id_to_check}.")
+            
+                for i, played_game_row_id in enumerate(played_game_ids_for_user):
+                    logger.info(f"SCHEDULER (User: {user_id_to_check}): Processing game {i+1}/{games_to_check_for_this_user_count} (PlayedID: {played_game_row_id})")
+                    check_single_game_update_and_status(db_path, user_specific_f95_client, played_game_row_id, user_id_to_check) # Pass user_specific_f95_client
+                    total_games_checked_for_all_users +=1
+                    # Optional: time.sleep(1) 
                 
-        except sqlite3.Error as e:
-            logger.error(f"SCHEDULER: Database error during processing for user_id {user_id_to_check}: {e}", exc_info=True)
-        except Exception as e:
-            logger.error(f"SCHEDULER: Unexpected error during processing for user_id {user_id_to_check}: {e}", exc_info=True)
+            except sqlite3.Error as e_db_user:
+                logger.error(f"SCHEDULER: Database error during processing for user_id {user_id_to_check}: {e_db_user}", exc_info=True)
+            except Exception as e_user_processing:
+                logger.error(f"SCHEDULER: Unexpected error during processing for user_id {user_id_to_check}: {e_user_processing}", exc_info=True)
+            finally:
+                if conn:
+                    conn.close()
+        except Exception as e_outer_user_loop: # Catch errors like F95ApiClient instantiation failing
+            logger.error(f"SCHEDULER: Error in outer loop for user_id {user_id_to_check} (e.g. F95ApiClient init): {e_outer_user_loop}", exc_info=True)
         finally:
-            if conn:
-                conn.close()
-            user_specific_f95_client.close_session() # Close the client for this user
+            if user_specific_f95_client: # Ensure client is closed if instantiated
+                user_specific_f95_client.close_session() # Close the client for this user
     
     logger.info(f"--- Scheduled games update check finished for all users (processed {total_games_checked_for_all_users} applicable games across all users) ---")
 

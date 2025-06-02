@@ -645,7 +645,7 @@ def acknowledge_update_route(played_game_id):
 @login_required
 def edit_details_route(played_game_id):
     user_id = session.get('user_id')
-    game_details = get_my_played_game_details(DB_PATH, played_game_id, user_id)
+    game_details = get_my_played_game_details(DB_PATH, user_id, played_game_id)
 
     if not game_details:
         flash("Game not found or you do not have permission to edit it.", "error")
