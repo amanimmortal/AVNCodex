@@ -6,3 +6,6 @@ dist/
 
 # Application data (database, logs, etc.)
 data/
+
+# Python virtual environment
+.env/
