@@ -27,6 +27,7 @@ ENV_FILE_PATH = "f95.env" # This might also need to be volume mapped if used
 LOG_FILE_PATH = "/data/logs/update_checker.log" # Changed for Docker volume
 NUM_GAMES_TO_PROCESS_FROM_RSS = 60 # Process all games from RSS by default
 MAX_COMPLETED_GAMES_TO_FETCH_FOR_STATUS_CHECK = 90 # Adjusted to observed RSS limit
+SCRAPER_DEBOUNCE_DAYS = 7 # How often to re-scrape existing games for full details
 
 # --- Logging Setup ---
 def setup_logging():
@@ -737,9 +738,13 @@ def add_game_to_my_list(db_path: str,
         current_game_version = version_to_use
         current_game_rss_pub_date = pub_date_to_use
         current_game_completed_status = "UNKNOWN" # Default
+        # ---- Fields for scraping decisions in add_game ----
+        existing_description = None
+        existing_scraper_last_run_at = None
+        # ---- End Fields for scraping decisions ----
 
         # Try to get the game from the main 'games' table
-        cursor.execute("SELECT id, version, rss_pub_date, completed_status, image_url FROM games WHERE f95_url = ?", (f95_url,))
+        cursor.execute("SELECT id, version, rss_pub_date, completed_status, image_url, description, scraper_last_run_at FROM games WHERE f95_url = ?", (f95_url,))
         game_row = cursor.fetchone()
 
         if game_row:
@@ -748,6 +753,8 @@ def add_game_to_my_list(db_path: str,
             current_game_rss_pub_date = game_row[2] if game_row[2] is not None else pub_date_to_use
             current_game_completed_status = game_row[3] if game_row[3] is not None else "UNKNOWN"
             db_image_url = game_row[4] # This can be None
+            existing_description = game_row[5] # Store existing description
+            existing_scraper_last_run_at = game_row[6] # Store existing scrape timestamp
             
             update_fields = []
             update_values = []
@@ -845,6 +852,51 @@ def add_game_to_my_list(db_path: str,
                   current_timestamp, current_timestamp, current_timestamp))
             game_id_in_db = cursor.lastrowid
             logger.info(f"Added new game to 'games' table: ID {game_id_in_db} - {name_to_use} with status {current_game_completed_status} and image '{final_image_path_to_store}'.")
+
+        # --- START: Scrape data if it's missing (for both new and existing games found in 'games' table) ---
+        should_scrape_details_on_add = False
+        if game_id_in_db: # Ensure we have a game_id to work with
+            if not existing_description or not existing_scraper_last_run_at:
+                logger.info(f"Game '{name_to_use}' (ID: {game_id_in_db}) is missing description or has not been scraped. Scheduling scrape.")
+                should_scrape_details_on_add = True
+        
+        if should_scrape_details_on_add:
+            logger.info(f"Attempting to scrape additional data for game during add/update: {name_to_use} ({f95_url})")
+            primary_admin_id_for_scraper = get_primary_admin_user_id(db_path)
+            f95_username_scraper, f95_password_scraper = None, None
+            if primary_admin_id_for_scraper is not None:
+                f95_username_scraper = get_setting(db_path, 'f95_username', user_id=primary_admin_id_for_scraper)
+                f95_password_scraper = get_setting(db_path, 'f95_password', user_id=primary_admin_id_for_scraper)
+            
+            if not f95_username_scraper or not f95_password_scraper:
+                logger.warning(f"Scraping for '{name_to_use}' during add will be anonymous (F95zone credentials missing for primary admin).")
+
+            try:
+                scraped_data_on_add = extract_game_data(f95_url, username=f95_username_scraper, password=f95_password_scraper)
+                if scraped_data_on_add:
+                    scrape_update_fields = {
+                        'description': scraped_data_on_add.get('full_description'),
+                        'changelog_text': scraped_data_on_add.get('changelog'),
+                        'engine': scraped_data_on_add.get('engine'),
+                        'language': scraped_data_on_add.get('language'),
+                        'censorship': scraped_data_on_add.get('censorship'),
+                        'tags_json': json.dumps(scraped_data_on_add.get('tags')) if scraped_data_on_add.get('tags') else None,
+                        'download_links_json': json.dumps(scraped_data_on_add.get('download_links')) if scraped_data_on_add.get('download_links') else None,
+                        'scraper_last_run_at': current_timestamp
+                    }
+                    
+                    set_clause_parts = [f"{key} = ?" for key in scrape_update_fields.keys()]
+                    set_clause = ", ".join(set_clause_parts)
+                    final_params = list(scrape_update_fields.values()) + [game_id_in_db]
+                    
+                    cursor.execute(f"UPDATE games SET {set_clause} WHERE id = ?", tuple(final_params))
+                    conn.commit() # Commit scrape updates
+                    logger.info(f"Successfully scraped and stored additional data for game '{name_to_use}' (ID: {game_id_in_db}) during add/update.")
+                else:
+                    logger.warning(f"Scraping returned no data for game '{name_to_use}' (ID: {game_id_in_db}) during add/update.")
+            except Exception as e_scrape_add:
+                logger.error(f"Error scraping data for game '{name_to_use}' (ID: {game_id_in_db}) during add/update: {e_scrape_add}", exc_info=True)
+        # --- END: Scrape data if it's missing ---
 
         # Now, add to user_played_games
         if game_id_in_db:
@@ -1730,6 +1782,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
     try:
         cursor.execute("""
             SELECT g.id, g.name, g.version, g.author, g.image_url, g.rss_pub_date, g.completed_status, g.f95_url as url, 
+                   g.scraper_last_run_at, g.description, -- Added scraper_last_run_at and description
                    upg.id as user_played_game_id, upg.user_id
             FROM games g
             JOIN user_played_games upg ON g.id = upg.game_id
@@ -1747,6 +1800,10 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
         current_rss_pub_date_str = game_data['rss_pub_date']
         current_status = game_data['completed_status']
         game_url = game_data['url']
+        # ---- Fields for scraping decisions ----
+        scraper_last_run_at_str = game_data['scraper_last_run_at']
+        description_from_db = game_data['description']
+        # ---- End Fields for scraping decisions ----
         
         # Ensure the user_id from fetched game_data matches the passed user_id, as a sanity check.
         # This should always be true due to the WHERE clause.
@@ -2091,6 +2148,60 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
             conn.commit()
         except sqlite3.Error as e_lc:
             logger.error(f"SCHEDULER/SYNC (User: {user_id}): DB error updating last_checked_at for '{current_name}': {e_lc}")
+
+        # --- Start Scraper Logic Integration ---
+        should_scrape_game_details = False
+        if description_from_db is None: # Never been scraped (or description is explicitly NULL)
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) has no description. Scheduling scrape.")
+            should_scrape_game_details = True
+        elif not scraper_last_run_at_str: # Never been scraped (no timestamp)
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) has not been scraped before (no timestamp). Scheduling scrape.")
+            should_scrape_game_details = True
+        elif has_primary_update: # If core RSS data changed (name, version, date), consider re-scraping
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) was updated via RSS. Considering re-scrape.")
+            # Optionally, add debounce check here too if RSS updates are frequent but scraping is heavy
+            should_scrape_game_details = True # For now, always re-scrape if primary RSS data changes
+        
+        if not should_scrape_game_details and scraper_last_run_at_str: # If not already scheduled, check debounce for periodic refresh
+            try:
+                last_run_dt = datetime.fromisoformat(scraper_last_run_at_str)
+                if datetime.now(timezone.utc) - last_run_dt > timedelta(days=SCRAPER_DEBOUNCE_DAYS):
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) last scraped on {scraper_last_run_at_str}. Re-scraping due to age (>{SCRAPER_DEBOUNCE_DAYS} days).")
+                    should_scrape_game_details = True
+                else:
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) last scraped on {scraper_last_run_at_str}. Skipping re-scrape due to debounce.")
+            except ValueError as e_date_parse_scrape:
+                logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Could not parse scraper_last_run_at_str '{scraper_last_run_at_str}' for game '{log_name_for_notification}'. Error: {e_date_parse_scrape}. Will attempt to re-scrape.")
+                should_scrape_game_details = True
+        
+        if should_scrape_game_details:
+            logger.info(f"SCHEDULER/SYNC (User: {user_id}): Attempting to scrape additional data for game: {log_name_for_notification} ({game_url})")
+            primary_admin_id_for_scraper = get_primary_admin_user_id(db_path)
+            f95_username_scraper, f95_password_scraper = None, None
+            if primary_admin_id_for_scraper is not None:
+                f95_username_scraper = get_setting(db_path, 'f95_username', user_id=primary_admin_id_for_scraper)
+                f95_password_scraper = get_setting(db_path, 'f95_password', user_id=primary_admin_id_for_scraper)
+            
+            if not f95_username_scraper or not f95_password_scraper:
+                logger.warning(f"SCHEDULER/SYNC (User: {user_id}): F95zone username or password not configured for primary admin. Scraping for '{log_name_for_notification}' will be anonymous.")
+
+            try:
+                scraped_data = extract_game_data(game_url, username=f95_username_scraper, password=f95_password_scraper)
+                if scraped_data:
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Successfully scraped data for '{log_name_for_notification}'.")
+                    update_fields['description'] = scraped_data.get('full_description')
+                    update_fields['changelog_text'] = scraped_data.get('changelog')
+                    update_fields['engine'] = scraped_data.get('engine')
+                    update_fields['language'] = scraped_data.get('language')
+                    update_fields['censorship'] = scraped_data.get('censorship')
+                    update_fields['tags_json'] = json.dumps(scraped_data.get('tags')) if scraped_data.get('tags') else None
+                    update_fields['download_links_json'] = json.dumps(scraped_data.get('download_links')) if scraped_data.get('download_links') else None
+                    update_fields['scraper_last_run_at'] = datetime.now(timezone.utc).isoformat()
+                else:
+                    logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Scraping returned no data for game: {log_name_for_notification}")
+            except Exception as e_scrape_sync:
+                logger.error(f"SCHEDULER/SYNC (User: {user_id}): Error scraping data for game {log_name_for_notification} ({game_url}): {e_scrape_sync}", exc_info=True)
+        # --- End Scraper Logic Integration ---
 
     except sqlite3.Error as e:
         logger.error(f"SCHEDULER/SYNC (User: {user_id}): Database error in check_single_game_update_and_status for played_game_id {played_game_row_id}: {e}", exc_info=True)
