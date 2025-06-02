@@ -905,8 +905,15 @@ def cached_image_route(filename):
         abort(500)
 
 if __name__ == '__main__':
-    # initialize_database(DB_PATH) # Moved to top-level
-    # create_initial_admin_user_if_none_exists() # Moved to top-level
-    # start_or_reschedule_scheduler(flask_app) # Moved to top-level
-    
-    flask_app.run(debug=True, host='0.0.0.0', port=5000) 
+    # --- Create Initial Admin User (if none exists) ---
+    # Wrap in app_context for database operations if they require it and logger access
+    with flask_app.app_context():
+        create_initial_admin_user_if_none_exists()
+
+    # --- Start Scheduler ---
+    # start_or_reschedule_scheduler(flask_app) # Ensure this uses the flask_app instance
+
+    # --- Run Flask App ---
+    # Use an environment variable for the port, defaulting to 5000
+    port = int(os.environ.get("FLASK_RUN_PORT", 5000))
+    flask_app.run(debug=True, host='0.0.0.0', port=port) 

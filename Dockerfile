@@ -12,6 +12,11 @@ COPY requirements.txt .
 # Environment variable to tell Playwright where to find browsers
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
+# Define an argument for the port, with a default value
+ARG APP_PORT=5000
+# Set an environment variable for the Flask app to use this port
+ENV FLASK_RUN_PORT=${APP_PORT}
+
 # Install any needed packages specified in requirements.txt
 # and Playwright browser dependencies
 RUN pip install --no-cache-dir -r requirements.txt \
