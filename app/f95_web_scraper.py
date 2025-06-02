@@ -23,18 +23,28 @@ def login_to_f95zone(page, username, password):
 
         page.click(login_button_selector)
         print("Clicked login button.")
-        page.wait_for_timeout(5000) # Wait 5 seconds
+        # Wait for navigation to complete or for a login success/failure indicator
+        # Increased timeout slightly and wait for a more definitive state like networkidle or specific selectors
+        try:
+            page.wait_for_load_state('networkidle', timeout=7000) # Wait for network to be idle
+        except Exception as e_wait_idle:
+            print(f"Network did not become idle after login click, proceeding with checks. Error: {e_wait_idle}")
+            page.wait_for_timeout(3000) # Fallback fixed wait if networkidle times out
 
         # Check for successful login indicators
-        if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account||username"):
-            print("Login appears successful.")
+        if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("//a[contains(@class, 'p-navgroup-link--username')]"): # Added XPath for username link
+            print("Login check: Logout link or account element or username link found. Login appears successful.")
+            print(f"Current URL after login attempt: {page.url}")
             return True
         elif error_block := page.query_selector(".blockMessage.blockMessage--error"):
             error_text = error_block.inner_text()
             print(f"Login failed. Error message found: {error_text}")
+            print(f"Current URL after login failure: {page.url}")
             return False
         else:
-            print(f"Login failed. No specific error message found on page. URL after attempt: {page.url}")
+            print(f"Login failed. No specific error message or success indicator found on page. URL after attempt: {page.url}")
+            # Potentially take a screenshot for debugging if login is consistently problematic
+            # page.screenshot(path='login_failure_debug.png')
             return False
 
     except Exception as e:
@@ -46,8 +56,8 @@ def get_page_html_with_playwright(page, url):
     try:
         print(f"Navigating to {url} with Playwright...")
         page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        print(f"Successfully navigated to {url}. Waiting for page to settle.")
-        page.wait_for_timeout(3000) 
+        print(f"Successfully navigated to {url}. Current Playwright page URL: {page.url}. Waiting for page to settle.")
+        page.wait_for_timeout(3000)
         html_content = page.content()
         if not html_content:
             print(f"Warning: Fetched empty HTML content from {url}")
@@ -88,18 +98,21 @@ def extract_game_data(game_thread_url, username=None, password=None):
             try:
                 print("Navigating to login page for authentication...")
                 page.goto("https://f95zone.to/login/login", wait_until="domcontentloaded", timeout=30000)
+                print(f"On login page. Current URL: {page.url}")
                 if login_to_f95zone(page, username, password):
-                    print("Login successful. Proceeding with scraping.")
+                    print("LOGIN_F95_WEB_SCRAPER: Login function returned True.")
                     logged_in = True
                 else:
-                    print("Login failed. Scraping will proceed without authentication, which may fail for some content.")
+                    print("LOGIN_F95_WEB_SCRAPER: Login function returned False. Scraping will proceed without authentication, which may fail for some content.")
             except Exception as e_login_nav:
                 print(f"Error navigating to login page or during login process: {e_login_nav}")
                 print("Scraping will proceed without authentication.")
         else:
             print("No credentials provided. Scraping as anonymous user.")
 
+        print(f"Attempting to fetch game thread URL: {game_thread_url}")
         html_content = get_page_html_with_playwright(page, game_thread_url)
+        print(f"After navigating to game thread. Current Playwright page URL: {page.url}")
         
         if not html_content:
             print(f"Failed to get HTML content for {game_thread_url} using Playwright.")
@@ -121,6 +134,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
             data['title'] = title_tag.get_text(strip=True)
         elif page_title_element := soup.find('title'):
             data['title'] = page_title_element.get_text(strip=True).replace(" | F95zone", "")
+        print(f"SCRAPER_DEBUG: Extracted title: {data['title']}")
 
         # --- Author (Thread Starter) ---
         author_tag = soup.find('a', class_='username')
@@ -149,6 +163,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 data['author'] = author_tag.get_text(strip=True)
         # else: # Optional: Add logging if author_tag or first_post_article_for_author is not found
             # print(f"DEBUG: For {game_thread_url}, author_tag found: {author_tag is not None}, first_post_article_for_author found: {first_post_article_for_author is not None}")
+        print(f"SCRAPER_DEBUG: Extracted author: {data['author']}")
 
         # --- Main content of the first post ---
         first_post_article_content = soup.find('article', class_='message--post')
@@ -169,6 +184,10 @@ def extract_game_data(game_thread_url, username=None, password=None):
             
             data['full_description'] = "\n".join(filter(None, desc_elements)).strip() or \
                                        bb_wrapper.get_text(separator='\n', strip=True)
+
+            # Limit description length for logging to avoid flooding logs
+            description_snippet = (data['full_description'][:200] + '...') if data['full_description'] and len(data['full_description']) > 200 else data['full_description']
+            print(f"SCRAPER_DEBUG: Description snippet: {description_snippet}")
 
             # --- Changelog ---
             changelog_text_parts = []
@@ -299,6 +318,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
             elif isinstance(value, list) and not value:
                 data[key] = ["Not found"] if key in ["tags", "download_links"] else "Not found"
 
+    print(f"SCRAPER_DEBUG: Final data dictionary before return: {data}")
     return data
 
 if __name__ == '__main__':
