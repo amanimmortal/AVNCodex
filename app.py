@@ -448,6 +448,7 @@ def login_route():
             session.clear()
             session['user_id'] = user['id']
             session['username'] = user['username'] # Store username for easy display
+            session['is_admin'] = user['is_admin'] # ADDED: Store admin status in session
             flash(f'Welcome back, {user["username"]}!', 'success')
             next_page = request.args.get('next')
             return redirect(next_page or url_for('index'))
