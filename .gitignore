@@ -9,3 +9,7 @@ data/
 
 # Python virtual environment
 .env/
+
+# IDE-specific folders
+.vscode/
+.cursor/
