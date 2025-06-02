@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import time # Added for potential waits
 from playwright.sync_api import sync_playwright # Added for Playwright
+import re # Added for regular expressions
 
 # --- Playwright Login Function ---
 def login_to_f95zone(page, username, password):
@@ -16,35 +17,50 @@ def login_to_f95zone(page, username, password):
         page.fill("input[name='password']", password)
         print("Filled password.")
 
-        login_button_selector = "button.button--primary:has-text('Log in')"
-        if not page.query_selector(login_button_selector):
-            login_button_selector = "form.block[action='/login/login'] button[type='submit']"
-            print(f"Primary login button selector not found, trying fallback: {login_button_selector}")
+        login_button = page.locator("button.button--primary", has_text="Log in")
+        
+        if not login_button or login_button.count() == 0: 
+            print("Primary login button (.button--primary with text 'Log in') not found. Trying fallback selector for form button...")
+            login_button = page.locator("form.block[action='/login/login'] button[type='submit']")
+        
+        if not login_button or login_button.count() == 0:
+            print("Fallback form button not found. Trying get_by_role('button', name=re.compile(r'log in', re.IGNORECASE))...")
+            login_button = page.get_by_role("button", name=re.compile(r"log in", re.IGNORECASE))
 
-        page.click(login_button_selector)
-        print("Clicked login button.")
-        # Wait for navigation to complete or for a login success/failure indicator
-        # Increased timeout slightly and wait for a more definitive state like networkidle or specific selectors
+        if login_button.count() > 0:
+            button_to_click = login_button.first
+            try:
+                print(f"Found login button. Waiting for it to be visible and enabled...")
+                button_to_click.wait_for(state="visible", timeout=5000) 
+                button_to_click.wait_for(state="enabled", timeout=5000) 
+                print(f"Login button is visible and enabled. Attempting click now...")
+                button_to_click.click(timeout=25000) # Increased timeout to 25 seconds for the click action
+                print("Playwright click() call for login button completed. Page should have navigated or updated.")
+            except Exception as e_click_wait:
+                print(f"LOGIN ERROR: Error while waiting for login button state or during the click action itself: {e_click_wait}")
+                return False
+        else:
+            print("LOGIN ERROR: Could not find a clickable login button on the page after all fallbacks.")
+            print(f"Current URL when failing to find login button: {page.url}")
+            return False
+
+        print("Waiting for login result (e.g., navigation, specific elements changing)...")
         try:
-            page.wait_for_load_state('networkidle', timeout=7000) # Wait for network to be idle
-        except Exception as e_wait_idle:
-            print(f"Network did not become idle after login click, proceeding with checks. Error: {e_wait_idle}")
-            page.wait_for_timeout(3000) # Fallback fixed wait if networkidle times out
+            page.wait_for_selector(
+                "a[href='/logout/'], .blockMessage.blockMessage--error, a.p-navgroup-link--username", 
+                timeout=15000
+            )
+            print(f"Login result indicator found. Current URL: {page.url}")
+        except Exception as e_wait_indicator:
+            print(f"Timeout or error waiting for login result indicator. Error: {e_wait_indicator}")
+            print(f"Current URL after login click attempt and wait for indicator: {page.url}")
 
-        # Check for successful login indicators
-        if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("//a[contains(@class, 'p-navgroup-link--username')]"): # Added XPath for username link
+        if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
             print("Login check: Logout link or account element or username link found. Login appears successful.")
             print(f"Current URL after login attempt: {page.url}")
             return True
-        elif error_block := page.query_selector(".blockMessage.blockMessage--error"):
-            error_text = error_block.inner_text()
-            print(f"Login failed. Error message found: {error_text}")
-            print(f"Current URL after login failure: {page.url}")
-            return False
         else:
             print(f"Login failed. No specific error message or success indicator found on page. URL after attempt: {page.url}")
-            # Potentially take a screenshot for debugging if login is consistently problematic
-            # page.screenshot(path='login_failure_debug.png')
             return False
 
     except Exception as e:
@@ -111,8 +127,62 @@ def extract_game_data(game_thread_url, username=None, password=None):
             print("No credentials provided. Scraping as anonymous user.")
 
         print(f"Attempting to fetch game thread URL: {game_thread_url}")
-        html_content = get_page_html_with_playwright(page, game_thread_url)
-        print(f"After navigating to game thread. Current Playwright page URL: {page.url}")
+        # html_content = get_page_html_with_playwright(page, game_thread_url) # Moved after spoiler clicks
+        # print(f"After navigating to game thread. Current Playwright page URL: {page.url}")
+
+        # Navigate to the game thread page first
+        try:
+            print(f"Navigating to {game_thread_url} with Playwright before spoiler clicks...")
+            page.goto(game_thread_url, wait_until="domcontentloaded", timeout=30000)
+            print(f"Successfully navigated to {game_thread_url}. Current URL: {page.url}")
+            page.wait_for_timeout(2000) # Give page a moment to settle
+        except Exception as e_nav_game_page:
+            print(f"Error navigating to game page {game_thread_url} before spoiler interaction: {e_nav_game_page}")
+            browser.close()
+            return None
+
+        # Attempt to click all spoiler buttons to reveal content
+        print("Attempting to find and click spoiler buttons...")
+        spoiler_buttons_selector = "button.bbCodeSpoiler-button"
+        try:
+            spoiler_buttons = page.query_selector_all(spoiler_buttons_selector)
+            print(f"Found {len(spoiler_buttons)} spoiler buttons.")
+            for i, button_element in enumerate(spoiler_buttons):
+                try:
+                    if button_element.is_visible() and button_element.is_enabled():
+                        # print(f"Attempting to click spoiler button {i+1}") # Optional: Keep for super-detailed debugging
+                        button_element.click(timeout=2000) # Click with a short timeout for the action itself
+                        # print(f"Clicked spoiler button {i+1}.") # REDUCED VERBOSITY
+                        
+                        spoiler_container = button_element.query_selector("xpath=ancestor::div[contains(@class, 'bbCodeSpoiler')]")
+                        if spoiler_container:
+                            content_area = spoiler_container.query_selector("div.bbCodeSpoiler-content")
+                            if content_area:
+                                page.wait_for_timeout(750) 
+                                # content_text = content_area.inner_text(timeout=1000) # REDUCED VERBOSITY
+                                # print(f"  Spoiler {i+1} content snippet after click & wait: {(content_text[:70] + '...') if content_text and len(content_text) > 70 else content_text}") # REDUCED VERBOSITY
+                            # else: # Optional: Keep for debugging specific spoiler structure issues
+                                # print(f"  Could not find content area for spoiler {i+1} after click.")
+                        # else: # Optional: Keep for debugging specific spoiler structure issues
+                            # print(f"  Could not find parent spoiler container for button {i+1}.")
+                            page.wait_for_timeout(500) # Fallback general pause if specific content area isn't found by the above logic
+
+                    else:
+                        # print(f"Spoiler button {i+1} is not visible or enabled, skipping.") # REDUCED VERBOSITY
+                        pass 
+                except Exception as e_click_spoiler:
+                    print(f"Could not click or process spoiler button {i+1}: {e_click_spoiler}")
+            print("Finished attempting to click spoiler buttons.")
+        except Exception as e_find_spoilers:
+            print(f"Error finding or interacting with spoiler buttons: {e_find_spoilers}")
+
+        # Add a more substantial overall wait here for any final JS updates after all spoiler interactions
+        # print("Waiting a bit longer for all spoiler content to potentially load (increased wait)...") # REDUCED VERBOSITY
+        page.wait_for_timeout(2500) # Reduced from 5000, individual waits are now more targeted
+
+        # Now get the HTML content after attempting to click spoilers
+        # print(f"Getting HTML content after spoiler clicks. Current URL: {page.url}") # REDUCED VERBOSITY
+        html_content = page.content()
         
         if not html_content:
             print(f"Failed to get HTML content for {game_thread_url} using Playwright.")
@@ -134,36 +204,27 @@ def extract_game_data(game_thread_url, username=None, password=None):
             data['title'] = title_tag.get_text(strip=True)
         elif page_title_element := soup.find('title'):
             data['title'] = page_title_element.get_text(strip=True).replace(" | F95zone", "")
-        print(f"SCRAPER_DEBUG: Extracted title: {data['title']}")
+        # print(f"SCRAPER_DEBUG: Extracted title: {data['title']}") # REDUCED VERBOSITY
 
         # --- Author (Thread Starter) ---
-        author_tag = soup.find('a', class_='username')
-        first_post_article_for_author = soup.find('article', class_='message--post')
-        
         # data['author'] is initialized to None in the data dictionary.
-        # It will only be updated if this specific logic succeeds, 
-        # or by other more general author extraction logic later in the function.
-
-        if author_tag and first_post_article_for_author:
-            author_confirmed_in_first_post = False
-            # Safely check if author_tag.closest is a callable method
-            if hasattr(author_tag, 'closest') and callable(author_tag.closest):
-                # Call .closest() and check its return value
-                closest_article = author_tag.closest('article', class_='message--post')
-                # Check if the found closest article is the same as the first_post_article_for_author
-                if closest_article and closest_article is first_post_article_for_author:
-                    author_confirmed_in_first_post = True
-                # else: # Optional: Add logging here if closest_article is found but isn't the first post, or not found at all
-                #     print(f"DEBUG: For {game_thread_url}, author_tag.closest check: closest_article is {closest_article is not None}, is_first_post: {closest_article is first_post_article_for_author}")
+        first_post_article = soup.find('article', class_='message--post') # Find the first post
+        if first_post_article:
+            user_details_div = first_post_article.find('div', class_='message-userDetails')
+            if user_details_div:
+                author_link_tag = user_details_div.find('a', class_='username')
+                if author_link_tag:
+                    data['author'] = author_link_tag.get_text(strip=True)
+                else:
+                    print(f"Warning: For URL {game_thread_url}, author link not found within first post's userDetails.")
             else:
-                # This case handles if author_tag.closest is not a callable method (e.g., it's None or not present on the tag)
-                print(f"Warning: For URL {game_thread_url}, 'author_tag.closest' is not a callable method or does not exist. Author tag details: Tag name='{author_tag.name if author_tag else 'N/A'}', Type of 'closest' attr='{type(getattr(author_tag, 'closest', None))}'. Author might not be correctly identified from the first post.")
+                print(f"Warning: For URL {game_thread_url}, userDetails div not found in the first post.")
+        else:
+            print(f"Warning: For URL {game_thread_url}, first post article not found for author extraction.")
+        
+        # Fallback or alternative author scraping logic (from dt/dd pairs) is handled later in the script.
 
-            if author_confirmed_in_first_post:
-                data['author'] = author_tag.get_text(strip=True)
-        # else: # Optional: Add logging if author_tag or first_post_article_for_author is not found
-            # print(f"DEBUG: For {game_thread_url}, author_tag found: {author_tag is not None}, first_post_article_for_author found: {first_post_article_for_author is not None}")
-        print(f"SCRAPER_DEBUG: Extracted author: {data['author']}")
+        # print(f"SCRAPER_DEBUG: Extracted author (after first post check): {data['author']}") # REDUCED VERBOSITY
 
         # --- Main content of the first post ---
         first_post_article_content = soup.find('article', class_='message--post')
@@ -186,8 +247,8 @@ def extract_game_data(game_thread_url, username=None, password=None):
                                        bb_wrapper.get_text(separator='\n', strip=True)
 
             # Limit description length for logging to avoid flooding logs
-            description_snippet = (data['full_description'][:200] + '...') if data['full_description'] and len(data['full_description']) > 200 else data['full_description']
-            print(f"SCRAPER_DEBUG: Description snippet: {description_snippet}")
+            # description_snippet = (data['full_description'][:200] + '...') if data['full_description'] and len(data['full_description']) > 200 else data['full_description'] # REDUCED VERBOSITY
+            # print(f"SCRAPER_DEBUG: Description snippet: {description_snippet}") # REDUCED VERBOSITY
 
             # --- Changelog ---
             changelog_text_parts = []
