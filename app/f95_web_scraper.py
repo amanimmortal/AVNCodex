@@ -125,8 +125,30 @@ def extract_game_data(game_thread_url, username=None, password=None):
         # --- Author (Thread Starter) ---
         author_tag = soup.find('a', class_='username')
         first_post_article_for_author = soup.find('article', class_='message--post')
-        if author_tag and first_post_article_for_author and author_tag.closest('article', class_='message--post'):
-            data['author'] = author_tag.get_text(strip=True)
+        
+        # data['author'] is initialized to None in the data dictionary.
+        # It will only be updated if this specific logic succeeds, 
+        # or by other more general author extraction logic later in the function.
+
+        if author_tag and first_post_article_for_author:
+            author_confirmed_in_first_post = False
+            # Safely check if author_tag.closest is a callable method
+            if hasattr(author_tag, 'closest') and callable(author_tag.closest):
+                # Call .closest() and check its return value
+                closest_article = author_tag.closest('article', class_='message--post')
+                # Check if the found closest article is the same as the first_post_article_for_author
+                if closest_article and closest_article is first_post_article_for_author:
+                    author_confirmed_in_first_post = True
+                # else: # Optional: Add logging here if closest_article is found but isn't the first post, or not found at all
+                #     print(f"DEBUG: For {game_thread_url}, author_tag.closest check: closest_article is {closest_article is not None}, is_first_post: {closest_article is first_post_article_for_author}")
+            else:
+                # This case handles if author_tag.closest is not a callable method (e.g., it's None or not present on the tag)
+                print(f"Warning: For URL {game_thread_url}, 'author_tag.closest' is not a callable method or does not exist. Author tag details: Tag name='{author_tag.name if author_tag else 'N/A'}', Type of 'closest' attr='{type(getattr(author_tag, 'closest', None))}'. Author might not be correctly identified from the first post.")
+
+            if author_confirmed_in_first_post:
+                data['author'] = author_tag.get_text(strip=True)
+        # else: # Optional: Add logging if author_tag or first_post_article_for_author is not found
+            # print(f"DEBUG: For {game_thread_url}, author_tag found: {author_tag is not None}, first_post_article_for_author found: {first_post_article_for_author is not None}")
 
         # --- Main content of the first post ---
         first_post_article_content = soup.find('article', class_='message--post')
