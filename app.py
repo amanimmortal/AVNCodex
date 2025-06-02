@@ -916,4 +916,5 @@ if __name__ == '__main__':
     # --- Run Flask App ---
     # Use an environment variable for the port, defaulting to 5000
     port = int(os.environ.get("FLASK_RUN_PORT", 5000))
+    print(f"Attempting to start Flask app on host 0.0.0.0 and port {port}", flush=True) # DEBUG LINE
     flask_app.run(debug=True, host='0.0.0.0', port=port) 
