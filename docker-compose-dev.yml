@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    env_file:
+      - config.env # Specifies a custom environment file
     ports:
       # Maps host port (APP_HOST_PORT, default 5000) to container port (FLASK_RUN_PORT, default 5000)
       - "${APP_HOST_PORT:-5000}:${FLASK_RUN_PORT:-5000}"
@@ -12,10 +14,11 @@ services:
       - /mnt/user/appdata/avncodex-dev/data:/data
     environment:
       # FLASK_RUN_PORT tells the app inside the container which port to listen on.
-      # Dockerfile provides a build-time default. This allows runtime override via .env file or environment.
-      # It's also used for the container side of the port mapping above.
+      # It's sourced from config.env, then defaults here, then the Dockerfile default.
+      # This ensures it's available for port mapping and inside the container.
       - FLASK_RUN_PORT=${FLASK_RUN_PORT:-5000}
       - PUID=99  # Typically 'nobody' user on Unraid
       - PGID=100 # Typically 'users' group on Unraid
     restart: unless-stopped
+
 # No named volumes needed for this Unraid-specific configuration 
