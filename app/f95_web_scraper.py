@@ -500,17 +500,18 @@ def extract_game_data(game_thread_url, username=None, password=None):
 
             # 3. Overview/Full Description
             desc_elements = []
-            stop_keywords = ['download', 'changelog', "what's new", "what is new", "version history", "updates", "installation", "preview", "screenshots", "spoiler:", "support the dev"] # Added more stop words
+            stop_keywords = ['download', 'changelog', "what's new", "what is new", "version history", "updates", "installation", "preview", "screenshots", "spoiler:", "support the dev", "developer", "author", "version", "engine", "language", "status", "censorship", "release date", "thread updated", "os", "platform", "system", "genre", "tags"] # EXPANDED
             for elem in bb_wrapper.children:
                 elem_text_lower = ""
                 if elem.name and (elem.name.startswith('h') or \
+                                  elem.name == 'dl' or # ADDED: Stop if we hit a definition list
                                   (elem.name == 'div' and any(cls in elem.get('class', []) for cls in ['bbCodeSpoiler', 'bbCodeBlock--download', 'bbCodeBlock--changelog'])) or \
                                   (elem.name == 'button' and 'bbCodeSpoiler-button' in elem.get('class',[])) or \
                                   (elem.name in ['strong','b'])): # Check strong/b tags as section headers too
                     elem_text_lower = elem.get_text(strip=True).lower()
                 
                 # More robust stop condition
-                if elem_text_lower and any(kw in elem_text_lower for kw in stop_keywords) and len(elem_text_lower) < 70 : # If header contains stop keyword
+                if (elem_text_lower and any(kw in elem_text_lower for kw in stop_keywords) and len(elem_text_lower) < 70) or elem.name == 'dl': # If header contains stop keyword or element is a DL
                     is_likely_section_header = True
                     # Exception: allow "Overview" or "Description" headers themselves.
                     if "overview" in elem_text_lower or "description" in elem_text_lower or "plot" in elem_text_lower or "story" in elem_text_lower:
@@ -549,9 +550,10 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 if match and match.group(1).strip():
                     # Basic cleaning for the date string - try to avoid grabbing too much following text
                     potential_date_str = match.group(1).strip()
-                    # Limit length and check for common date characters
-                    if len(potential_date_str) < 50 and any(c.isdigit() for c in potential_date_str):
-                        data['release_date'] = potential_date_str.split('\\n')[0].strip() # Take first line of match
+                    # Basic cleaning for the date string - try to avoid grabbing too much following text
+                    cleaned_val = re.sub(r"^\\s*[:\\-\\s]\\s*", "", potential_date_str).strip()
+                    if cleaned_val and len(cleaned_val) < 50 and any(c.isdigit() for c in cleaned_val):
+                        data['release_date'] = cleaned_val.split('\\n')[0].strip() # Take first line of match
                         break
             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Release Date from post: {data['release_date']}")
             # TODO: Consider parsing with dateutil.parser if a more structured date is needed.
@@ -574,10 +576,11 @@ def extract_game_data(game_thread_url, username=None, password=None):
             for pattern in os_patterns:
                 match = re.search(pattern, bb_wrapper_text_for_dates, re.IGNORECASE) # Use bb_wrapper_text_for_dates again
                 if match and match.group(1).strip():
-                    os_list_str = match.group(1).strip().split('\\n')[0].strip()
+                    os_list_str_raw = match.group(1).strip()
+                    cleaned_os_list_str = re.sub(r"^\\s*[:\\-\\s]\\s*", "", os_list_str_raw).strip().split('\\n')[0].strip()
                     # Avoid overly long strings that might not be just the OS list
-                    if len(os_list_str) < 100: # Arbitrary limit
-                        data['os_general_list'] = os_list_str
+                    if cleaned_os_list_str and len(cleaned_os_list_str) < 100: # Arbitrary limit
+                        data['os_general_list'] = cleaned_os_list_str
                         break
             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): OS General List from post: {data['os_general_list']}")
 
@@ -590,9 +593,10 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 for pattern in language_patterns:
                     match = re.search(pattern, bb_wrapper_text_for_dates, re.IGNORECASE)
                     if match and match.group(1).strip():
-                        lang_str = match.group(1).strip()
-                        if len(lang_str) < 150: # Arbitrary limit
-                            data['language'] = lang_str
+                        lang_str_raw = match.group(1).strip()
+                        cleaned_lang_str = re.sub(r"^\\s*[:\\-\\s]\\s*", "", lang_str_raw).strip().split('\\n')[0].strip()
+                        if cleaned_lang_str and len(cleaned_lang_str) < 150: # Arbitrary limit
+                            data['language'] = cleaned_lang_str
                             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Language from post: {data['language']}")
                             break
             
@@ -605,9 +609,10 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 for pattern in status_patterns:
                     match = re.search(pattern, bb_wrapper_text_for_dates, re.IGNORECASE)
                     if match and match.group(1).strip():
-                        status_str = match.group(1).strip()
-                        if len(status_str) < 100: # Arbitrary limit
-                            data['status'] = status_str
+                        status_str_raw = match.group(1).strip()
+                        cleaned_status_str = re.sub(r"^\\s*[:\\-\\s]\\s*", "", status_str_raw).strip().split('\\n')[0].strip()
+                        if cleaned_status_str and len(cleaned_status_str) < 100: # Arbitrary limit
+                            data['status'] = cleaned_status_str
                             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Status from post: {data['status']}")
                             break
 
@@ -620,9 +625,10 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 for pattern in censorship_patterns:
                     match = re.search(pattern, bb_wrapper_text_for_dates, re.IGNORECASE)
                     if match and match.group(1).strip():
-                        cen_str = match.group(1).strip()
-                        if len(cen_str) < 50: # Arbitrary limit
-                            data['censorship'] = cen_str
+                        cen_str_raw = match.group(1).strip()
+                        cleaned_cen_str = re.sub(r"^\\s*[:\\-\\s]\\s*", "", cen_str_raw).strip().split('\\n')[0].strip()
+                        if cleaned_cen_str and len(cleaned_cen_str) < 50: # Arbitrary limit
+                            data['censorship'] = cleaned_cen_str
                             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Censorship from post: {data['censorship']}")
                             break
             
@@ -710,6 +716,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
             # 9. Download Links & OS-Specific Filtering/Prioritization
             # CRITICAL OVERHAUL
             raw_download_links = [] # Temporary list to hold all found links with potential OS info
+            support_link_domains = ['patreon.com', 'subscribestar.adult', 'discord.gg', 'discord.com', 'itch.io', 'buymeacoffee.com', 'ko-fi.com', 'store.steampowered.com', 'paypal.com', 'subscribestar.com'] # Added .com for subscribestar, paypal
             
             # Strategy 1: Find sections explicitly marked "DOWNLOAD" or similar
             download_section_headers_texts = ['download', 'links', 'files'] # Broader terms for section headers
@@ -763,6 +770,22 @@ def extract_game_data(game_thread_url, username=None, password=None):
                     # Basic filtering for non-download links
                     if not href or href.startswith(('#', 'mailto:', 'javascript:')) or "f95zone.to/account/" in href or "f95zone.to/members/" in href :
                         continue
+                    
+                    # Filter out attachment (image) links
+                    if "attachments.f95zone.to" in href.lower():
+                        logger_scraper.debug(f"SCRAPER_DATA (URL: {game_thread_url}): Skipping attachment link: '{text}' -> '{href}'")
+                        continue
+
+                    # Filter out support/social links from primary download list
+                    try:
+                        link_domain = re.match(r"https://?([^/]+)", href).group(1).replace("www.", "")
+                        if any(support_domain in link_domain for support_domain in support_link_domains):
+                            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Identified support/social link (will not be in main downloads): '{text}' -> '{href}'")
+                            # Optionally, collect these separately: data['support_links'].append({'text':text,'url':href})
+                            continue
+                    except: # If regex fails for some reason, proceed with it
+                        pass
+
                     # Allow f95zone thread links if they seem like mod/patch download pages
                     if "f95zone.to/threads/" in href and not any(ext in href.lower() for ext in ['.zip', '.rar', '.apk', '.7z', '.exe', '.patch', '.mod']):
                         if not any(kw in text.lower() for kw in ['mod', 'patch', 'translation', 'download', 'fix', 'guide']):
@@ -815,7 +838,9 @@ def extract_game_data(game_thread_url, username=None, password=None):
         # Tags (Genre from spoiler, then div.tagGroup, then dt "tags")
         data['tags'] = [] # Reset
         genre_spoiler_found_tags = False
-        if bb_wrapper:
+        tags_found_by_js_taglist = False
+
+        if bb_wrapper: # Check within bbWrapper first for genre spoiler
             spoilers_for_tags = bb_wrapper.find_all('div', class_='bbCodeSpoiler')
             for spoiler in spoilers_for_tags:
                 button = spoiler.find('button', class_='bbCodeSpoiler-button')
@@ -828,7 +853,19 @@ def extract_game_data(game_thread_url, username=None, password=None):
                         genre_spoiler_found_tags = True
                     break
         
-        if not genre_spoiler_found_tags: # Fallback to standard tag locations
+        # New: Check for span.js-tagList a.tagItem (usually outside bbWrapper, so check soup)
+        if not genre_spoiler_found_tags:
+            if tags_span_container := soup.find('span', class_='js-tagList'):
+                tag_links = tags_span_container.find_all('a', class_='tagItem')
+                if tag_links:
+                    for tag_link in tag_links:
+                        tag_text = tag_link.get_text(strip=True)
+                        if tag_text not in data['tags']: data['tags'].append(tag_text)
+                    if data['tags']: # If we found tags here, mark it
+                        tags_found_by_js_taglist = True
+
+        # Fallback to standard tag locations if no genre spoiler AND no js-tagList tags found
+        if not genre_spoiler_found_tags and not tags_found_by_js_taglist: 
             if tags_container := soup.find('div', class_='tagGroup'): # Often at top of page, outside bbWrapper
                 tag_links = tags_container.find_all('a', class_='tagItem')
                 for tag_link in tag_links:
