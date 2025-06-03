@@ -540,8 +540,8 @@ def extract_game_data(game_thread_url, username=None, password=None):
             # Search for patterns like "Release Date: YYYY-MM-DD", "Released: ...", etc.
             # This is a simple text search in the bbWrapper for now.
             release_date_patterns = [
-                r"(?:Release Date|Released|Initial Release|First Release)\s*[:\-]?\s*([A-Za-z0-9,\s./-]+)",
-                r"<strong>(?:Release Date|Released|Initial Release|First Release)\s*[:\-]?\s*</strong>\s*([A-Za-z0-9,\s./-]+)" # If bolded label
+                r"(?:Release Date|Released|Initial Release|First Release)\s*[:\-]?\s*([^\n]+)",
+                r"<strong>(?:Release Date|Released|Initial Release|First Release)\s*[:\-]?\s*</strong>\s*([^\n]+)" # If bolded label
             ]
             bb_wrapper_text_for_dates = bb_wrapper.get_text(separator="\\n") # Get text with newlines for better context
             for pattern in release_date_patterns:
@@ -568,8 +568,8 @@ def extract_game_data(game_thread_url, username=None, password=None):
 
             # 6. OS Listing (General Platform Information from post body)
             os_patterns = [
-                r"(?:Platform|OS|Systems|Support[s]?)\s*[:\-]?\s*([A-Za-z0-9,\s/&()WindowsLinuxMacAndroidPC]+)",
-                r"<strong>(?:Platform|OS|Systems|Support[s]?)\s*[:\-]?\s*</strong>\s*([A-Za-z0-9,\s/&()WindowsLinuxMacAndroidPC]+)"
+                r"(?:Platform|OS|Systems|Support[s]?)\s*[:\-]?\s*([^\n]+)",
+                r"<strong>(?:Platform|OS|Systems|Support[s]?)\s*[:\-]?\s*</strong>\s*([^\n]+)"
             ]
             for pattern in os_patterns:
                 match = re.search(pattern, bb_wrapper_text_for_dates, re.IGNORECASE) # Use bb_wrapper_text_for_dates again
@@ -581,6 +581,51 @@ def extract_game_data(game_thread_url, username=None, password=None):
                         break
             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): OS General List from post: {data['os_general_list']}")
 
+            # Extract Language from post body
+            language_patterns = [
+                r"(?:Language[s]?)\s*[:\-]?\s*([^\n]+)",
+                r"<strong>(?:Language[s]?)\s*[:\-]?\s*</strong>\s*([^\n]+)"
+            ]
+            if data['language'] == "Not found": # Only if not already found (e.g. by DL list if that runs first)
+                for pattern in language_patterns:
+                    match = re.search(pattern, bb_wrapper_text_for_dates, re.IGNORECASE)
+                    if match and match.group(1).strip():
+                        lang_str = match.group(1).strip()
+                        if len(lang_str) < 150: # Arbitrary limit
+                            data['language'] = lang_str
+                            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Language from post: {data['language']}")
+                            break
+            
+            # Extract Status from post body
+            status_patterns = [
+                r"(?:Status)\s*[:\-]?\s*([^\n]+)",
+                r"<strong>(?:Status)\s*[:\-]?\s*</strong>\s*([^\n]+)"
+            ]
+            if data['status'] == "Not found":
+                for pattern in status_patterns:
+                    match = re.search(pattern, bb_wrapper_text_for_dates, re.IGNORECASE)
+                    if match and match.group(1).strip():
+                        status_str = match.group(1).strip()
+                        if len(status_str) < 100: # Arbitrary limit
+                            data['status'] = status_str
+                            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Status from post: {data['status']}")
+                            break
+
+            # Extract Censorship from post body
+            censorship_patterns = [
+                r"(?:Censorship|Censored)\s*[:\-]?\s*([^\n]+)",
+                r"<strong>(?:Censorship|Censored)\s*[:\-]?\s*</strong>\s*([^\n]+)"
+            ]
+            if data['censorship'] == "Not found":
+                for pattern in censorship_patterns:
+                    match = re.search(pattern, bb_wrapper_text_for_dates, re.IGNORECASE)
+                    if match and match.group(1).strip():
+                        cen_str = match.group(1).strip()
+                        if len(cen_str) < 50: # Arbitrary limit
+                            data['censorship'] = cen_str
+                            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Censorship from post: {data['censorship']}")
+                            break
+            
             # 7. Changelog
             changelog_text_parts = []
             possible_changelog_headers = ['changelog', "what's new", "update notes", "version history", "updates", "latest changes"]
