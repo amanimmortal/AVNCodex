@@ -321,7 +321,6 @@ def extract_game_data(game_thread_url, username=None, password=None):
             "final_author": "Not found",
             "tags": [],
             "full_description": "Not found",
-            "changelog": "Not found",
             "download_links": [], # Will be list of dicts: {'text': str, 'url': str, 'os_type': str} after filtering
             "engine": "Not found",
             "language": "Not found",
@@ -632,87 +631,6 @@ def extract_game_data(game_thread_url, username=None, password=None):
                             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Censorship from post: {data['censorship']}")
                             break
             
-            # 7. Changelog
-            changelog_text_parts = []
-            possible_changelog_headers = ['changelog', "what's new", "update notes", "version history", "updates", "latest changes"]
-            
-            spoilers = bb_wrapper.find_all('div', class_='bbCodeSpoiler')
-            found_changelog_primary = False
-            for spoiler_idx, spoiler in enumerate(spoilers):
-                button = spoiler.find('button', class_='bbCodeSpoiler-button')
-                content = spoiler.find('div', class_='bbCodeSpoiler-content')
-                if button and content and any(ch_kw in button.get_text(strip=True).lower() for ch_kw in possible_changelog_headers):
-                    changelog_text_parts.append(content.get_text(separator='\\n', strip=True))
-                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted changelog from spoiler (button: '{button.get_text(strip=True)}').")
-                    found_changelog_primary = True # Prioritize specific changelog spoilers
-                    # Consider breaking if it's a very specific "Changelog" spoiler, or collect all matching
-            
-            if not found_changelog_primary: # Fallback to searching headers if no direct spoiler match
-                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): No primary 'Changelog' spoiler found. Searching for headers: {possible_changelog_headers}")
-                header_tags_to_check = ['strong', 'b', 'h2', 'h3', 'h4', 'p']
-                
-                all_potential_header_elements = bb_wrapper.find_all(header_tags_to_check)
-                for header_el in all_potential_header_elements:
-                    header_text_lower = header_el.get_text(strip=True).lower()
-                    
-                    if any(ch_kw in header_text_lower for ch_kw in possible_changelog_headers) and len(header_text_lower) < 70:
-                        # Skip if this header itself is inside a spoiler button we might have processed or will process
-                        if header_el.find_parent('button', class_='bbCodeSpoiler-button'):
-                            continue
-
-                        # Try to get content from an adjacent spoiler
-                        next_sibling_spoiler = header_el.find_next_sibling('div', class_='bbCodeSpoiler')
-                        if next_sibling_spoiler:
-                            spoiler_content_div = next_sibling_spoiler.find('div', class_='bbCodeSpoiler-content')
-                            if spoiler_content_div:
-                                changelog_text_parts.append(spoiler_content_div.get_text(separator='\\n', strip=True))
-                                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted changelog from spoiler adjacent to header '{header_el.get_text(strip=True)}'.")
-                                found_changelog_primary = True # Ensure no break here
-
-                        # If no adjacent spoiler, collect text from subsequent siblings until a new major header
-                        if not changelog_text_parts or not found_changelog_primary: # only if not already populated by adjacent spoiler
-                            current_content_sibling = header_el.next_sibling
-                            temp_changelog_sibling_text = []
-                            while current_content_sibling:
-                                if current_content_sibling.name and \
-                                   (current_content_sibling.name.startswith('h') or \
-                                    (current_content_sibling.name in header_tags_to_check and any(kw in current_content_sibling.get_text(strip=True).lower() for kw in stop_keywords + possible_changelog_headers) and len(current_content_sibling.get_text(strip=True)) < 70) or \
-                                    (current_content_sibling.name == 'div' and any(cls in current_content_sibling.get('class', []) for cls in ['bbCodeSpoiler', 'bbCodeBlock--download']))):
-                                    break # Stop at next major section (this break is for the WHILE loop, which is correct)
-                                
-                                if isinstance(current_content_sibling, str) and current_content_sibling.strip():
-                                    temp_changelog_sibling_text.append(current_content_sibling.strip())
-                                elif current_content_sibling.name not in ['script', 'style', 'iframe']:
-                                    if current_content_sibling.name == 'div' and 'bbCodeSpoiler' in current_content_sibling.get('class', []):
-                                        spoiler_button = current_content_sibling.find('button', class_='bbCodeSpoiler-button')
-                                        spoiler_content = current_content_sibling.find('div', class_='bbCodeSpoiler-content')
-                                        if spoiler_button and spoiler_content and not any(kw in spoiler_button.get_text(strip=True).lower() for kw in stop_keywords):
-                                            temp_changelog_sibling_text.append(spoiler_content.get_text(separator='\\n', strip=True))
-                                    else:
-                                        temp_changelog_sibling_text.append(current_content_sibling.get_text(separator='\\n', strip=True))
-
-                                current_content_sibling = current_content_sibling.next_sibling
-                            
-                            if temp_changelog_sibling_text:
-                                changelog_text_parts.append("\\n".join(filter(None, temp_changelog_sibling_text)).strip())
-                                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted changelog from content following header '{header_el.get_text(strip=True)}'.")
-                                found_changelog_primary = True # Ensure no break here
-                                
-                    if found_changelog_primary: # This break is for the `for header_el in all_potential_header_elements:` loop
-                        break # Correctly placed break for the outer loop
-            
-            if changelog_text_parts:
-                data['changelog'] = "\\n---\\n".join(filter(None, changelog_text_parts)).strip()
-            else:
-                data['changelog'] = "Not found" # Changed from "Not clearly identified"
-            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted changelog (first 100 chars): {data['changelog'][:100] if data['changelog'] and data['changelog'] != 'Not found' else 'None'}")
-
-            # 8. Language / Censorship / Status / Engine (from post body - these are fallbacks or supplements to DL/Tags)
-            # These are usually in <dl> lists, handled later. This section is for text patterns if not in <dl>.
-            # Example: <strong>Language:</strong> English
-            # This is implicitly covered by strong_tags iteration if those terms appear in a label.
-            # For now, rely on DL parsing and later consolidation.
-
             # 9. Download Links & OS-Specific Filtering/Prioritization
             # CRITICAL OVERHAUL
             raw_download_links = [] # Temporary list to hold all found links with potential OS info
@@ -860,7 +778,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 if tag_links:
                     for tag_link in tag_links:
                         tag_text = tag_link.get_text(strip=True)
-                        if tag_text not in data['tags']: data['tags'].append(tag_text)
+                        if tag_text not in data['tags']: data['tags'].append(tag_text) # Ensure tag_text is not None and not already present
                     if data['tags']: # If we found tags here, mark it
                         tags_found_by_js_taglist = True
 
@@ -993,7 +911,6 @@ def extract_game_data(game_thread_url, username=None, password=None):
             "author": data['final_author'],
             "tags": data['tags'] if data['tags'] else ["Not found"],
             "full_description": data['full_description'],
-            "changelog": data['changelog'],
             "download_links": data['download_links'] if data['download_links'] else [], # Empty list if none
             "engine": data['engine'],
             "language": data['language'],

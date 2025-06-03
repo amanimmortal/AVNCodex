@@ -698,7 +698,7 @@ def edit_details_route(played_game_id):
     # The get_my_played_game_details should ideally return these. If it might not,
     # we add defaults here to prevent template errors.
     scraped_fields = [
-        'description', 'changelog_text', 'engine', 'language', 'censorship', 
+        'description', 'engine', 'language', 'censorship', 
         'tags_json', 'download_links_json', 'scraper_last_run_at'
     ]
     for field in scraped_fields:
