@@ -148,6 +148,16 @@ def extract_game_data(game_thread_url, username=None, password=None):
             logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to {game_thread_url} with Playwright before spoiler clicks...")
             page.goto(game_thread_url, wait_until="domcontentloaded", timeout=30000)
             logger_scraper.info(f"EXTRACT_GAME_DATA: Successfully navigated to {game_thread_url}. Current URL: {page.url}")
+            
+            # --- ADDED: Re-verify login on game page ---
+            if logged_in: # Only if we attempted login
+                page.wait_for_timeout(1000) # Brief pause for page to settle
+                if not (page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username")):
+                    logger_scraper.warning(f"EXTRACT_GAME_DATA: Login re-verification FAILED on game page ({page.url}). Expected login indicators not found. Content might be restricted.")
+                else:
+                    logger_scraper.info(f"EXTRACT_GAME_DATA: Login re-verification SUCCEEDED on game page ({page.url}).")
+            # --- END ADDED ---
+
             page.wait_for_timeout(2000) 
         except Exception as e_nav_game_page:
             logger_scraper.error(f"EXTRACT_GAME_DATA: Error navigating to game page {game_thread_url} before spoiler interaction: {e_nav_game_page}", exc_info=True)
@@ -163,6 +173,8 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 try:
                     if button_element.is_visible() and button_element.is_enabled():
                         button_element.click(timeout=2000) 
+                        page.wait_for_timeout(1000) # ADDED: Wait after each spoiler click
+                        
                         # Minimal logging for spoiler clicks unless debugging specific spoiler issues
                         # logger_scraper.debug(f"EXTRACT_GAME_DATA: Clicked spoiler button {i+1}.")
                         
@@ -184,7 +196,16 @@ def extract_game_data(game_thread_url, username=None, password=None):
         except Exception as e_find_spoilers:
             logger_scraper.error(f"EXTRACT_GAME_DATA: Error finding or interacting with spoiler buttons: {e_find_spoilers}", exc_info=True)
 
-        page.wait_for_timeout(2500) 
+        page.wait_for_timeout(5000) # INCREASED: Wait after all spoiler clicks
+
+        # --- ADDED: Debug Screenshot ---
+        try:
+            screenshot_path = "debug_screenshot_game_page.png" # Consider making path configurable or unique if multiple runs
+            page.screenshot(path=screenshot_path, full_page=True)
+            logger_scraper.info(f"EXTRACT_GAME_DATA: Saved debug screenshot to '{screenshot_path}'")
+        except Exception as e_screenshot:
+            logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to take debug screenshot: {e_screenshot}")
+        # --- END ADDED ---
 
         logger_scraper.debug(f"EXTRACT_GAME_DATA: Getting HTML content after spoiler clicks. Current URL: {page.url}")
         html_content = page.content()
@@ -326,41 +347,101 @@ def extract_game_data(game_thread_url, username=None, password=None):
             data['changelog'] = "\n---\n".join(changelog_text_parts) or "Not clearly identified"
             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted changelog (first 100 chars): {data['changelog'][:100] if data['changelog'] else 'None'}")
 
+            # --- Enhanced Download Link Extraction ---
+            data['download_links'] = [] # Reset before populating
+            
+            # Strategy 1: Find sections explicitly marked "DOWNLOAD" or similar
+            download_section_headers = bb_wrapper.find_all(['strong', 'b', 'h1', 'h2', 'h3', 'h4', 'p'])
+            potential_download_areas = []
 
-            links = bb_wrapper.find_all('a', href=True)
-            for link in links:
-                href = link['href']
-                text = link.get_text(strip=True)
-                dl_keywords = ['download', 'mega', 'mediafire', 'zippy', 'gdrive', 'google drive', 'pixeldrain', 'workupload', 'itch.io/']
-                file_exts = ['.zip', '.rar', '.apk', '.7z', '.exe']
+            for header in download_section_headers:
+                header_text_lower = header.get_text(strip=True).lower()
+                if "download" in header_text_lower and len(header_text_lower) < 30: # Avoid matching long paragraphs
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found potential download section header: '{header.get_text(strip=True)}'")
+                    # Try to find a container element for this download section
+                    # This could be the header's parent, or siblings until the next major header
+                    current_element = header
+                    while current_element and current_element.name not in ['article', 'div', 'section', 'ul', 'ol', 'p'] : # Common block containers
+                        current_element = current_element.parent
+                    if current_element and current_element not in potential_download_areas :
+                         potential_download_areas.append(current_element) # Add the container
+                    else: # Fallback: just take a few next siblings if no clear container
+                        sibling_area = []
+                        for sib in header.find_next_siblings(limit=5): # Limit to avoid grabbing too much
+                            if sib.name and (sib.name.startswith('h') or (sib.name == 'div' and 'Spoiler' in sib.get('class', []))): # Stop at next major section
+                                break
+                            sibling_area.append(sib)
+                        if sibling_area:
+                             # Create a temporary BeautifulSoup object from these siblings to search within them
+                            temp_soup_str = "".join(str(s) for s in sibling_area)
+                            potential_download_areas.append(BeautifulSoup(temp_soup_str, 'html.parser'))
+
+
+            if not potential_download_areas: # If no specific download headers found, search the whole bbWrapper
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): No specific 'DOWNLOAD' headers found. Searching entire bbWrapper for links.")
+                potential_download_areas.append(bb_wrapper)
+
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Identified {len(potential_download_areas)} potential areas to search for download links.")
+
+            for area_idx, search_area in enumerate(potential_download_areas):
+                if not search_area: continue # Should not happen, but safeguard
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Searching for links in area {area_idx + 1}...")
                 
-                is_dl_link_text = any(keyword in text.lower() for keyword in dl_keywords)
-                is_dl_link_href = any(keyword in href.lower() for keyword in dl_keywords)
-                is_file_ext_in_href = any(ext in href.lower() for ext in file_exts)
-                is_not_mailto = not href.startswith('mailto:')
-                is_not_internal_thread_link = 'f95zone.to/threads/' not in href
+                # Look for <a> tags with href
+                links_in_area = search_area.find_all('a', href=True)
+                for link in links_in_area:
+                    href = link['href']
+                    text = link.get_text(strip=True)
 
-                if (is_dl_link_text or is_dl_link_href or is_file_ext_in_href) and \
-                   is_not_mailto and (is_not_internal_thread_link or is_file_ext_in_href):
-                    data['download_links'].append({"text": text, "url": href})
-
-            buttons = bb_wrapper.find_all('button')
-            for button in buttons:
-                onclick_attr = button.get('onclick', '')
-                if not ("window.open" in onclick_attr or "location.href" in onclick_attr):
-                    continue
-
-                try:
-                    url_in_onclick = onclick_attr.split("'")[1]
-                    if not url_in_onclick.startswith('http') and not url_in_onclick.startswith('/'):
-                        url_in_onclick = '/' + url_in_onclick
+                    # Filter out common non-download links more aggressively
+                    if not href or href.startswith('#') or href.startswith('mailto:') or "javascript:void" in href:
+                        continue
+                    if "f95zone.to/threads/" in href and not any(ext in href.lower() for ext in ['.zip', '.rar', '.apk', '.7z', '.exe']): # Allow thread links if they point to files
+                        if not ("mod" in text.lower() or "patch" in text.lower() or "translation" in text.lower()): # but not if they are just other threads without clear indication
+                            continue
+                    if "members/" in href or "login" in href or "register" in href or "account" in href: # Skip profile/login links
+                        continue
                     
-                    is_duplicate = any(dl_link['url'] == url_in_onclick or dl_link['text'] == button.get_text(strip=True) for dl_link in data['download_links'])
+                    # If link text is generic like "you must be registered", try to find more context
+                    # For now, we'll accept them if they are under a "DOWNLOAD" header,
+                    # as the login should have made them real.
+                    
+                    # Avoid duplicates
+                    is_duplicate = any(dl['url'] == href and dl['text'] == text for dl in data['download_links'])
                     if not is_duplicate:
-                         data['download_links'].append({"text": button.get_text(strip=True), "url": url_in_onclick})
-                except IndexError:
-                    pass 
-            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found {len(data['download_links'])} download links.")
+                        data['download_links'].append({"text": text, "url": href})
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Added download link from area {area_idx + 1}: '{text}' -> '{href}'")
+
+            # Strategy 2: Button-based links (keep existing logic but apply to identified areas if possible)
+            # This might be redundant if the above captures them, but can be a fallback.
+            # For now, let's simplify and rely on the <a> tag search in identified areas.
+            # (Original button logic could be re-added here if needed, scoped to search_area)
+
+            # --- Fallback: Original broad search if no links found in specific sections and section search was attempted ---
+            if not data['download_links'] and len(potential_download_areas) > 1 : # More than 1 means specific areas were tried
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): No links found in specific download sections, doing a broader search in bbWrapper for <a> tags.")
+                original_links = bb_wrapper.find_all('a', href=True)
+                for link in original_links:
+                    href = link['href']
+                    text = link.get_text(strip=True)
+                    dl_keywords = ['download', 'mega', 'mediafire', 'zippy', 'gdrive', 'google drive', 'pixeldrain', 'workupload', 'itch.io/']
+                    file_exts = ['.zip', '.rar', '.apk', '.7z', '.exe']
+                    
+                    is_dl_link_text = any(keyword in text.lower() for keyword in dl_keywords)
+                    is_dl_link_href = any(keyword in href.lower() for keyword in dl_keywords)
+                    is_file_ext_in_href = any(ext in href.lower() for ext in file_exts)
+                    is_not_mailto = not href.startswith('mailto:')
+                    # Allow internal links if they contain file extensions or known DL keywords in text/href
+                    is_relevant_internal_link = 'f95zone.to/threads/' not in href or is_file_ext_in_href or is_dl_link_href or "mod" in text.lower()
+
+                    if (is_dl_link_text or is_dl_link_href or is_file_ext_in_href) and is_not_mailto and is_relevant_internal_link:
+                        is_duplicate = any(dl['url'] == href and dl['text'] == text for dl in data['download_links'])
+                        if not is_duplicate:
+                            data['download_links'].append({"text": text, "url": href})
+                            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Added download link (fallback broad search): '{text}' -> '{href}'")
+            
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found {len(data['download_links'])} download links after all strategies.")
+            # --- End Enhanced Download Link Extraction ---
 
         if tags_container := soup.find('div', class_='tagGroup'):
             tag_links = tags_container.find_all('a', class_='tagItem')
