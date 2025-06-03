@@ -336,7 +336,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
 
         data = {
             "url": game_thread_url, # Store the URL that was *actually processed* by this instance
-            "title": None, "version": None, "author": None, "tags": [],
+            "title": None, "version": None, "author": "Not found", "tags": [], # Initialize author to "Not found"
             "full_description": None, "changelog": None, "download_links": [],
             "engine": None, "language": None, "status": None, "censorship": None,
         }
@@ -347,63 +347,52 @@ def extract_game_data(game_thread_url, username=None, password=None):
             data['title'] = page_title_element.get_text(strip=True).replace(" | F95zone", "")
         logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted title: {data['title']}")
 
-        # --- ADDED: Attempt to parse Engine, Version, Author from title as a fallback ---
+        # --- Author Extraction - Step 1: Attempt inference from title (will be lowest priority) ---
+        inferred_author_from_title = "Not found"
         if data['title']:
-            # Version: Look for patterns like [v0.1.2], (v0.1.2), v0.1.2, ver 0.1.2, version 0.1.2
-            version_match = re.search(r'(?:\[|\(|ver(?:sion)?\s*)\s*(v?(?:\d+\.)+\d+\w*)\s*(?:\]|\))?', data['title'], re.IGNORECASE)
-            if version_match and not data['version']: # Only if not already found
-                data['version'] = version_match.group(1)
-                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred version from title: {data['version']}")
-
-            # Author: Look for pattern like [AuthorName] or (AuthorName) at the end of title
-            # Avoid matching version numbers if they are also in brackets
-            author_match = re.search(r'(?:\[|\()([^\[\]()]*?)(?:\]|\))\s*$', data['title'])
-            if author_match:
-                potential_author = author_match.group(1).strip()
-                # Avoid using if it looks like a version number or is very short
-                if not re.fullmatch(r'v?\d+(\.\d+)*\w*', potential_author, re.IGNORECASE) and len(potential_author) > 2:
-                    if not data['author'] or data['author'] == 'Not found': # Only if not already found or is default 'Not found'
-                        data['author'] = potential_author
-                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred author from title: {data['author']}")
+            author_match_title = re.search(r'(?:\[|\()([^\[\]()]*?)(?:\]|\))\s*$', data['title'])
+            if author_match_title:
+                potential_author_title = author_match_title.group(1).strip()
+                if not re.fullmatch(r'v?\d+(\.\d+)*\w*', potential_author_title, re.IGNORECASE) and len(potential_author_title) > 2:
+                    inferred_author_from_title = potential_author_title
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Tentatively inferred author from title: {inferred_author_from_title}")
+        # --- End Author Title Inference ---
             
-            # Engine: Look for common engine names at the start or in brackets/parentheses
-            # This is a simplified check; more robust would list known engines
-            engine_keywords = ['ren\'py', 'unity', 'rpg maker', 'html', 'unreal engine', 'qsp', 'tyranobuilder', 'wolf rpg']
-            title_lower = data['title'].lower()
-            for eng_key in engine_keywords:
-                if eng_key in title_lower:
-                    # Try to extract the exact casing from original title if found in brackets/parentheses
-                    engine_match_in_brackets = re.search(r'(?:\[|\()(' + re.escape(eng_key) + r')(?:\]|\))', data['title'], re.IGNORECASE)
-                    if engine_match_in_brackets and (not data['engine'] or data['engine'] == 'Not found'):
-                        data['engine'] = engine_match_in_brackets.group(1)
-                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred engine from title (in brackets): {data['engine']}")
+        # --- Engine: Look for common engine names (moved before title-based author to avoid conflict) ---
+        # This is a simplified check; more robust would list known engines
+        engine_keywords = ['ren\'py', 'unity', 'rpg maker', 'html', 'unreal engine', 'qsp', 'tyranobuilder', 'wolf rpg']
+        title_lower = data['title'].lower()
+        for eng_key in engine_keywords:
+            if eng_key in title_lower:
+                # Try to extract the exact casing from original title if found in brackets/parentheses
+                engine_match_in_brackets = re.search(r'(?:\[|\()(' + re.escape(eng_key) + r')(?:\]|\))', data['title'], re.IGNORECASE)
+                if engine_match_in_brackets and (not data['engine'] or data['engine'] == 'Not found'):
+                    data['engine'] = engine_match_in_brackets.group(1)
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred engine from title (in brackets): {data['engine']}")
+                    break
+                # Else, use the keyword itself if found and no engine yet
+                elif (not data['engine'] or data['engine'] == 'Not found'):
+                    # Find the original casing if possible
+                    try:
+                        start_index = title_lower.find(eng_key)
+                        original_casing_engine = data['title'][start_index : start_index + len(eng_key)]
+                        data['engine'] = original_casing_engine
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred engine from title (substring): {data['engine']}")
                         break
-                    # Else, use the keyword itself if found and no engine yet
-                    elif (not data['engine'] or data['engine'] == 'Not found'):
-                        # Find the original casing if possible
-                        try:
-                            start_index = title_lower.find(eng_key)
-                            original_casing_engine = data['title'][start_index : start_index + len(eng_key)]
-                            data['engine'] = original_casing_engine
-                            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred engine from title (substring): {data['engine']}")
-                            break
-                        except: # Should not happen with `in` check, but as a safeguard
-                            pass
-        # --- END ADDED ---
+                    except: # Should not happen with `in` check, but as a safeguard
+                        pass
+        # --- END Engine from Title ---
 
+        # --- Author Extraction - Step 2: From first post userDetails (after title inference, before DL/Desc) ---
+        author_from_post_details = "Not found"
         first_post_article = soup.find('article', class_='message--post') 
         if first_post_article:
             user_details_div = first_post_article.find('div', class_='message-userDetails')
             if user_details_div:
                 author_link_tag = user_details_div.find('a', class_='username')
                 if author_link_tag:
-                    author_from_post = author_link_tag.get_text(strip=True)
-                    # If data['author'] is already set (e.g. from title inference) and author_from_post is numeric, prefer existing.
-                    # Otherwise, use author_from_post.
-                    if data['author'] and author_from_post.isdigit():
-                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Author from post ('{author_from_post}') is numeric. Keeping existing inferred author: '{data['author']}'.")
-                    else:
-                        data['author'] = author_from_post
+                    author_from_post_details = author_link_tag.get_text(strip=True)
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Author from post details: {author_from_post_details}")
                 else:
                     logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Author link not found within first post's userDetails.")
             else:
@@ -411,7 +400,24 @@ def extract_game_data(game_thread_url, username=None, password=None):
         else:
             logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): First post article not found for author extraction.")
         
-        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted author (after first post check): {data['author']}")
+        # Assign from post details if current data['author'] is "Not found" or if post author is not numeric
+        # while inferred_from_title might be better than a numeric ID.
+        if data['author'] == "Not found":
+            if author_from_post_details != "Not found":
+                data['author'] = author_from_post_details
+        elif author_from_post_details != "Not found" and not author_from_post_details.isdigit():
+             data['author'] = author_from_post_details
+        elif author_from_post_details != "Not found" and author_from_post_details.isdigit() and inferred_author_from_title != "Not found":
+            # If post author is numeric, but we have a non-numeric title inference, prefer title inference over numeric ID
+            data['author'] = inferred_author_from_title
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Post author ('{author_from_post_details}') is numeric. Using inferred author from title ('{inferred_author_from_title}') instead.")
+        elif author_from_post_details != "Not found" and author_from_post_details.isdigit() and inferred_author_from_title == "Not found":
+            # If post author is numeric and no title inference, use numeric post author for now
+            data['author'] = author_from_post_details
+
+
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Author after post/title check: {data['author']}")
+        # --- End Author Post Details ---
 
         first_post_article_content = soup.find('article', class_='message--post')
         bb_wrapper = first_post_article_content.find('div', class_='bbWrapper') if first_post_article_content else None
@@ -434,31 +440,65 @@ def extract_game_data(game_thread_url, username=None, password=None):
             description_snippet_log = (data['full_description'][:200] + '...') if data['full_description'] and len(data['full_description']) > 200 else data['full_description']
             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Description snippet: {description_snippet_log}")
 
+            # --- Refined Changelog Extraction from Spoiler ---
             changelog_text_parts = []
-            possible_changelog_headers = ['changelog', "what\'s new", "update notes", "version history"]
+            possible_changelog_headers = ['changelog', "what's new", "update notes", "version history", "updates"] # Keep this broad for headers
+            
+            # First, specifically look for a spoiler with "Changelog" in its button text
             spoilers = bb_wrapper.find_all('div', class_='bbCodeSpoiler')
+            found_changelog_spoiler = False
             for spoiler in spoilers:
                 button = spoiler.find('button', class_='bbCodeSpoiler-button')
                 content = spoiler.find('div', class_='bbCodeSpoiler-content')
-                if button and content and any(ch_kw in button.get_text(strip=True).lower() for ch_kw in possible_changelog_headers):
+                if button and content and "changelog" in button.get_text(strip=True).lower():
                     changelog_text_parts.append(content.get_text(separator='\n', strip=True))
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted changelog directly from 'Changelog' spoiler.")
+                    found_changelog_spoiler = True
+                    break # Found the primary changelog spoiler
 
-            if not changelog_text_parts:
-                for header_tag_name in ['strong', 'h2', 'h3', 'h4']:
+            # Fallback to searching headers if no specific "Changelog" spoiler was found
+            if not found_changelog_spoiler:
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): No specific 'Changelog' spoiler found. Searching for headers: {possible_changelog_headers}")
+                for header_tag_name in ['strong', 'h2', 'h3', 'h4', 'p']: # Added 'p' for cases where it might be a paragraph header
                     headers = bb_wrapper.find_all(header_tag_name)
                     for header in headers:
-                        if any(ch_kw in header.get_text(strip=True).lower() for ch_kw in possible_changelog_headers):
-                            next_content = []
-                            for sibling in header.find_next_siblings():
-                                if sibling.name and (sibling.name.startswith('h') or (sibling.name == 'div' and 'Spoiler' in sibling.get('class', []))):
-                                    break
-                                next_content.append(sibling.get_text(separator='\n', strip=True))
-                            if next_content:
-                                changelog_text_parts.append("\n".join(next_content))
-                            break 
-                    if changelog_text_parts:
+                        header_text_lower = header.get_text(strip=True).lower()
+                        if any(ch_kw in header_text_lower for ch_kw in possible_changelog_headers) and len(header_text_lower) < 50: # Avoid very long paragraph matches
+                            # Check if the header itself is inside a spoiler button, if so, skip (already handled or will be by spoiler logic)
+                            if header.find_parent('button', class_='bbCodeSpoiler-button'):
+                                continue
+
+                            next_content_elements = []
+                            # Try to get content from an adjacent spoiler if the header is right before it
+                            next_sibling_spoiler = header.find_next_sibling('div', class_='bbCodeSpoiler')
+                            if next_sibling_spoiler:
+                                spoiler_content_div = next_sibling_spoiler.find('div', class_='bbCodeSpoiler-content')
+                                if spoiler_content_div:
+                                    next_content_elements.append(spoiler_content_div.get_text(separator='\n', strip=True))
+                                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted changelog from spoiler adjacent to header '{header.get_text(strip=True)}'.")
+
+                            # If no adjacent spoiler, collect text from subsequent siblings
+                            if not next_content_elements:
+                                for sibling in header.find_next_siblings():
+                                    if sibling.name and (sibling.name.startswith('h') or (sibling.name == 'div' and 'Spoiler' in sibling.get('class', [])) or \
+                                                        any(ch_kw in sibling.get_text(strip=True).lower() for ch_kw in possible_changelog_headers if len(sibling.get_text(strip=True)) < 50 ) ): # Stop at next major section or another changelog-like header
+                                        break
+                                    next_content_elements.append(sibling.get_text(separator='\n', strip=True))
+                                if next_content_elements:
+                                     logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted changelog from content following header '{header.get_text(strip=True)}'.")
+                            
+                            if next_content_elements:
+                                changelog_text_parts.append("\n".join(filter(None, next_content_elements)).strip())
+                                found_changelog_spoiler = True # Mark as found to stop searching other header types
+                                break 
+                    if found_changelog_spoiler:
                         break
-            data['changelog'] = "\n---\n".join(changelog_text_parts) or "Not clearly identified"
+            
+            if changelog_text_parts:
+                data['changelog'] = "\n---\n".join(changelog_text_parts).strip()
+            else:
+                data['changelog'] = "Not clearly identified"
+            # --- End Refined Changelog Extraction ---
             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted changelog (first 100 chars): {data['changelog'][:100] if data['changelog'] else 'None'}")
 
             # --- Enhanced Download Link Extraction ---
@@ -557,16 +597,43 @@ def extract_game_data(game_thread_url, username=None, password=None):
             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found {len(data['download_links'])} download links after all strategies.")
             # --- End Enhanced Download Link Extraction ---
 
-        if tags_container := soup.find('div', class_='tagGroup'):
-            tag_links = tags_container.find_all('a', class_='tagItem')
-            for tag_link in tag_links:
-                data['tags'].append(tag_link.get_text(strip=True))
-        elif tags_dt := soup.find('dt', string=lambda t: t and 'tags' in t.lower()):
-            if tags_dd := tags_dt.find_next_sibling('dd'): 
-                tag_links = tags_dd.find_all('a')
+        # --- Refined Tags (Genre) Extraction from Spoiler ---
+        data['tags'] = [] # Initialize/reset
+        genre_spoiler_found = False
+        if bb_wrapper: # Ensure bb_wrapper exists
+            spoilers = bb_wrapper.find_all('div', class_='bbCodeSpoiler')
+            for spoiler in spoilers:
+                button = spoiler.find('button', class_='bbCodeSpoiler-button')
+                content_div = spoiler.find('div', class_='bbCodeSpoiler-content')
+                if button and content_div and "genre" in button.get_text(strip=True).lower():
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found 'Genre' spoiler: '{button.get_text(strip=True)}'")
+                    raw_tags_text = content_div.get_text(separator=',', strip=True) # Get text, using comma as a hopeful separator
+                    if raw_tags_text:
+                        # Split by comma, then strip each item. Filter out empty strings.
+                        parsed_tags = [tag.strip() for tag in raw_tags_text.split(',') if tag.strip()]
+                        data['tags'].extend(parsed_tags)
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted tags from 'Genre' spoiler: {data['tags']}")
+                        genre_spoiler_found = True
+                    else:
+                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): 'Genre' spoiler content was empty.")
+                    break # Found the genre spoiler
+
+        # Fallback to existing tag extraction if Genre spoiler not found or empty
+        if not genre_spoiler_found:
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): 'Genre' spoiler not found or empty. Falling back to original tag selectors.")
+            if tags_container := soup.find('div', class_='tagGroup'):
+                tag_links = tags_container.find_all('a', class_='tagItem')
                 for tag_link in tag_links:
-                    data['tags'].append(tag_link.get_text(strip=True))
-        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted tags: {data['tags']}")
+                    tag_text = tag_link.get_text(strip=True)
+                    if tag_text not in data['tags']: data['tags'].append(tag_text)
+            elif tags_dt := soup.find('dt', string=lambda t: t and 'tags' in t.lower()):
+                if tags_dd := tags_dt.find_next_sibling('dd'): 
+                    tag_links = tags_dd.find_all('a')
+                    for tag_link in tag_links:
+                        tag_text = tag_link.get_text(strip=True)
+                        if tag_text not in data['tags']: data['tags'].append(tag_text)
+        # --- End Refined Tags Extraction ---
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted tags (final): {data['tags']}")
 
 
         prefix_elements = soup.find_all('span', class_=lambda x: x and x.startswith('label'))
@@ -591,19 +658,63 @@ def extract_game_data(game_thread_url, username=None, password=None):
                     data['engine'] = dd_text
                 elif 'language' in dt_text and not data['language']:
                     data['language'] = dd_text
-                elif 'status' in dt_text and not data['status']:
-                    # Check if the status from dls is more specific than one from title (if any)
-                    # For now, dls source is more direct, so it can override title inference for status
+                elif 'status' in dt_text and (not data['status'] or data['status'] == "Not found"): # Allow DL to set status if not already set well
                     data['status'] = dd_text
                 elif 'censorship' in dt_text and not data['censorship']:
                     data['censorship'] = dd_text
-                elif 'developer' in dt_text and (not data['author'] or data['author'] == 'Not found'): # Prioritize author from first post, then title, then this
-                    data['author'] = dd_text
-                elif 'version' in dt_text and (not data['version'] or data['version'] == 'Not found'): # Title inference can be overridden by more specific dl list
+                elif 'developer' in dt_text : # Capture developer from DL list
+                    if dd_text and dd_text != "Not found":
+                        author_from_dl_list = dd_text
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Author found in DL list: '{author_from_dl_list}' (under 'developer' dt).")
+                elif 'version' in dt_text and (not data['version'] or data['version'] == "Not found"):
                      data['version'] = dd_text
         
-        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): After dls - Engine: {data['engine']}, Lang: {data['language']}, Status: {data['status']}, Cens: {data['censorship']}, Author: {data['author']}, Version: {data['version']}")
+        # Consolidate Author based on priority:
+        # 1. Developer from description (developer_from_description_text)
+        # 2. Developer from DL list (author_from_dl_list)
+        # 3. Author from post details (already in data['author'] or refined with title inference)
+        # 4. Author inferred from title (only if data['author'] is still "Not found" or numeric post author was placeholder)
 
+        if developer_from_description_text != "Not found":
+            if data['author'] != developer_from_description_text:
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Prioritizing Developer from description ('{developer_from_description_text}') for Author over current ('{data['author']}').")
+                data['author'] = developer_from_description_text
+        elif author_from_dl_list != "Not found":
+            if data['author'] == "Not found" or data['author'].isdigit() or data['author'] == inferred_author_from_title: 
+                # Use DL if current is placeholder, numeric, or just the title inference
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Using Author from DL list ('{author_from_dl_list}') as current is ('{data['author']}').")
+                data['author'] = author_from_dl_list
+            else:
+                 logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Author from DL list ('{author_from_dl_list}') found, but keeping current non-placeholder author ('{data['author']}').")
+        elif data['author'] == "Not found" and inferred_author_from_title != "Not found":
+            # Last resort: if nothing else and title inference exists
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Using Author from title inference ('{inferred_author_from_title}') as last resort.")
+            data['author'] = inferred_author_from_title
+
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Final Author after all checks: {data['author']}")
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): After dls & final author - Engine: {data['engine']}, Lang: {data['language']}, Status: {data['status']}, Cens: {data['censorship']}, Version: {data['version']}")
+
+        # --- Clean title if engine name is a prefix (ensure this runs after final engine is set) ---
+        if data['title'] and data['engine'] and data['engine'] != "Not found":
+            if data['title'].lower().startswith(data['engine'].lower()):
+                # Find the length of the engine string in the title to slice accurately
+                # This handles cases where engine is 'Ren'Py' and title is 'Ren'PyGame Name'
+                engine_len_in_title = -1
+                try:
+                    # re.escape to handle special characters in engine name like in Ren'Py
+                    match_engine_prefix = re.match(re.escape(data['engine']), data['title'], re.IGNORECASE)
+                    if match_engine_prefix:
+                        engine_len_in_title = len(match_engine_prefix.group(0))
+                except re.error:
+                    logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Regex error trying to match engine '{data['engine']}' in title for cleaning. Skipping title clean for engine prefix.")
+
+                if engine_len_in_title > 0 and len(data['title']) > engine_len_in_title:
+                    original_title_for_log = data['title']
+                    data['title'] = data['title'][engine_len_in_title:].lstrip(' -:') # Remove engine and any leading separators
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Cleaned title from '{original_title_for_log}' to '{data['title']}' by removing engine prefix '{data['engine']}'.")
+                elif engine_len_in_title > 0 and len(data['title']) == engine_len_in_title:
+                     logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Title '{data['title']}' seems to be only the engine name '{data['engine']}'. Not cleaning.")
+        # --- END Clean title if engine name is a prefix ---
 
         if isinstance(data['tags'], list):
             for tag_text_lower in [t.lower() for t in data['tags']]:
@@ -635,7 +746,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
             if not data['language'] or data['language'] == "Not found":
                 # Regex: "language" (optional 's'), optional colon, optional spaces/newlines, then capture group.
                 # Capture group: word characters, spaces, commas, 'and'.
-                lang_match = re.search(r"language(?:s)?\\s*:\\s*([\\w\\s,]+(?:and[\\w\\s,]+)*)", desc_text_lower, re.IGNORECASE)
+                lang_match = re.search(r"language(?:s)?\\s*\\n*:\\s*([\\w\\s,]+(?:and[\\w\\s,]+)*)", desc_text_lower, re.IGNORECASE)
                 if lang_match:
                     try:
                         original_lang_text = desc_text_to_search[lang_match.start(1):lang_match.end(1)]
@@ -651,7 +762,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
             if not data['censorship'] or data['censorship'] == "Not found":
                 # Regex: "censored" (optional 'd'), optional colon, optional spaces/newlines, then capture group for the value.
                 # Capture group: one or more word characters (e.g., "Yes", "No", "Partial")
-                censorship_match = re.search(r"censor(?:ed)?\\s*:\\s*([\\w\\-]+)", desc_text_lower, re.IGNORECASE)
+                censorship_match = re.search(r"censor(?:ed)?\\s*\\n*:\\s*([\\w\\-]+)", desc_text_lower, re.IGNORECASE)
                 if censorship_match:
                     try:
                         original_cens_text = desc_text_to_search[censorship_match.start(1):censorship_match.end(1)]
@@ -682,7 +793,8 @@ def extract_game_data(game_thread_url, username=None, password=None):
             # OS
             # Regex: "os", optional colon, optional spaces/newlines, then capture group.
             # Capture group: word characters, spaces, commas, 'and'.
-            os_match = re.search(r"os\\s*:\\s*([\\w\\s,]+(?:and[\\w\\s,]+)*)", desc_text_lower, re.IGNORECASE)
+            # MODIFIED to handle newline between keyword and colon
+            os_match = re.search(r"os\\s*\\n*:\\s*([\\w\\s,]+(?:and[\\w\\s,]+)*)", desc_text_lower, re.IGNORECASE)
             if os_match:
                 try:
                     original_os_text = desc_text_to_search[os_match.start(1):os_match.end(1)]
@@ -693,9 +805,176 @@ def extract_game_data(game_thread_url, username=None, password=None):
                     logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found OS info in description (lower): '{os_match.group(1).strip()}'")
             else:
                 logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): OS pattern not found in description.")
+
+            # --- ADDED: Parse Developer from description (will be Step 4 for author, but logic is in description parsing area) ---
+            # This will run near the end of description parsing.
+            # The value from here should be high priority for data['author']
+            
+            # --- Author Extraction - Step 4 (was 1 before): Developer from description (Highest Priority) ---
+            # This is parsed within the full_description block later on.
+            # We will capture it there and then use it to finalize author at the end of all parsing.
+            developer_from_description_text = "Not found" # Temp variable
+
+            if not data['language'] or data['language'] == "Not found":
+                # Regex: "language" (optional 's'), optional colon, optional spaces/newlines, then capture group.
+                # Capture group: word characters, spaces, commas, 'and'.
+                lang_match = re.search(r"language(?:s)?\\s*\\n*:\\s*([\\w\\s,]+(?:and[\\w\\s,]+)*)", desc_text_lower, re.IGNORECASE)
+                if lang_match:
+                    try:
+                        original_lang_text = desc_text_to_search[lang_match.start(1):lang_match.end(1)]
+                        data['language'] = original_lang_text.strip()
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred language from description: '{data['language']}'")
+                    except Exception as e_lang_extract:
+                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original language casing: {e_lang_extract}, using lower: '{lang_match.group(1).strip()}'")
+                        data['language'] = lang_match.group(1).strip()
+                else:
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Language pattern not found in description.")
+            
+            # Censorship
+            if not data['censorship'] or data['censorship'] == "Not found":
+                # Regex: "censored" (optional 'd'), optional colon, optional spaces/newlines, then capture group for the value.
+                # Capture group: one or more word characters (e.g., "Yes", "No", "Partial")
+                censorship_match = re.search(r"censor(?:ed)?\\s*\\n*:\\s*([\\w\\-]+)", desc_text_lower, re.IGNORECASE)
+                if censorship_match:
+                    try:
+                        original_cens_text = desc_text_to_search[censorship_match.start(1):censorship_match.end(1)]
+                        data['censorship'] = original_cens_text.strip()
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred censorship from description: '{data['censorship']}'")
+                    except Exception as e_cens_extract:
+                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original censorship casing: {e_cens_extract}, using lower: '{censorship_match.group(1).strip()}'")
+                        data['censorship'] = censorship_match.group(1).strip()
+                else:
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Censorship pattern not found in description.")
+
+            # Version (if not found by title or dl list)
+            if not data['version'] or data['version'] == "Not found":
+                # Regex: "version", optional colon, optional spaces/newlines, then capture group.
+                # Capture group: word chars, dots, hyphens (e.g., "0.1.2b", "1.0-final")
+                version_desc_match = re.search(r"version\\s*:\\s*([\\w\\.\\-]+)", desc_text_lower, re.IGNORECASE)
+                if version_desc_match:
+                    try:
+                        original_ver_text = desc_text_to_search[version_desc_match.start(1):version_desc_match.end(1)]
+                        data['version'] = original_ver_text.strip()
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred version from description: '{data['version']}'")
+                    except Exception as e_ver_extract:
+                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original version casing: {e_ver_extract}, using lower: '{version_desc_match.group(1).strip()}'")
+                        data['version'] = version_desc_match.group(1).strip()
+                else:
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Version pattern not found in description.")
+            
+            # OS
+            # Regex: "os", optional colon, optional spaces/newlines, then capture group.
+            # Capture group: word characters, spaces, commas, 'and'.
+            # MODIFIED to handle newline between keyword and colon
+            os_match = re.search(r"os\\s*\\n*:\\s*([\\w\\s,]+(?:and[\\w\\s,]+)*)", desc_text_lower, re.IGNORECASE)
+            if os_match:
+                try:
+                    original_os_text = desc_text_to_search[os_match.start(1):os_match.end(1)]
+                    # This field is not directly stored in data['os'] yet, just logged for now.
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found OS info in description: '{original_os_text.strip()}'")
+                except Exception as e_os_extract:
+                    logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original OS casing: {e_os_extract}, using lower: '{os_match.group(1).strip()}'")
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found OS info in description (lower): '{os_match.group(1).strip()}'")
+            else:
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): OS pattern not found in description.")
+
+            # Developer (capture it here)
+            dev_match = re.search(r"developer\\s*\\n*:\\s*([^\\n\\r<]+)", desc_text_lower, re.IGNORECASE)
+            if dev_match:
+                try:
+                    original_dev_text = desc_text_to_search[dev_match.start(1):dev_match.end(1)].strip()
+                    if len(original_dev_text) > 0 and len(original_dev_text) < 100 and '<' not in original_dev_text:
+                        developer_from_description_text = original_dev_text
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Developer parsed from description: '{developer_from_description_text}'")
+                    else:
+                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Developer text from desc ('{original_dev_text}') invalid/long.")
+                except Exception as e_dev_extract:
+                    logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original developer casing for desc: {e_dev_extract}")
+                    dev_name_lower = dev_match.group(1).strip()
+                    if len(dev_name_lower) > 0 and len(dev_name_lower) < 100 and '<' not in dev_name_lower:
+                       developer_from_description_text = dev_name_lower
+                       logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Developer parsed from description (fallback lower): '{developer_from_description_text}'")
+            else:
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Developer pattern not found in description.")
+            # --- End Developer from description capture ---
+
         else:
             logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): No full_description available to parse for further details.")
-        # --- END ADDED ---
+        # --- END Description Parsing Fallbacks ---
+
+        # --- Author Extraction - Step 3: From DL lists ---
+        author_from_dl_list = "Not found"
+        dls = soup.find_all('dl', class_=['pairs--columns', 'block-body-infoPairs', 'pairs--justified'])
+        for dl_element in dls:
+            dt_elements = dl_element.find_all('dt')
+            for dt in dt_elements:
+                dt_text = dt.get_text(strip=True).lower()
+                dd = dt.find_next_sibling('dd')
+                if not dd:
+                    continue
+                
+                dd_text = dd.get_text(strip=True)
+                if 'engine' in dt_text and not data['engine']:
+                    data['engine'] = dd_text
+                elif 'language' in dt_text and not data['language']:
+                    data['language'] = dd_text
+                elif 'status' in dt_text and (not data['status'] or data['status'] == "Not found"): # Allow DL to set status if not already set well
+                    data['status'] = dd_text
+                elif 'censorship' in dt_text and not data['censorship']:
+                    data['censorship'] = dd_text
+                elif 'developer' in dt_text : # Capture developer from DL list
+                    if dd_text and dd_text != "Not found":
+                        author_from_dl_list = dd_text
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Author found in DL list: '{author_from_dl_list}' (under 'developer' dt).")
+                elif 'version' in dt_text and (not data['version'] or data['version'] == "Not found"):
+                     data['version'] = dd_text
+        
+        # Consolidate Author based on priority:
+        # 1. Developer from description (developer_from_description_text)
+        # 2. Developer from DL list (author_from_dl_list)
+        # 3. Author from post details (already in data['author'] or refined with title inference)
+        # 4. Author inferred from title (only if data['author'] is still "Not found" or numeric post author was placeholder)
+
+        if developer_from_description_text != "Not found":
+            if data['author'] != developer_from_description_text:
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Prioritizing Developer from description ('{developer_from_description_text}') for Author over current ('{data['author']}').")
+                data['author'] = developer_from_description_text
+        elif author_from_dl_list != "Not found":
+            if data['author'] == "Not found" or data['author'].isdigit() or data['author'] == inferred_author_from_title: 
+                # Use DL if current is placeholder, numeric, or just the title inference
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Using Author from DL list ('{author_from_dl_list}') as current is ('{data['author']}').")
+                data['author'] = author_from_dl_list
+            else:
+                 logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Author from DL list ('{author_from_dl_list}') found, but keeping current non-placeholder author ('{data['author']}').")
+        elif data['author'] == "Not found" and inferred_author_from_title != "Not found":
+            # Last resort: if nothing else and title inference exists
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Using Author from title inference ('{inferred_author_from_title}') as last resort.")
+            data['author'] = inferred_author_from_title
+
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Final Author after all checks: {data['author']}")
+        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): After dls & final author - Engine: {data['engine']}, Lang: {data['language']}, Status: {data['status']}, Cens: {data['censorship']}, Version: {data['version']}")
+
+        # --- Clean title if engine name is a prefix (ensure this runs after final engine is set) ---
+        if data['title'] and data['engine'] and data['engine'] != "Not found":
+            if data['title'].lower().startswith(data['engine'].lower()):
+                # Find the length of the engine string in the title to slice accurately
+                # This handles cases where engine is 'Ren'Py' and title is 'Ren'PyGame Name'
+                engine_len_in_title = -1
+                try:
+                    # re.escape to handle special characters in engine name like in Ren'Py
+                    match_engine_prefix = re.match(re.escape(data['engine']), data['title'], re.IGNORECASE)
+                    if match_engine_prefix:
+                        engine_len_in_title = len(match_engine_prefix.group(0))
+                except re.error:
+                    logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Regex error trying to match engine '{data['engine']}' in title for cleaning. Skipping title clean for engine prefix.")
+
+                if engine_len_in_title > 0 and len(data['title']) > engine_len_in_title:
+                    original_title_for_log = data['title']
+                    data['title'] = data['title'][engine_len_in_title:].lstrip(' -:') # Remove engine and any leading separators
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Cleaned title from '{original_title_for_log}' to '{data['title']}' by removing engine prefix '{data['engine']}'.")
+                elif engine_len_in_title > 0 and len(data['title']) == engine_len_in_title:
+                     logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Title '{data['title']}' seems to be only the engine name '{data['engine']}'. Not cleaning.")
+        # --- END Clean title if engine name is a prefix ---
 
         for key, value in data.items():
             if value is None:
