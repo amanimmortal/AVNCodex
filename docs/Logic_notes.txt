@@ -1,0 +1,1234 @@
+**AI Coding Assistant Guide: F95Zone Scraper Refinement**
+
+*This document summarizes the key requirements and logic points for refining the F95Zone web scraper, based on analysis of `docs/scraper_findings.txt` and existing scraper code. Use this guide to implement robust data extraction.*
+
+**I. General Scraper Architecture & Session Management:**
+
+1.  **Persistent Login:**
+    *   Implement a persistent login session. Log in once at the start of a scraping session.
+    *   Verify login status before each page request (e.g., check for username in `div.p-account.p-navgroup--member span.p-navgroup-linkText`).
+    *   Attempt re-login only if the session is detected as lost.
+    *   The `app/f95_web_scraper.py` already has a `login_to_f95zone` function that needs to be integrated into this persistent session model.
+
+2.  **Spoiler Handling:**
+    *   Before parsing page content, identify and click all spoiler buttons (e.g., `button.bbCodeSpoiler-button`) to reveal their content. Ensure content is loaded before proceeding.
+
+**II. Data Extraction from Thread Page:**
+
+**A. Header Information (e.g., within `div.uix_headerInner`):**
+
+1.  **Title String (`h1.p-title-value`):**
+    *   This is the primary source for Game Name, Version, and Author.
+    *   Implement robust parsing logic (e.g., regex, priority rules) to accurately separate these three components from the combined string.
+    *   Examples:
+        *   "U4IA [Ep3.11p] [DriftyGames]" -> Name: U4IA, Version: Ep3.11p, Author: DriftyGames
+        *   "A Foreign World [Ep. 6.5] [Highborntiger]" -> Name: A Foreign World, Version: Ep. 6.5, Author: Highborntiger
+        *   "A House in the Rift [v0.7.20r1] [Zanith]" -> Name: A House in the Rift, Version: v0.7.20r1, Author: Zanith
+        *   Handle variations: "v" prefix, "Ep." prefix, suffixes like "Public", multi-part versions (e.g., 0.7.20r1, 1.4.5.0), alphanumeric versions (e.g., v0.12f), versions with chapter info (e.g., "Ch. 3 Finale (v6)"). Define a standard for the extracted version (e.g., keep full string or extract core like "v6").
+        *   Handle author names with special characters (e.g., "Digi.B", "Mutt & Jeff").
+    *   Fallback for title: `soup.find('title').get_text(strip=True).replace(" | F95zone", "")`.
+
+2.  **Author (from Header - Distinct Field):**
+    *   While title string parsing is primary, investigate if a distinct "Author: [Name]" pattern appears directly in the header area on some pages. If so, this could be a high-priority source. (Current scraper `extract_game_data` does not explicitly look for this distinct pattern in the header).
+
+3.  **Game Type / Engine (from Header):**
+    *   The notes suggest these are *not consistently* found as distinct labeled fields in the header.
+    *   Primarily rely on tags, and title/description inference for these.
+    *   However, if reliable patterns for "Game Type:" or "Engine:" are found in the header, add logic to extract them.
+
+4.  **Tags (`div.tagGroup a.tagItem`):**
+    *   Extract tags from this standard XenForo structure. Current scraper logic seems to cover this.
+
+**B. Main Post Content (e.g., `article.message--post div.bbWrapper`):**
+
+1.  **Developer/Author (Consolidated Approach):**
+    *   Prioritize extraction in this order:
+        1.  Explicitly labeled Developer in post body: Search for patterns like `<strong>Developer:</strong> [Name]`, `<b>Developer:</b> [Name]`, or similar variations within `bbWrapper`. This should be a primary source if present.
+        2.  Developer from `<dl>` lists (e.g., `<dt>Developer</dt><dd>[Name]</dd>`).
+        3.  Author from game thread title string parsing (as described in II.A.1).
+        4.  Thread starter's F95Zone username (e.g., `a.username` in `div.message-userDetails` of the first post). (This is a good heuristic but might not be the canonical dev name).
+    *   The scraper already has a multi-source approach; refine it based on this priority and pattern search.
+
+2.  **Version (Consolidated Approach):**
+    *   Prioritize extraction in this order:
+        1.  Version from game thread title string parsing (as described in II.A.1). This is a common and often reliable pattern.
+        2.  Explicitly labeled Version in post body: Search for patterns like `<strong>Version:</strong> [Number]`, `<b>Version:</b> [Number]`, "Current version:", "Latest Release:", etc., within `bbWrapper`.
+        3.  Version from `<dl>` lists (e.g., `<dt>Version</dt><dd>[Number]</dd>`).
+    *   The current scraper's reliance on `<dl>` is insufficient. Robust title parsing and text pattern search are crucial.
+
+3.  **Overview/Full Description:**
+    *   Extract the main descriptive block of text from `bbWrapper`.
+    *   The current logic of iterating `bbWrapper` children until a "download" or "changelog" type header seems like a reasonable starting point. Refine to ensure it captures all relevant overview text.
+
+4.  **Release Date:**
+    *   Implement search for common patterns within `bbWrapper`: "`Release Date: [date]`", "`Released: [date]`", "`Latest release: [date]`", `<strong>Release Date:</strong> YYYY-MM-DD`.
+    *   Investigate if it can be found in post metadata (e.g., `<time>` tags associated with the first post, if distinguishable as a "release" date vs. "post" date).
+
+5.  **Thread Updated Date:**
+    *   Locate the definitive element for "last updated" for the thread. This might be:
+        *   Near the first post's date (`time.u-dt`).
+        *   A specific timestamp for thread last update in a thread-level metadata block.
+
+6.  **OS Listing (General Platform Information):**
+    *   Implement search within `bbWrapper` for patterns like:
+        *   `<strong>Platform:</strong> Windows, Linux, Mac, Android`
+        *   `<strong>OS:</strong> Windows, Mac, Linux`
+        *   "Supports: Windows, Linux"
+    *   This is for general OS compatibility information, separate from download link OS specificity.
+
+7.  **Changelog:**
+    *   Robust extraction:
+        1.  Primary: Spoilers with "changelog" (or variations like "what's new", "update notes", "version history", "updates") in the button text. Extract content from `div.bbCodeSpoiler-content`.
+        2.  Fallback: Content following headers (e.g., `<strong>`, `<h2>`, `<h3>`) with text like "Changelog", "What's New", etc.
+            *   If the header is immediately followed by a spoiler, extract from that spoiler.
+            *   Otherwise, collect text from subsequent siblings until the next major section header.
+    *   The current scraper logic for changelogs appears to be a good base.
+
+8.  **Language / Censorship / Status / Engine (from post body):**
+    *   Prioritize `<dl>` lists (e.g., `<dt>Language</dt><dd>English</dd>`).
+    *   Also search for bolded items or text patterns like:
+        *   `<strong>Language:</strong> English`
+        *   `<strong>Censored:</strong> No / Uncensored`
+        *   `<strong>Status:</strong> Ongoing / Completed`
+        *   `<strong>Engine:</strong> Ren'Py`
+    *   Engine can also be inferred from title (as in `extract_game_data`) or tags. Consolidate.
+
+9.  **Download Links & OS-Specific Filtering/Prioritization:**
+    *   **Critical Area requiring significant enhancement.**
+    *   **Identify Download Sections:**
+        *   Look for common download section headers: "DOWNLOAD", "Downloads", "PC Download", "Android Download", "Windows:", "Linux:", "Mac:", "Android:", etc. (often `<strong>`, `<h2>`, `<h3>`).
+    *   **Parse Links under Headers:** Extract `<a>` tags with `href` from within these identified sections.
+    *   **OS Identification for Links:**
+        *   Primary: Section headers (e.g., links under "Windows Downloads" are for Windows).
+        *   Secondary: Link text clues (e.g., "[WIN]", "[LINUX]", "[MAC]", "[ANDROID]", ".exe", ".apk", "_pc", "_linux", "_mac", "_android").
+        *   Tertiary: URL patterns if reliable (e.g., "/windows/", "/android/").
+    *   **Implement OS-Based Prioritization (as per `scraper_findings.txt`):**
+        1.  Identify all links and their determined OS (Win, Linux, Mac, Android, Extras/Other).
+        2.  If Win or Linux links exist: Collect *only* Win and Linux links. Also collect any "Extras" links. Ignore Mac and Android links.
+        3.  If *neither* Win nor Linux links exist: Collect *all* available download links (Mac, Android, Extras, etc.).
+    *   The current scraper collects all links without this OS-based logic. This needs to be built.
+
+**III. Data Cleaning and Post-Processing:**
+
+1.  **Title Cleaning:**
+    *   If the game engine name (once determined) appears as a prefix in the game title, remove it.
+    *   Example: "Ren'Py My Game Title" -> "My Game Title" if Engine is "Ren'Py". Handle separators like ' -:'.
+2.  **Default Values:** For fields not found, use a consistent "Not found" or `None` as appropriate for the data structure (e.g., empty list `[]` for tags/download_links if none).
+
+--- Original Content Below ---
+
+Game Page Analysis: https://f95zone.to/threads/u4ia-ep3-11p-driftygames.158858/
+
+**I. Header Information (`div.uix_headerInner` or similar structure)**
+
+*   **Source of Truth:** `docs/scraper_findings.txt` indicates this section contains: Title, Version (e.g., `[v0.8.5 Public]`), Author (e.g., `[Caribdis]`), Game Type, App/Program, Tags.
+*   **Live HTML Observation (U4IA page):** [TODO: Manually verify structure or use Playwright to inspect element if analysis continues this deep for *each* field]
+
+*   **`app/f95_web_scraper.py` - `extract_game_data` function:**
+
+    *   **Title:**
+        *   Current Logic:
+            1.  `soup.find('h1', class_='p-title-value').get_text(strip=True)`
+            2.  Fallback: `soup.find('title').get_text(strip=True).replace(" | F95zone", "")`
+        *   Assessment: Seems reasonable. `h1.p-title-value` is likely the main title element on the page.
+
+    *   **Author:**
+        *   Primary Method (Thread Starter):
+            *   Looks for `a.username` within `div.message-userDetails` of the first `article.message--post`.
+            *   This gets the F95Zone *username* of the thread creator.
+        *   Secondary Method (Inferred from Title):
+            *   Regex `r'(?:\\\\\\[|\\\\()([^\\\\\\[\\\\\\]()]*?)(?:\\\\\\]|\\\\))\\\\s*$'\` on the extracted title.
+            *   Aims to get text in `[]` or `()` at the end of the title, if not a version number.
+        *   Assessment:
+            *   The primary method (thread starter username) is a good heuristic but might not always be the "canonical" game author/developer name (e.g., if a fan posts the thread, or the dev uses a different forum name).
+            *   The title inference is good for capturing bracketed author names as per `scraper_findings.txt`.
+            *   `scraper_findings.txt` notes "Author - E.g. [Caribdis]" directly in the header. It's unclear if the scraper explicitly looks for an "Author" field *distinct from the title itself* within the header elements (other than the title inference). The current code does not show a specific selector for a standalone "Author: [Name]" pattern in the header.
+
+    *   **Version:**
+        *   Current Logic (lines 180-429): **No explicit extraction logic for game version found in this section.** `data['version']` is initialized to `None` and not updated.
+        *   Assessment: **Major Gap.** `scraper_findings.txt` highlights version information in both the header (`[v0.8.5 Public]`) and the main post body (`0.8.5 Public`). This needs to be added.
+        *   The regex to *avoid* matching versions during author inference (`r'v?\\\\d+(\\\\.\\\\d+)*\\\\w*'`) shows awareness of version patterns.
+
+    *   **Game Type / App/Program / Tags (from header):**
+        *   Current Logic (lines 180-429): No explicit logic for these fields from the header section is visible.
+        *   Assessment: **Gap.** `scraper_findings.txt` indicates these can be present. The scraper should attempt to find them. `data['engine']` extraction from title (lines 357-374) might cover "App/Program" to some extent (e.g., Ren'Py, Unity) if it appears in the title. Tags are also not yet addressed in the visible code.
+
+**II. Main Post Content (`div.message-main.uix_messageContent.js-quickEditTarget` / `bbWrapper`)**
+
+*   **Source of Truth:** `docs/scraper_findings.txt` details fields like Overview, Thread Updated, Release Date, Developer, Censored, Version, OS, Language, Changelog, Download Links.
+*   **Live HTML Observation (U4IA page):** [TODO: Further detailed inspection needed as analysis proceeds for each field]
+
+*   **`app/f95_web_scraper.py` - `extract_game_data` function (continued analysis based on lines 430-679 and knowledge of overall structure):**
+
+    *   **Version (from main post):**
+        *   Current Logic: Primarily extracted if found in a `<dl>` structure (e.g., `<dt>Version</dt><dd>0.8.5</dd>`) (lines 648-649).
+        *   Assessment: This covers structured metadata. However, `scraper_findings.txt` shows "Version - E.g. 0.8.5 Public" which might appear as plain text or bolded text within the main post body, not necessarily in a `<dl>`. The scraper doesn't have a robust way to find version strings directly in the `bbWrapper` text if not in a `<dl>`.
+        *   **Overall Version Assessment**: The scraper lacks a method to reliably get versions like `[v1.2.3]` from the page title/header string (a common pattern per `scraper_findings.txt`). The `<dl>` check is good but insufficient on its own.
+
+    *   **Tags (Genre):**
+        *   Current Logic:
+            1.  Primary: Looks for a spoiler button with "genre" in text; parses comma-separated tags from its content (lines 576-591).
+            2.  Fallback 1: `soup.find('div', class_='tagGroup').find_all('a', class_='tagItem')` (lines 596-598).
+            3.  Fallback 2: `dt` containing "tags" then `a` tags in `dd` (lines 599-600).
+        *   Assessment: This is quite comprehensive. The `div.tagGroup` is the standard XenForo tag location. The genre spoiler covers in-post lists. This aligns well with `scraper_findings.txt`.
+
+    *   **Developer / Author (Consolidated):**
+        *   Current Logic: Prioritizes developer info found in description text (logic for `developer_from_description_text` population needs full review but is referenced), then from `<dl>` list (`author_from_dl_list`), then from post details (thread starter `a.username`), then from title inference (lines 652 onwards).
+        *   Assessment: This multi-source approach is good. `scraper_findings.txt` lists "Developer" in the main post, which the description parsing and `<dl>` check aim to cover. The prioritization helps select the best available author/developer name.
+
+    *   **Overview/Full Description:**
+        *   Current Logic: `data['full_description']` is populated by iterating children of `bbWrapper` until a section like "download" or "changelog" (lines 393-406).
+        *   Assessment: Seems adequate for capturing the main descriptive block of text.
+
+    *   **Thread Updated / Release Date:**
+        *   Current Logic: **No explicit extraction logic found in the viewed snippets.**
+        *   Assessment: **Gap.** `scraper_findings.txt` mentions these. They are important metadata.
+
+    *   **Censored / Language / Engine / Status:**
+        *   Current Logic:
+            *   Language, Censorship, Status, Engine: Extracted if found in `<dl>` lists (lines 638-643, 624-628 for Engine/Status from label spans).
+            *   Engine also inferred from title.
+        *   Assessment: Good coverage if data is in these structured formats. `scraper_findings.txt` examples ("Censored - E.g. No", "Language - E.g. English") fit this.
+
+    *   **OS (Operating System):**
+        *   Current Logic: No explicit field `data['os']`. OS is not specifically extracted from `<dl>` lists in the viewed code, nor from general text, nor is there specific parsing from download link categories (e.g. "Download [Win]").
+        *   Assessment: **Gap.** `scraper_findings.txt` clearly lists "OS - E.g. Windows, Linux, Mac, Android". This needs to be addressed.
+
+    *   **Changelog:**
+        *   Current Logic: Robust extraction from spoilers with "changelog" in button text, or from content following headers like "changelog", "what's new" etc. (lines 431-482).
+        *   Assessment: Good, aligns with `scraper_findings.txt`.
+
+    *   **Download Links:**
+        *   Current Logic: Comprehensive search for links under "DOWNLOAD" headers or broadly in `bbWrapper`, with keyword and file extension filtering (lines 485-570).
+        *   Assessment: Good for finding links. However, the specific requirement from `scraper_findings.txt`: "I only care about Win/Linux and possibly Extras. Ignore Mac and Android. Logic should follow that is those OS subsections do not exist give them all" **is NOT implemented.** The scraper currently collects all identified download links without this OS-based prioritization or filtering.
+
+**III. Summary of Key Gaps & Potential Improvements:**
+
+1.  **Version Extraction:** Needs a method to parse versions from the header/title string (e.g., `[v1.0]`, `(0.75)`). Current `<dl>` reliance is insufficient.
+2.  **Author from Header:** Consider looking for a distinct "Author: [Name]" pattern in the header area if available on some pages, as a supplement to current methods.
+3.  **Game Type (from header):** Add logic to extract if present in the header as per `scraper_findings.txt`.
+4.  **Thread Updated / Release Date:** Implement extraction for these fields.
+5.  **OS Extraction (General):** Add logic to find general OS listings (e.g., "OS: Windows, Mac, Linux, Android").
+6.  **OS-Specific Download Link Filtering:** Implement the logic from `scraper_findings.txt` to prioritize Win/Linux links and handle Mac/Android conditionally.
+
+Next step: Examine the live HTML for the test URL (`https://f95zone.to/threads/u4ia-ep3-11p-driftygames.158858/`) to see how these fields actually appear, which will inform how to best implement the missing pieces.
+
+**IV. Analysis of Live HTML for `https://f95zone.to/threads/u4ia-ep3-11p-driftygames.158858/` (Anonymous View)**
+
+*This section details observations from the live HTML of the first test URL, fetched as an anonymous user. This serves as a baseline for confirming initial assumptions and guiding scraper logic for common elements. Subsequent URLs will be analyzed assuming a logged-in state to ensure comprehensive coverage of all features, especially download links.*
+
+1.  **Header Area (`div.uix_headerInner`, `h1.p-title-value`, etc.):**
+    *   **Title String:** The `h1.p-title-value` element contains the full thread title. For this page, it's "U4IA [Ep3.11p] [DriftyGames]".
+        *   **Confirmation:** This confirms the raw title string embeds game name, version, and author.
+        *   **Scraper Action:** Implement robust parsing logic to separate Title, Version (e.g., `[Ep3.11p]`), and Author (e.g., `[DriftyGames]`) from this combined string. Consider regex and priority rules.
+    *   **Game Type/Engine in Header:** Not observed as distinct labeled fields in the header for this page. Engine information might be in tags or inferred.
+        *   **Scraper Action:** Continue relying on tag parsing and title/description inference for engine/game type initially.
+    *   **Tags:** A `div.tagGroup` is present at the top, containing `a.tagItem` elements.
+        *   **Confirmation:** Standard tag structure observed.
+        *   **Scraper Action:** Current scraper logic for `div.tagGroup` is likely sufficient.
+
+2.  **Main Post Content (`article.message--post div.bbWrapper`):**
+    *   **Developer:** For this page, the developer "DriftyGames" is part of the title. Within the `bbWrapper`, specific bolded "**Developer:**" labels are not immediately apparent from a general anonymous view but might be present or structured differently in other posts.
+        *   **Scraper Action:** The existing multi-source author/developer extraction (title, post user, `<dl>`) is important. Enhance logic to also find patterns like `<strong>Developer:</strong> [Name]` or similar within the `bbWrapper` as a primary source if present.
+    *   **Version (in post):** The version "Ep3.11p" is in the title. Explicit "**Version:**" labels within the `bbWrapper` need to be checked on a case-by-case basis across different game pages.
+        *   **Scraper Action:** Prioritize version parsing from the title string. Also, implement robust search for patterns like "`Version: ...`", "`Current version: ...`", or bolded version numbers within `bbWrapper`, supplementing the existing `<dl>` check.
+    *   **Release Date / Thread Updated:**
+        *   **Release Date:** Not immediately obvious as a distinctly labeled field like "**Released:**" in the main content area for this specific page (anonymous view).
+            *   **Scraper Action:** Implement search for common patterns ("`Released: [date]`", "`Release Date: [date]`") within `bbWrapper`. Also, investigate if it's in post metadata (e.g., `<time>` tags associated with the first post).
+        *   **Thread Updated:** Typically found in the post metadata (e.g., `time.u-dt` for post dates, or a specific timestamp for thread last update).
+            *   **Scraper Action:** Locate the definitive element for "last updated" for the thread. This might be near the first post's date or in a thread-level metadata block.
+    *   **OS Listing (General):** No explicit "**Platform:**" or "**OS:**" section observed in the main content area for this specific page (anonymous view).
+        *   **Scraper Action:** Implement search for these patterns within `bbWrapper`. OS information will also be critical when parsing download sections.
+    *   **Download Sections & OS Specificity:** (Anonymous view often hides direct links or shows them as "login to see"). However, the structure of download sections (if placeholders are visible) can still be assessed.
+        *   **Scraper Action:** The download link logic must be significantly enhanced to:
+            *   Identify common download section headers (e.g., "DOWNLOAD", "Downloads", "PC Download", "Android Download").
+            *   Parse links under these headers.
+            *   Crucially, implement the OS-based prioritization from `scraper_findings.txt`: Win/Linux preferred; if not present, take all. Ignore Mac/Android if Win/Linux exist.
+
+3.  **General Scraper Architecture Note (From User Feedback):**
+    *   **Persistent Login Sessions:** The scraper (`app/f95_web_scraper.py`) should be refactored. Instead of logging in for every URL, it should log in once at the start of a scraping session, maintain the session, and verify login status (e.g., by checking for username in `div.p-account.p-navgroup--member span.p-navgroup-linkText`) before each new page request, attempting re-login only if the session is lost.
+
+**V. URL-Specific Analysis and Scraper Logic Refinements**
+
+*This section details the analysis of each subsequent URL from `docs/scraper_findings.txt`. For each URL, the live HTML is retrieved, and its specific structures for key data points are noted. This is compared against the current scraper logic (`app/f95_web_scraper.py`) and the expectations in `scraper_findings.txt`. Necessary adjustments or confirmations for the scraper's parsing logic are outlined. While the HTML for this analysis is fetched without an active login during this interactive session, the analysis aims to identify all elements a logged-in scraper should find.*
+
+*   **URL 1: `https://f95zone.to/threads/u4ia-ep3-11p-driftygames.158858/`**
+    *   Status: Initial analysis complete (see Section IV). Based on HTML retrieved anonymously.
+
+*   **URL 2: `https://f95zone.to/threads/a-foreign-world-ep-6-5-highborntiger.135123/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "A Foreign World [Ep. 6.5] [Highborntiger]".
+                *   **Scraper Action:** Reinforces the need for robust parsing of the title string to extract:
+                    *   Game Name: "A Foreign World"
+                    *   Version: "[Ep. 6.5]" (Note: "Ep." prefix)
+                    *   Author: "[Highborntiger]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** The name "Highborntiger" is in the title. Looking for a specific "**Developer:**" label in the post.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if a line like `<strong>Developer:</strong> Highborntiger` or similar exists.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** Version "[Ep. 6.5]" is in the title. Checking for explicit "**Version:**" or similar in the post.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Version:</strong> Episode 6.5` or `<strong>Latest Release:</strong> Ep. 6.5`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure it handles "Ep." and other prefixes.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", with links.
+                *   **Scraper Action:** This is critical. Must confirm the structure of download sections and implement the OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. The scraper needs to identify which links belong to which OS, potentially by looking at section headers (e.g., "Windows Downloads") or link text clues (e.g., "[WIN]", ".exe").
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" or a header.
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested.
+
+*   **URL 3: `https://f95zone.to/threads/a-house-in-the-rift-v0-7-20r1-zanith.29627/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "A House in the Rift [v0.7.20r1] [Zanith]".
+                *   **Scraper Action:** Further reinforces the need for robust parsing of the title string:
+                    *   Game Name: "A House in the Rift"
+                    *   Version: "[v0.7.20r1]" (Note: "v" prefix and complex version number)
+                    *   Author: "[Zanith]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy.
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic should be sufficient.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "Zanith" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains `<strong>Developer:</strong> Zanith`.
+                *   **Scraper Action:** Confirm and enhance logic for `<strong>Developer:</strong> [Name]`.
+            *   **Version (in post):** "[v0.7.20r1]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains `<strong>Version:</strong> 0.7.20r1`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for "Version" textual patterns. Ensure version parsing handles "v" prefix and multi-part versions like "0.7.20r1".
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:" patterns.
+                *   **Scraper Action (Thread Updated):** Check post metadata.
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Platform:</strong> Windows, Linux, Mac`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:" patterns.
+            *   **Overview/Full Description:** Main text content.
+                *   **Scraper Action:** Existing logic should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "Downloads", potentially with OS-specific sub-headings or link text (e.g., "Windows:", "Linux:", "Mac:").
+                *   **Scraper Action:** Critical to confirm structure. Implement OS-based prioritization (Win/Linux first). Scraper must identify which links belong to which OS. This page might be a good test for Mac links if present, and how they should be handled (ignored if Win/Linux exist).
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler or header.
+                *   **Scraper Action:** Verify existing changelog logic.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items.
+                *   **Scraper Action:** Verify current searches.
+
+*   **URL 4: `https://f95zone.to/threads/adored-by-the-devil-v0-12f-empiric.140107/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Adored by the Devil [v0.12f] [Empiric]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Adored by the Devil"
+                    *   Version: "[v0.12f]" (Note: "v" prefix, letter suffix)
+                    *   Author: "[Empiric]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy.
+            *   **Tags (`div.tagGroup a.tagItem`):** Present.
+                *   **Scraper Action:** Existing logic should be sufficient.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "Empiric" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body has `<strong>Developer:</strong> Empiric`.
+                *   **Scraper Action:** Confirm/enhance `<strong>Developer:</strong> [Name]` search.
+            *   **Version (in post):** "[v0.12f]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body has `<strong>Version:</strong> 0.12f`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for "Version" text patterns. Ensure version parsing handles "v" prefix and alphanumeric versions like "0.12f".
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify "Release Date:" search.
+                *   **Scraper Action (Thread Updated):** Check post metadata.
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement/Verify "OS:", "Platform:" search.
+            *   **Overview/Full Description:** Main text content.
+                *   **Scraper Action:** Existing logic should apply.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze standard download sections.
+                *   **Scraper Action:** Crucial: implement OS-based prioritization (Win/Linux preferred). Verify how OS is indicated for links/sections.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for spoiler or header.
+                *   **Scraper Action:** Existing logic should apply; verify.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items.
+                *   **Scraper Action:** Test current `<dl>`/text searches.
+
+*   **URL 5: `https://f95zone.to/threads/artemis-v0-6-1b-digi-b.77680/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Artemis [v0.6.1b] [Digi.B]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Artemis"
+                    *   Version: "[v0.6.1b]" (Note: "v" prefix, multi-part version with letter)
+                    *   Author: "[Digi.B]" (Note: period in author name)
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy.
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic should be sufficient.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "Digi.B" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains `<strong>Developer:</strong> Digi.B`.
+                *   **Scraper Action:** Confirm and enhance logic for `<strong>Developer:</strong> [Name]`. Ensure it handles names with periods.
+            *   **Version (in post):** "[v0.6.1b]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains `<strong>Version:</strong> 0.6.1b`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for "Version" textual patterns. Ensure version parsing handles complex versions like "v0.6.1b".
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:" patterns.
+                *   **Scraper Action (Thread Updated):** Check post metadata.
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** Main text content.
+                *   **Scraper Action:** Existing logic should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Mac:", with links.
+                *   **Scraper Action:** Confirm download section structure. Implement/Verify OS-based prioritization (Win/Linux preferred).
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for spoiler or header.
+                *   **Scraper Action:** Existing logic should be generally applicable.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested.
+
+*   **URL 6: `https://f95zone.to/threads/being-a-dik-v0-11-1-drpinkcake.25332/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Being a DIK [v0.11.1] [DrPinkCake]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Being a DIK"
+                    *   Version: "[v0.11.1]" (Note: "v" prefix, multi-part version)
+                    *   Author: "[DrPinkCake]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy.
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic should be sufficient.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "DrPinkCake" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains `<strong>Developer:</strong> DrPinkCake`.
+                *   **Scraper Action:** Confirm and enhance logic for `<strong>Developer:</strong> [Name]`.
+            *   **Version (in post):** "[v0.11.1]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains `<strong>Version:</strong> 0.11.1`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for "Version" textual patterns.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:" patterns.
+                *   **Scraper Action (Thread Updated):** Check post metadata.
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:" patterns.
+            *   **Overview/Full Description:**
+                *   **Scraper Action:** Existing logic should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze distinct download sections/links for PC (Windows/Linux), Mac, and Android.
+                *   **Scraper Action:** Test OS-based prioritization. Ensure it correctly identifies Win/Linux links, and handles Mac/Android as per rules (ignore if Win/Linux present).
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler or header.
+                *   **Scraper Action:** Existing changelog logic should be robust.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested.
+
+*   **URL 7: `https://f95zone.to/threads/color-of-my-sound-ch-3-finale-v6-gallant-trombe.95142/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Color of My Sound [Ch. 3 Finale (v6)] [Gallant Trombe]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Color of My Sound"
+                    *   Version: "[Ch. 3 Finale (v6)]" (Note: Complex version string with chapter info and "v" prefix)
+                    *   Author: "[Gallant Trombe]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy.
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "Gallant Trombe" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains `<strong>Developer:</strong> Gallant Trombe`.
+                *   **Scraper Action:** Confirm and enhance logic for `<strong>Developer:</strong> [Name]`.
+            *   **Version (in post):** "[Ch. 3 Finale (v6)]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check if post body contains `<strong>Version:</strong> Chapter 3 Finale (v6)` or similar.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for "Version" textual patterns. Ensure version parsing is robust enough for complex strings like "Ch. 3 Finale (v6)", potentially extracting "v6" as the core version if a simpler form is needed, or keeping the full string. This requires defining the desired version format.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:" patterns.
+                *   **Scraper Action (Thread Updated):** Check post metadata.
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** Main text content.
+                *   **Scraper Action:** Existing logic should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze clear download sections.
+                *   **Scraper Action:** Confirm download section structure and rigorously apply OS-based prioritization (Win/Linux preferred).
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for spoiler or header for changelog.
+                *   **Scraper Action:** Existing changelog logic should be tested.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested.
+
+*   **URL 8: `https://f95zone.to/threads/contagion-crisis-v0-5-0-welovemonsters.199939/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Contagion Crisis [v0.5.0] [WeLoveMonsters]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Contagion Crisis"
+                    *   Version: "[v0.5.0]" (Note: "v" prefix, standard semantic versioning)
+                    *   Author: "[WeLoveMonsters]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy.
+            *   **Tags (`div.tagGroup a.tagItem`):** Present.
+                *   **Scraper Action:** Existing logic should be sufficient.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "WeLoveMonsters" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains `<strong>Developer:</strong> WeLoveMonsters`.
+                *   **Scraper Action:** Confirm/enhance logic for `<strong>Developer:</strong> [Name]`.
+            *   **Version (in post):** "[v0.5.0]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains `<strong>Version:</strong> 0.5.0`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for "Version" textual patterns.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search.
+                *   **Scraper Action (Thread Updated):** Check post metadata.
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Platform:</strong> Windows, Linux`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:".
+            *   **Overview/Full Description:** Main text content.
+                *   **Scraper Action:** Existing logic should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC (Windows/Linux):".
+                *   **Scraper Action:** Verify download section structure. Implement OS-based prioritization.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler or header.
+                *   **Scraper Action:** Existing logic should be robust.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested.
+
+*   **URL 9: `https://f95zone.to/threads/crimson-high-v0-41-1-vertigo.94642/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Crimson High [v0.41.1] [Vertigo]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Crimson High"
+                    *   Version: "[v0.41.1]" (Note: "v" prefix, multi-part version)
+                    *   Author: "[Vertigo]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed from typical structure.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "Vertigo" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, search for explicit `<strong>Developer:</strong> Vertigo` or similar.
+                *   **Scraper Action:** Confirm and enhance logic for finding `<strong>Developer:</strong> [Name]` patterns. Prioritize if found.
+            *   **Version (in post):** "[v0.41.1]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, search for explicit `<strong>Version:</strong> 0.41.1` or similar in the post body.
+                *   **Scraper Action:** Prioritize title parsing for version. Enhance search for "Version" textual patterns in `bbWrapper` as a fallback or supplement.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, search for `<strong>Release Date:</strong> YYYY-MM-DD` or similar.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc.
+                *   **Scraper Action (Thread Updated):** Investigate post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, search for explicit `<strong>Platform:</strong> Windows, Linux, Mac` or `<strong>OS:</strong> ...`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:", etc., within the post body.
+            *   **Overview/Full Description:** The main text content preceding download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should generally apply. Verify with this page's structure.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, carefully examine the structure of download sections. Look for headers like "DOWNLOADS", "PC:", "Windows:", "Linux:", "Mac:", "Android:" and how links are presented under them.
+                *   **Scraper Action:** This is crucial. Confirm the structure. Implement the OS-based prioritization from `scraper_findings.txt`: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. The scraper must accurately identify which links belong to which OS.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, look for spoiler buttons with "Changelog" text or headers like "Changelog", "What's New".
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, look for `<dl>` lists containing these terms or bolded items like `<strong>Language:</strong> English`, `<strong>Censored:</strong> Uncensored`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and enhanced if new patterns are found.
+
+*   **URL 10: `https://f95zone.to/threads/cross-realms-v0-3-0-public-duskduck.197127/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Cross Realms [v0.3.0 Public] [DuskDuck]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Cross Realms"
+                    *   Version: "[v0.3.0 Public]" (Note: "v" prefix, multi-part version, "Public" suffix)
+                    *   Author: "[DuskDuck]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "DuskDuck" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if the post body contains a clear `<strong>Developer:</strong> DuskDuck` or similar pattern.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` patterns. Prioritize this if found.
+            *   **Version (in post):** "[v0.3.0 Public]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if the post body contains `<strong>Version:</strong> 0.3.0 Public` or similar.
+                *   **Scraper Action:** Prioritize title parsing for version. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure parsing handles "v" prefix, multi-part versions, and suffixes like "Public".
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for `<strong>Release Date:</strong> YYYY-MM-DD` or similar.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android` or `<strong>OS:</strong> ...`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable. Test for robustness.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", etc., with their respective links.
+                *   **Scraper Action:** Crucial: Confirm the structure of download sections. Implement/Verify OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. Scraper needs to identify link OS by section headers or link text clues.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog", a header like "## Changelog", or similar patterns.
+                *   **Scraper Action:** Existing changelog logic is likely robust; confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items (e.g., `<strong>Language:</strong> English`).
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 11: `https://f95zone.to/threads/desert-stalker-v0-18-3-zetan.68105/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Desert Stalker [v0.18.3] [Zetan]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Desert Stalker"
+                    *   Version: "[v0.18.3]" (Note: "v" prefix, multi-part version)
+                    *   Author: "[Zetan]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** The name "Zetan" is in the title. Looking for a specific "**Developer:**" label in the post.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if a line like `<strong>Developer:</strong> Zetan` or similar exists.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** Version "[v0.18.3]" is in the title. Checking for explicit "**Version:**" or similar in the post.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Version:</strong> 0.18.3` or `<strong>Latest Release:</strong> v0.18.3`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure it handles "v" prefix and multi-part versions.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable. Test for robustness.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", "Mac:" with links. Note how OS is indicated for each link or link group.
+                *   **Scraper Action:** This is critical. Must confirm the structure of download sections and implement the OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. The scraper needs to identify which links belong to which OS, potentially by looking at section headers (e.g., "Windows Downloads", "PC Version") or link text clues (e.g., "[WIN]", "_pc", ".exe", "[LINUX]", ".sh", "[MAC]", ".dmg", "[ANDROID]", ".apk").
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" or a header like "What's New".
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items (e.g., `<strong>Language:</strong> English`, `<strong>Censored:</strong> Uncensored`).
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and enhanced if new patterns are found.
+
+*   **URL 12: `https://f95zone.to/threads/eruption-imminent-v0-5-1-morriganrae.160930/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Eruption Imminent [v0.5.1] [MorriganRae]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Eruption Imminent"
+                    *   Version: "[v0.5.1]" (Note: "v" prefix, multi-part version)
+                    *   Author: "[MorriganRae]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "MorriganRae" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if the post body contains `<strong>Developer:</strong> MorriganRae` or similar.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** "[v0.5.1]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Version:</strong> 0.5.1` or similar.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure it handles "v" prefixes and multi-part versions.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", with links.
+                *   **Scraper Action:** This is critical. Must confirm the structure of download sections and implement the OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. The scraper needs to identify which links belong to which OS, potentially by looking at section headers or link text clues.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" or a header.
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested.
+
+*   **URL 13: `https://f95zone.to/threads/eternum-v0-8-5-public-caribdis.93340/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Eternum [v0.8.5 Public] [Caribdis]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Eternum"
+                    *   Version: "[v0.8.5 Public]" (Note: "v" prefix, multi-part version, "Public" suffix)
+                    *   Author: "[Caribdis]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "Caribdis" is in the title. Check for a specific "**Developer:**" label in the post.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if a line like `<strong>Developer:</strong> Caribdis` or similar exists.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** Version "[v0.8.5 Public]" is in the title. Check for explicit "**Version:**" or similar in the post.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Version:</strong> 0.8.5 Public` or `<strong>Latest Release:</strong> v0.8.5 Public`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure it handles "v" prefix, multi-part versions, and suffixes like "Public".
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable. Confirm no critical sections are missed.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", "Mac:", "Linux:" with links.
+                *   **Scraper Action:** Critical. Confirm the structure of download sections. Implement OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. Scraper needs to identify link OS by section headers or link text clues (e.g., "[WIN]", "[PC]", ".exe", "[LINUX]", ".sh", "[MAC]", ".dmg", "[ANDROID]", ".apk"). Pay attention to how different game versions might be presented within the download section.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" or a header like "CHANGELOG".
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and enhanced if needed for these specific fields.
+
+*   **URL 14: `https://f95zone.to/threads/friends-in-need-ch-1-remake-v0-25-neonghosts.112500/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Friends in Need [Ch.1 Remake / v0.25] [NeonGhosts]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Friends in Need"
+                    *   Version: "[Ch.1 Remake / v0.25]" (Note: Complex version string with chapter info, slash, and "v" prefix)
+                    *   Author: "[NeonGhosts]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "NeonGhosts" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if the post body contains `<strong>Developer:</strong> NeonGhosts` or similar.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** "[Ch.1 Remake / v0.25]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if the post body contains `<strong>Version:</strong> Ch.1 Remake / v0.25` or similar.
+                *   **Scraper Action:** Prioritize title parsing for version. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure parsing is robust enough for complex strings like "Ch.1 Remake / v0.25", potentially extracting "v0.25" as the core version. Define desired version format.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", "Mac:" with links.
+                *   **Scraper Action:** Critical. Confirm the structure of download sections. Implement OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. The scraper needs to identify which links belong to which OS by section headers or link text clues.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" or a header like "CHANGELOG".
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 15: `https://f95zone.to/threads/harem-hotel-v0-18-2-runey.12760/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Harem Hotel [v0.18.2] [Runey]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Harem Hotel"
+                    *   Version: "[v0.18.2]" (Note: "v" prefix, multi-part version)
+                    *   Author: "[Runey]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "Runey" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if the post body contains `<strong>Developer:</strong> Runey` or similar links/text.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` patterns or developer links. Prioritize this over title inference if found.
+            *   **Version (in post):** "[v0.18.2]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if the post body contains `<strong>Version:</strong> 0.18.2` or similar.
+                *   **Scraper Action:** Prioritize title parsing for version. Enhance search for "Version", "Latest Version", etc., textual patterns in `bbWrapper`.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for `<strong>Release Date:</strong> YYYY-MM-DD` or similar.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android` or `<strong>OS:</strong> ...`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable. Test for robustness.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", "Mac:" with their respective links. This page is known for many download links and versions.
+                *   **Scraper Action:** Critical. Confirm the structure of download sections. Implement/Verify OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. Scraper needs to identify link OS by section headers or link text clues (e.g., "[WIN]", "[PC]", ".exe", "[LINUX]", ".sh", "[MAC]", ".dmg", "[ANDROID]", ".apk"). Pay attention to how different game versions might be presented within the download section.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog", a header like "## Changelog", or similar patterns.
+                *   **Scraper Action:** Existing changelog logic is likely robust; confirm with this page's structure (likely multiple changelog entries within spoilers).
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items (e.g., `<strong>Language:</strong> English`, `<strong>Censored:</strong> Uncensored`).
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested.
+
+*   **URL 16: `https://f95zone.to/threads/hooked-v0-4-5-blenderknight.200060/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Hooked [v0.4.5] [BlenderKnight]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Hooked"
+                    *   Version: "[v0.4.5]" (Note: "v" prefix, multi-part version)
+                    *   Author: "[BlenderKnight]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "BlenderKnight" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if the post body contains `<strong>Developer:</strong> BlenderKnight` or similar.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** "[v0.4.5]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check for explicit `<strong>Version:</strong> 0.4.5` or similar in the post body.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure parsing handles "v" prefixes and multi-part versions.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable. Test for robustness.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", "Mac:", with links. Identify how OS specificity is marked (section headers, link text clues like "[WIN]", "[LINUX]", file extensions).
+                *   **Scraper Action:** CRITICAL. Confirm/refine logic to identify download sections and their associated OS. Implement OS-based prioritization (Win/Linux preferred; if none, take all; ignore Mac/Android if Win/Linux are present).
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, look for spoiler buttons with "Changelog" or headers like "CHANGELOG".
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 17: `https://f95zone.to/threads/inanna-revenge-ep-1-atemx-games.238419/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Inanna Revenge [Ep. 1] [AtemX Games]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Inanna Revenge"
+                    *   Version: "[Ep. 1]" (Note: "Ep." prefix, simple version number)
+                    *   Author: "[AtemX Games]" (Note: Multi-word author name)
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "AtemX Games" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check for a line like `<strong>Developer:</strong> AtemX Games`.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** "[Ep. 1]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Version:</strong> Episode 1` or similar.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure it handles "Ep." and other prefixes.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD` or `<strong>Latest release:</strong> [Date]`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", "Latest release:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android` or `<strong>OS:</strong> ...`.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Windows:", "Linux:", "Android:", with links. Pay attention to how links are grouped or labeled.
+                *   **Scraper Action:** This is critical. Must confirm the structure of download sections and implement the OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. The scraper needs to identify which links belong to which OS, potentially by looking at section headers (e.g., "Windows Downloads") or link text clues (e.g., "[WIN]", ".exe", "Linux", "Android").
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" or a header like "What's new?".
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 18: `https://f95zone.to/threads/lessons-in-love-v0-49-0-selebus.48158/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Lessons in Love [v0.49.0] [Selebus]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Lessons in Love"
+                    *   Version: "[v0.49.0]" (Note: "v" prefix, standard semantic versioning)
+                    *   Author: "[Selebus]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "Selebus" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if the post body contains `<strong>Developer:</strong> Selebus` or similar links/text for the developer.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` patterns or developer links. Prioritize this over title inference if found.
+            *   **Version (in post):** "[v0.49.0]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if the post body contains `<strong>Version:</strong> 0.49.0` or similar.
+                *   **Scraper Action:** Prioritize title parsing for version. Enhance search for "Version", "Latest Version", etc., textual patterns in `bbWrapper`.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for `<strong>Release Date:</strong> YYYY-MM-DD` or similar.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android` or `<strong>OS:</strong> ...`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable. Test for robustness.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", "Mac:" with their respective links. This page is known for numerous download options and mirrors.
+                *   **Scraper Action:** Critical. Confirm the structure of download sections. Implement/Verify OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. Scraper needs to identify link OS by section headers (e.g., "Windows Downloads," "PC Downloads") or link text clues (e.g., "[WIN]", "[PC]", ".exe", "[LINUX]", ".sh", "[MAC]", ".dmg", "[ANDROID]", ".apk"). Pay close attention to how different game versions or mirrors are presented within the download section.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog", a header like "## Changelog", or similar patterns. This page likely has extensive changelogs.
+                *   **Scraper Action:** Existing changelog logic should be robust; confirm with this page's structure (likely multiple changelog entries within spoilers or dedicated sections).
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items (e.g., `<strong>Language:</strong> English`, `<strong>Censored:</strong> Uncensored`).
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested.
+
+*   **URL 19: `https://f95zone.to/threads/lucky-paradox-v0-10-0-stawer.33740/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Lucky Paradox [v0.10.0] [Stawer]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Lucky Paradox"
+                    *   Version: "[v0.10.0]" (Note: "v" prefix, standard semantic versioning)
+                    *   Author: "[Stawer]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** The name "Stawer" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if a line like `<strong>Developer:</strong> Stawer` or similar exists in the post body.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** Version "[v0.10.0]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check for explicit `<strong>Version:</strong> 0.10.0` or similar in the post body.
+                *   **Scraper Action:** Prioritize title parsing for version. Enhance search for various "Version" textual patterns (e.g., "Latest Version:", "Game Version:") in `bbWrapper`. Ensure it handles "v" prefix.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, look for patterns like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Initial Release:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, search for a section like `<strong>OS:</strong> Windows, Linux, Mac, Android` or `<strong>Platforms:</strong> ...`.
+                *   **Scraper Action:** Implement/Verify search for "OS:", "Platform(s):", "Supported Systems:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable. Confirm against this page.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", "Mac:", including links and any surrounding text that indicates OS.
+                *   **Scraper Action:** Critical. Confirm structure of download sections. Implement the OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. The scraper needs to identify which links belong to which OS, potentially by looking at section headers (e.g., "Windows Downloads", "Linux Version") or link text/URL clues (e.g., "[WIN]", "-pc.zip", "/android/").
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" or a header like "What's New:".
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure (e.g., direct text, spoiler, separate linked page).
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 20: `https://f95zone.to/threads/moonripple-lake-v0-4-1-bcg.220933/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Moonripple Lake [v0.4.1] [BCG]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Moonripple Lake"
+                    *   Version: "[v0.4.1]" (Note: "v" prefix, standard multi-part version)
+                    *   Author: "[BCG]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "BCG" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check for a line like `<strong>Developer:</strong> BCG` or similar.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** Version "[v0.4.1]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Version:</strong> 0.4.1` or similar.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure version parsing handles "v" prefix and standard versions.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", "Last Update:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", "Supports:", etc.
+            *   **Overview/Full Description:** Main text content.
+                *   **Scraper Action:** Existing logic should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", link text (e.g., "[WIN]", "[LINUX]", "[MAC]", "[ANDROID]").
+                *   **Scraper Action:** Crucial. Confirm structure. Implement OS-based prioritization (Win/Linux preferred; if none, all). Scraper must identify link OS via section headers or link text.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for spoiler with "Changelog" or a header.
+                *   **Scraper Action:** Confirm existing logic.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 21: `https://f95zone.to/threads/origin-story-v0-7-0-jdor.183779/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Origin Story [v0.7.0] [JDor]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Origin Story"
+                    *   Version: "[v0.7.0]" (Note: "v" prefix, standard semantic versioning)
+                    *   Author: "[JDor]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** The name "JDor" is in the title. Looking for a specific "**Developer:**" label in the post.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if a line like `<strong>Developer:</strong> JDor` or similar exists.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** Version "[v0.7.0]" is in the title. Checking for explicit "**Version:**" or similar in the post.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Version:</strong> 0.7.0` or `<strong>Latest Release:</strong> 0.7.0`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", with links.
+                *   **Scraper Action:** This is critical. Must confirm the structure of download sections and implement the OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. The scraper needs to identify which links belong to which OS, potentially by looking at section headers (e.g., "Windows Downloads") or link text clues (e.g., "[WIN]", ".exe").
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" or a header.
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 22: `https://f95zone.to/threads/pale-carnations-ch-4-up-5-public-mutt-jeff.50281/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Pale Carnations [Ch.4 - Up.5 Public] [Mutt & Jeff]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Pale Carnations"
+                    *   Version: "[Ch.4 - Up.5 Public]" (Note: Complex version string with multiple parts, "Ch.", "Up.", and "Public" keywords)
+                    *   Author: "[Mutt & Jeff]" (Note: "&" in author name)
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "Mutt & Jeff" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if a line like `<strong>Developer:</strong> Mutt & Jeff` or similar exists.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Ensure it handles names with "&".
+            *   **Version (in post):** "[Ch.4 - Up.5 Public]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Version:</strong> Chapter 4 - Update 5 Public` or similar variations.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure it handles complex version strings as noted above.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", and link text/attributes.
+                *   **Scraper Action:** Critical. Confirm download section structures and implement the OS-based prioritization (Win/Linux first; if none, all; ignore Mac/Android if Win/Linux exist). Scraper needs to identify OS for links (section headers, link text clues like "[WIN]", file extensions).
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" or a relevant header.
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 23: `https://f95zone.to/threads/projekt-passion-spin-off-v0-2-classy-lemon.119199/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Projekt Passion Spin-Off [v0.2] [Classy Lemon]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Projekt Passion Spin-Off"
+                    *   Version: "[v0.2]" (Note: "v" prefix, simple version)
+                    *   Author: "[Classy Lemon]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "Classy Lemon" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains a pattern like `<strong>Developer:</strong> Classy Lemon`.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** "[v0.2]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains a pattern like `<strong>Version:</strong> 0.2`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure it handles simple versions like "0.2".
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", with links.
+                *   **Scraper Action:** This is critical. Must confirm the structure of download sections and implement the OS-based prioritization: Win/Linux links first. If none, take all. Ignore Mac/Android if Win/Linux exist. The scraper needs to identify which links belong to which OS, potentially by looking at section headers (e.g., "Windows Downloads") or link text clues (e.g., "[WIN]", ".exe").
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" or a header.
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 24: `https://f95zone.to/threads/realm-invader-ep-2-p1-invader-gary.120317/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Realm Invader [Ep.2 P1] [Invader Gary]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Realm Invader"
+                    *   Version: "[Ep.2 P1]" (Note: "Ep." prefix, multi-part version with "P")
+                    *   Author: "[Invader Gary]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** The name "Invader Gary" is in the title. Checking for a specific "<strong>Developer:</strong>" label in the post.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if a line like `<strong>Developer:</strong> Invader Gary` or similar exists.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** Version "[Ep.2 P1]" is in the title. Checking for explicit "<strong>Version:</strong>" or similar in the post.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Version:</strong> Ep.2 P1` or similar.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure it handles complex version formats like "Ep.2 P1".
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", etc. This is important for general OS info even if not directly tied to download links initially.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable. Confirm against this page's layout.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", "Mac:", and the links/text clues within them (e.g., "[WIN]", "[LINUX]", ".apk", ".dmg").
+                *   **Scraper Action:** This remains a critical area. Confirm the structure of download sections. The scraper must accurately identify links for different OS (Windows, Linux, Mac, Android) and then apply the prioritization: Win/Linux links first. If none, take all available links. Ignore Mac/Android links IF Win or Linux links are present.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for a spoiler button with "Changelog" in its text, or a distinct header like "### Changelog ###".
+                *   **Scraper Action:** Existing changelog logic is likely robust, but verify with this specific page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 25: `https://f95zone.to/threads/that-new-teacher-v0-7-0-rogueone.171128/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "That New Teacher [v0.7.0] [RogueOne]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "That New Teacher"
+                    *   Version: "[v0.7.0]" (Note: "v" prefix, standard semantic versioning)
+                    *   Author: "[RogueOne]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "RogueOne" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if a line like `<strong>Developer:</strong> RogueOne` or similar exists in the post body.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** "[v0.7.0]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, confirm if post body contains explicit version text like `<strong>Version:</strong> 0.7.0`.
+                *   **Scraper Action:** Prioritize title parsing. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure version parsing handles "v" prefix and standard semantic versions.
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   **Scraper Action (Thread Updated):** Reiterate need to check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android` or similar.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", etc.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable. Confirm no new section delimiters interfere.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", etc., and the links within. Pay attention to how OS is indicated (section headers, link text).
+                *   **Scraper Action:** This remains critical. Confirm structure and implement/refine OS-based prioritization (Win/Linux first; if none, all; ignore Mac/Android if Win/Linux exist). The scraper must robustly identify OS for each link.
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for spoiler buttons with "Changelog" or headers like "What's New:".
+                *   **Scraper Action:** Existing changelog logic is likely robust but confirm with this page's structure.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*   **URL 26: `https://f95zone.to/threads/worlds-crossing-academy-v1-4-5-0-teamemberwings.86666/`**
+    *   **Status:** Analysis based on HTML retrieved for this URL.
+    *   **Observations & Scraper Actions:**
+        *   **Header Area:**
+            *   **Title String (`h1.p-title-value`):** Contains "Worlds Crossing Academy [v1.4.5.0] [TeamEmberWings]".
+                *   **Scraper Action:** Continue refining title parsing for:
+                    *   Game Name: "Worlds Crossing Academy"
+                    *   Version: "[v1.4.5.0]" (Note: "v" prefix, four-part semantic versioning)
+                    *   Author: "[TeamEmberWings]"
+            *   **Game Type/Engine in Header:** No distinct labeled fields observed.
+                *   **Scraper Action:** Continue with existing strategy (tags, title/description inference).
+            *   **Tags (`div.tagGroup a.tagItem`):** Present and contain relevant tags.
+                *   **Scraper Action:** Existing logic for `div.tagGroup` should work.
+        *   **Main Post Content (`article.message--post div.bbWrapper`):**
+            *   **Developer:** "TeamEmberWings" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Developer:</strong> TeamEmberWings` or similar patterns.
+                *   **Scraper Action:** Confirm and enhance logic to find `<strong>Developer:</strong> [Name]` or similar patterns. Prioritize this over title inference if found.
+            *   **Version (in post):** "[v1.4.5.0]" is in the title.
+                *   *Live HTML Check:* Based on fetched HTML, check for `<strong>Version:</strong> 1.4.5.0` or similar in the post body.
+                *   **Scraper Action:** Prioritize title parsing for version. Enhance search for various "Version" textual patterns in `bbWrapper`. Ensure version parsing handles "v" prefix and multi-part versions like "1.4.5.0".
+            *   **Release Date / Thread Updated:**
+                *   *Live HTML Check (Release Date):* Based on fetched HTML, check for a line like `<strong>Release Date:</strong> YYYY-MM-DD`.
+                *   **Scraper Action (Release Date):** Implement/Verify search for "Release Date:", "Released:", etc., patterns.
+                *   *Live HTML Check (Thread Updated):* Check post metadata (e.g., `<time>` tags, thread-level last update timestamp).
+                *   **Scraper Action (Thread Updated):** Locate the definitive element for "last updated" for the thread.
+            *   **OS Listing (General):**
+                *   *Live HTML Check:* Based on fetched HTML, check for a section like `<strong>Platform:</strong> Windows, Linux, Mac, Android`.
+                *   **Scraper Action:** Implement search for "OS:", "Platform:", etc., within `bbWrapper`.
+            *   **Overview/Full Description:** The main text content before download/changelog sections.
+                *   **Scraper Action:** Existing logic of reading `bbWrapper` children should be generally applicable.
+            *   **Download Sections & OS Specificity:**
+                *   *Live HTML Check:* Based on fetched HTML, analyze sections like "DOWNLOADS", "PC:", "Android:", and the links within them.
+                *   **Scraper Action:** Critically important: Implement the OS-based prioritization (Win/Linux preferred; if not present, take all; ignore Mac/Android if Win/Linux exist). The scraper must identify which links belong to which OS (e.g., via section headers or link text clues).
+            *   **Changelog:**
+                *   *Live HTML Check:* Based on fetched HTML, check for spoiler buttons with "Changelog" or a header like "### Changelog".
+                *   **Scraper Action:** Existing changelog logic should be tested and confirmed.
+            *   **Language/Censored:**
+                *   *Live HTML Check:* Based on fetched HTML, check for `<dl>` lists or bolded items like `<strong>Language:</strong> English` or `<strong>Censored:</strong> No`.
+                *   **Scraper Action:** Current `<dl>` and text pattern searches should be tested and refined if necessary.
+
+*(Further URLs will be analyzed and appended here)*

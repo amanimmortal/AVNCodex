@@ -1,0 +1,65 @@
+F95Zone Credentials for Testing:
+
+Username: amanimmortal
+Password: 27L5ueFMUZ4NmAz
+
+A Subsection of game URLs for testing:
+
+https://f95zone.to/threads/u4ia-ep3-11p-driftygames.158858/
+https://f95zone.to/threads/a-foreign-world-ep-6-5-highborntiger.135123/
+https://f95zone.to/threads/a-house-in-the-rift-v0-7-20r1-zanith.29627/
+https://f95zone.to/threads/adored-by-the-devil-v0-12f-empiric.140107/
+https://f95zone.to/threads/artemis-v0-6-1b-digi-b.77680/
+https://f95zone.to/threads/being-a-dik-v0-11-1-drpinkcake.25332/
+https://f95zone.to/threads/color-of-my-sound-ch-3-finale-v6-gallant-trombe.95142/
+https://f95zone.to/threads/contagion-crisis-v0-5-0-welovemonsters.199939/
+https://f95zone.to/threads/crimson-high-v0-41-1-vertigo.94642/
+https://f95zone.to/threads/cross-realms-v0-3-0-public-duskduck.197127/
+https://f95zone.to/threads/desert-stalker-v0-18-3-zetan.68105/
+https://f95zone.to/threads/eruption-imminent-v0-5-1-morriganrae.160930/
+https://f95zone.to/threads/eternum-v0-8-5-public-caribdis.93340/
+https://f95zone.to/threads/friends-in-need-ch-1-remake-v0-25-neonghosts.112500/
+https://f95zone.to/threads/harem-hotel-v0-18-2-runey.12760/
+https://f95zone.to/threads/hooked-v0-4-5-blenderknight.200060/
+https://f95zone.to/threads/inanna-revenge-ep-1-atemx-games.238419/
+https://f95zone.to/threads/lessons-in-love-v0-49-0-selebus.48158/
+https://f95zone.to/threads/lucky-paradox-v0-10-0-stawer.33740/
+https://f95zone.to/threads/moonripple-lake-v0-4-1-bcg.220933/
+https://f95zone.to/threads/origin-story-v0-7-0-jdor.183779/
+https://f95zone.to/threads/pale-carnations-ch-4-up-5-public-mutt-jeff.50281/
+https://f95zone.to/threads/projekt-passion-spin-off-v0-2-classy-lemon.119199/
+https://f95zone.to/threads/realm-invader-ep-2-p1-invader-gary.120317/
+https://f95zone.to/threads/that-new-teacher-v0-7-0-rogueone.171128/
+https://f95zone.to/threads/worlds-crossing-academy-v1-4-5-0-teamemberwings.86666/
+
+
+Sections we care about in a game page and what they might contain for scraping:
+
+div.uix_headerInner - These should always be the same, though it might not always have all elements.
+
+Game Type (Sometimes) - E.g. VN
+App/Program (Sometimes) - E.g. Ren'Py
+Title - E.g. Eternum
+Version - E.g. [v0.8.5 Public]
+Author - E.g. [Caribdis}
+Tags - E.g. 3dcg adventure ahegao animated big ass big tits blackmail cosplay creampie drugs footjob groping group sex handjob harem horror humor male domination male protagonist masturbation milf mobile game monster oral sex pov prostitution romance school setting sci-fi sex toys sexual harassment spanking teasing titfuck vaginal sex virgin voyeurism (Not an extensive list)
+
+
+The very first: <div class="message-main uix_messageContent js-quickEditTarget"> - These will be the most different between games, but they MOSTLY hold to a similar pattern. Rather than being completely different, it is MORE likely that one or more of these might simply be missing.
+
+Overview - E.g. You’re moving with your best friend to the city of Kredon, home to some of the best schools and universities in the country, to continue your studies. However, in Kredon, there’s only one thing everyone talks about: ETERNUM—the virtual, hyper-reality MMORPG game released a few years ago that revolutionized the world of technology.
+Thread Updated - E.g. 2025-01-14
+Release Date - E.g. 2025-01-14
+Developer - E.g. Caribdis Patreon - SubscribeStar - Itch.io - Discord - Twitter
+Censored - E.g. No
+Version - E.g. 0.8.5 Public
+OS - E.g.  Windows, Linux, Mac, Android
+Language - E.g.  English
+Other Games - E.g.  Once in a Lifetime
+Genre - This is mostly a replication of Tags from above
+Installation - This can be ignored
+Changelog - E.g. v0.8.5 Public Bugfixes v0.8.4 Grammar/text fixes Minor variable changes
+Developer Notes - Can be ignored 
+Fan Signatures - Can be ignored
+DOWNLOAD Win/Linux - This is where the download links will be, won't always have the Win/Linux, Windows, or other label as sometimes there is only one row provided. Download links will never be images, and will typically be something like google drive, gofile, mega, mixdrop, pixeldrain, etc. If they do exist, I only care about Win/Linux and possibly Extras. Ignore Mac and Android. Logic should follow that is those OS subsections do not exist give them all.
+Below the download links will be a section for screenshots, ALMOST ALL games have them. At this stage they can be ignored.
