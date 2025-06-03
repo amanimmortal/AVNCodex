@@ -675,10 +675,10 @@ def extract_game_data(game_thread_url, username=None, password=None):
         # 3. Author from post details (already in data['author'] or refined with title inference)
         # 4. Author inferred from title (only if data['author'] is still "Not found" or numeric post author was placeholder)
 
-        if developer_from_description_text != "Not found":
-            if data['author'] != developer_from_description_text:
-                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Prioritizing Developer from description ('{developer_from_description_text}') for Author over current ('{data['author']}').")
-                data['author'] = developer_from_description_text
+        developer_from_description_text = "Not found"
+        if data['author'] != developer_from_description_text:
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Prioritizing Developer from description ('{developer_from_description_text}') for Author over current ('{data['author']}').")
+            data['author'] = developer_from_description_text
         elif author_from_dl_list != "Not found":
             if data['author'] == "Not found" or data['author'].isdigit() or data['author'] == inferred_author_from_title: 
                 # Use DL if current is placeholder, numeric, or just the title inference
@@ -737,6 +737,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
         logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): After tags inference - Engine: {data['engine']}, Status: {data['status']}, Cens: {data['censorship']}")
 
         # --- ADDED: Parse full_description for more details as a fallback ---
+        developer_from_description_text = "Not found"
         if data['full_description']:
             desc_text_to_search = data['full_description'] # Use original casing for extraction, lower for matching
             desc_text_lower = desc_text_to_search.lower()
@@ -806,14 +807,9 @@ def extract_game_data(game_thread_url, username=None, password=None):
             else:
                 logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): OS pattern not found in description.")
 
-            # --- ADDED: Parse Developer from description (will be Step 4 for author, but logic is in description parsing area) ---
-            # This will run near the end of description parsing.
-            # The value from here should be high priority for data['author']
-            
             # --- Author Extraction - Step 4 (was 1 before): Developer from description (Highest Priority) ---
             # This is parsed within the full_description block later on.
             # We will capture it there and then use it to finalize author at the end of all parsing.
-            developer_from_description_text = "Not found" # Temp variable
 
             if not data['language'] or data['language'] == "Not found":
                 # Regex: "language" (optional 's'), optional colon, optional spaces/newlines, then capture group.
