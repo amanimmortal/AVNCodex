@@ -9,22 +9,15 @@ import logging
 logger_scraper = logging.getLogger(__name__) # Use __name__ for module-level logger
 
 # --- Playwright Login Function ---
-def login_to_f95zone(page, username, password):
+def login_to_f95zone(page, username, password, target_url_after_login=None):
     """
     Logs into F95zone using Playwright.
-    Assumes the page is already navigated to the login page or a page that redirects to login.
+    Assumes the page is already navigated to the login page.
+    If target_url_after_login is provided, navigates there and checks login status on that page.
     """
     try:
         logger_scraper.info("Login Attempt: Initiated.")
         
-        # --- ADDED: Check if already logged in on the current page --- 
-        # This check is done on the page provided to this function.
-        logger_scraper.info(f"Login Attempt: Current URL at start of login_to_f95zone: {page.url}")
-        if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
-            logger_scraper.info("Login Attempt: Already logged in (detected logout link, account element, or username link on current page). Skipping form fill/click.")
-            return True
-        # --- END ADDED CHECK ---
-
         page.fill("input[name='login']", username)
         logger_scraper.info("Login Attempt: Filled username.")
         page.fill("input[name='password']", password)
@@ -43,9 +36,17 @@ def login_to_f95zone(page, username, password):
         if login_button.count() > 0:
             button_to_click = login_button.first
             try:
-                logger_scraper.info(f"Login Attempt: Found login button. Attempting click now...")
+                logger_scraper.info("Login Attempt: Found login button. Attempting click now...")
                 button_to_click.click(timeout=25000) 
                 logger_scraper.info("Login Attempt: Playwright click() call for login button completed.")
+                # It's good to wait for some navigation or indicator that the login click has had an effect.
+                # This could be a specific element, or a general load state change.
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=15000) # Wait for DOM after click
+                    logger_scraper.info(f"Login Attempt: DOM loaded after login click. Current URL: {page.url}")
+                except Exception as e_dom_wait:
+                    logger_scraper.warning(f"Login Attempt: Timeout waiting for DOM load after login click. Current URL: {page.url}. Error: {e_dom_wait}")
+
             except Exception as e_click_wait:
                 logger_scraper.error(f"LOGIN ERROR: Error during the click action itself: {e_click_wait}")
                 return False
@@ -54,25 +55,91 @@ def login_to_f95zone(page, username, password):
             logger_scraper.error(f"LOGIN ERROR: Current URL when failing to find login button: {page.url}")
             return False
 
-        logger_scraper.info("Login Attempt: Waiting for login result indicator...")
-        try:
-            page.wait_for_selector(
-                "a[href='/logout/'], .blockMessage.blockMessage--error, a.p-navgroup-link--username", 
-                timeout=15000
-            )
-            logger_scraper.info(f"Login Attempt: Login result indicator found. Current URL: {page.url}")
-        except Exception as e_wait_indicator:
-            logger_scraper.warning(f"Login Attempt: Timeout or error waiting for login result indicator. Error: {e_wait_indicator}")
-            logger_scraper.info(f"Login Attempt: Current URL after login click attempt and wait for indicator: {page.url}")
-            # Even if wait times out, proceed to check selectors directly as a fallback
-
-        if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
-            logger_scraper.info("Login Attempt: Logout link or account element or username link found. Login appears successful.")
-            logger_scraper.info(f"Login Attempt: Current URL after successful login check: {page.url}")
-            return True
+        # Check for initial login success indicators on the page we landed on (often the homepage or a redirect)
+        logger_scraper.info(f"Login Attempt: Checking for login indicators on current page ({page.url}) after form submission.")
+        initial_login_success = False
+        # More specific check based on user-provided HTML for logged-in state
+        if page.query_selector("div.p-account span.p-navgroup-linkText") and page.query_selector("div.p-account span.p-navgroup-linkText").is_visible():
+            username_text = page.query_selector("div.p-account span.p-navgroup-linkText").text_content()
+            logger_scraper.info(f"Login Attempt: Initial indicators (username: '{username_text}') suggest login successful on {page.url}.")
+            initial_login_success = True
+        elif page.query_selector("a[href='/logout/']"):
+            logger_scraper.info(f"Login Attempt: Initial indicators (logout link) suggest login successful on {page.url}.")
+            initial_login_success = True
         else:
-            logger_scraper.error(f"Login Attempt: Login failed. No specific error message or success indicator found. URL after attempt: {page.url}")
+            logger_scraper.warning(f"Login Attempt: Initial login indicators NOT found on {page.url} after form submission. Checking for error messages.")
+            # Check for common error messages like "Incorrect password" or "User not found"
+            error_message_selectors = [
+                ".blockMessage.blockMessage--error", # General error block
+                "//div[contains(@class, 'blockMessage--error') and (contains(.,'Incorrect password') or contains(.,'not found'))]", # More specific XPath
+                "li.formRow-explain", # Sometimes errors appear in form explainers
+            ]
+            error_found = False
+            for selector in error_message_selectors:
+                error_element = None
+                if selector.startswith("//"):
+                    error_element = page.query_selector(selector) #bs4 like
+                else:
+                    error_element = page.locator(selector).first if page.locator(selector).count() > 0 else None
+                
+                if error_element and error_element.is_visible():
+                    error_text = error_element.text_content() # playwright way
+                    logger_scraper.error(f"LOGIN ERROR: Detected error message after login attempt: {error_text[:100]}")
+                    error_found = True
+                    break
+            if error_found:
+                return False # Definite login failure due to error message
+            # If no specific error message, but also no success indicators, it's ambiguous, but we'll treat as fail for now
+            logger_scraper.error(f"Login Attempt: Login failed on {page.url}. No specific error message, but no success indicators either.")
             return False
+
+        if not initial_login_success:
+            # This case should ideally be caught by the error message check above, but as a fallback:
+            logger_scraper.error(f"Login Attempt: Initial login indicators were not found on {page.url}, and no specific error message was caught. Assuming failure.")
+            return False
+
+        # If a target URL is provided, navigate there and re-verify login status
+        if target_url_after_login:
+            logger_scraper.info(f"Login Attempt: Initial login successful. Navigating to target URL: {target_url_after_login}")
+            try:
+                page.goto(target_url_after_login, wait_until="networkidle", timeout=45000)
+                logger_scraper.info(f"Login Attempt: Reached target URL. Current URL: {page.url}. Verifying login status.")
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
+                page.wait_for_timeout(3000) # Settle time
+
+                # Definitive check on the target page using refined selectors
+                logged_in_on_target = False
+                not_logged_in_on_target = False
+
+                # Check for positive login indicators first
+                if page.query_selector("div.p-account span.p-navgroup-linkText") and page.query_selector("div.p-account span.p-navgroup-linkText").is_visible():
+                    username_text_target = page.query_selector("div.p-account span.p-navgroup-linkText").text_content()
+                    logger_scraper.info(f"Login Attempt: CONFIRMED LOGGED IN on target page ({page.url}) based on username text: '{username_text_target}'.")
+                    logged_in_on_target = True
+                elif page.query_selector("a[href='/logout/']"):
+                    logger_scraper.info(f"Login Attempt: CONFIRMED LOGGED IN on target page ({page.url}) based on presence of logout link.")
+                    logged_in_on_target = True
+                
+                # If not confirmed logged in, check for explicit not logged in indicators
+                if not logged_in_on_target:
+                    if page.query_selector("a[href*='/login']") or page.query_selector("a[href*='/register']"):
+                        logger_scraper.warning(f"Login Attempt: DEFINITIVELY NOT LOGGED IN on target page ({page.url}). Found Login/Register buttons.")
+                        not_logged_in_on_target = True
+                
+                if logged_in_on_target:
+                    return True
+                elif not_logged_in_on_target:
+                    return False
+                else:
+                    logger_scraper.warning(f"Login Attempt: LOGIN INDETERMINATE on target page ({page.url}). No specific username/logout AND no Login/Register buttons. Assuming NOT logged in.")
+                    return False
+            except Exception as e_target_nav:
+                logger_scraper.error(f"Login Attempt: Error navigating to or checking target URL {target_url_after_login}: {e_target_nav}")
+                return False
+        else:
+            # If no target URL, success is based on initial indicators post-form submission
+            logger_scraper.info("Login Attempt: No target_url_after_login provided. Login success based on indicators on landing page after form submission.")
+            return True # initial_login_success was already true to reach here
 
     except Exception as e:
         logger_scraper.error(f"LOGIN ERROR: An unexpected error occurred during login: {e}", exc_info=True)
@@ -116,7 +183,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
     logger_scraper.info(f"EXTRACT_GAME_DATA: Starting extraction for: {game_thread_url}")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         context = browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         )
@@ -127,84 +194,60 @@ def extract_game_data(game_thread_url, username=None, password=None):
             try:
                 logger_scraper.info("EXTRACT_GAME_DATA: Navigating to login page (https://f95zone.to/login/login) to ensure fresh login attempt.")
                 page.goto("https://f95zone.to/login/login", wait_until="domcontentloaded", timeout=30000)
-                logger_scraper.info(f"EXTRACT_GAME_DATA: On login page. Current URL: {page.url}. Attempting login via login_to_f95zone function.")
+                logger_scraper.info(f"EXTRACT_GAME_DATA: On login page. Current URL: {page.url}. Attempting login via login_to_f95zone function, targeting game thread url directly.")
                 
-                # Call login_to_f95zone. This function will try to fill the form.
-                # Its return value is based on its own checks, but we'll re-verify on the game page.
-                login_function_returned_true = login_to_f95zone(page, username, password)
-                logger_scraper.info(f"EXTRACT_GAME_DATA: login_to_f95zone function returned: {login_function_returned_true}. Current URL after call: {page.url}")
+                # Call login_to_f95zone, passing the game_thread_url as the target for final login verification.
+                # The function will navigate to game_thread_url if initial login actions seem successful.
+                final_page_logged_in_status = login_to_f95zone(page, username, password, target_url_after_login=game_thread_url)
+                logger_scraper.info(f"EXTRACT_GAME_DATA: login_to_f95zone (targeting game page) returned: {final_page_logged_in_status}. Current URL: {page.url}")
 
-                # --- ADDED: Explicit check on current page immediately after login_to_f95zone returns ---
-                current_page_login_status_after_login_func = False
-                if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
-                    logger_scraper.info(f"EXTRACT_GAME_DATA: POST-LOGIN_FUNC CHECK (URL: {page.url}): Logout/account indicators FOUND. Login seems to have worked on this page.")
-                    current_page_login_status_after_login_func = True
-                else:
-                    logger_scraper.warning(f"EXTRACT_GAME_DATA: POST-LOGIN_FUNC CHECK (URL: {page.url}): Logout/account indicators NOT FOUND. Login may have failed or redirected to a non-logged-in page.")
-                # --- END ADDED CHECK ---
+                # The following blocks are now handled within login_to_f95zone or are no longer needed:
+                # - POST-LOGIN_FUNC CHECK (verification is now on target_url_after_login)
+                # - Navigate to base URL to help session cookies settle (target_url_after_login handles navigation)
+                # - Cookie saving/loading (direct navigation to target is preferred)
+                # - Separate navigation to game_thread_url (done by login_to_f95zone if target is provided)
+                # - Separate login check on game page (done by login_to_f95zone if target is provided)
 
-                # Regardless of what login_to_f95zone returned, navigate to the game thread
-                logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to game thread URL: {game_thread_url} AFTER login attempt and post-login_func check.")
-                page.goto(game_thread_url, wait_until="networkidle", timeout=45000) # Wait for network to be idle
-                logger_scraper.info(f"EXTRACT_GAME_DATA: Successfully navigated to {game_thread_url} (waited for networkidle). Current URL: {page.url}")
-                page.wait_for_load_state("domcontentloaded", timeout=10000) # Ensure DOM is loaded
-                page.wait_for_timeout(3000) # Extra wait for JS rendering
+                # We should already be on the game page if login_to_f95zone navigated there.
+                # If final_page_logged_in_status is false, it means login failed even on the target game page.
 
-                # Now, definitively check if logged in on the GAME PAGE
-                # Priority 1: Check for indicators that user is NOT logged in
-                login_button_on_game_page = page.query_selector("a[href*='/login']") # Common login link
-                register_button_on_game_page = page.query_selector("a[href*='/register']") # Common register link
-                # More specific selectors for F95zone login/register buttons if known, e.g., based on text or class
-                # Example: page.locator("a.button", has_text=re.compile(r"log in", re.IGNORECASE)).count() > 0 or \
-                #          page.locator("a.button", has_text=re.compile(r"register", re.IGNORECASE)).count() > 0
-
-                if login_button_on_game_page or register_button_on_game_page:
-                    logger_scraper.warning(f"EXTRACT_GAME_DATA: DEFINITIVELY NOT LOGGED IN on game page ({page.url}). Found Login/Register buttons.")
-                    final_page_logged_in_status = False
-                else:
-                    # Priority 2: If no explicit NOT logged in indicators, check for POSITIVE logged in indicators
-                    logger_scraper.info(f"EXTRACT_GAME_DATA: No obvious Login/Register buttons found on game page ({page.url}). Checking for positive login indicators (logout/account links).")
-                    if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
-                        logger_scraper.info(f"EXTRACT_GAME_DATA: CONFIRMED LOGGED IN on game page ({page.url}) based on presence of logout/account indicators.")
-                        final_page_logged_in_status = True
-                    else:
-                        logger_scraper.warning(f"EXTRACT_GAME_DATA: LOGIN INDETERMINATE on game page ({page.url}). No Login/Register buttons AND no Logout/Account indicators found. Assuming NOT logged in for restricted content.")
-                        final_page_logged_in_status = False # Treat as not logged in if indeterminate
-
-            except Exception as e_login_nav:
-                logger_scraper.error(f"EXTRACT_GAME_DATA: Error during login navigation or game page load: {e_login_nav}", exc_info=True)
+            except Exception as e_login_nav: # This might catch errors from login_to_f95zone if it raises something unexpected
+                logger_scraper.error(f"EXTRACT_GAME_DATA: Error during the overall login and navigation process: {e_login_nav}", exc_info=True)
+                final_page_logged_in_status = False # Ensure status reflects failure
                 # Try to take a screenshot even on error here to see the page state
                 timestamp = time.strftime("%Y%m%d-%H%M%S")
-                error_screenshot_path = f"/data/debug_screenshot_login_error_{timestamp}.png"
+                error_screenshot_path = f"/data/debug_screenshot_EXTRACT_error_{timestamp}.png"
                 try:
                     page.screenshot(path=error_screenshot_path, full_page=True)
                     logger_scraper.info(f"EXTRACT_GAME_DATA: Saved error screenshot to '{error_screenshot_path}'")
                 except Exception as es_err:
-                    logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to take error screenshot: {es_err}")
-                browser.close()
-                return None # Critical failure if login process errors out before game page check
+                    logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to take error screenshot during EXCEPTION: {es_err}")
+                # browser.close() # Don't close here yet, screenshot below might still be useful
+                # return None # Let it proceed to screenshot and then return None if html_content is bad
         else:
             logger_scraper.info("EXTRACT_GAME_DATA: No credentials provided. Proceeding as anonymous.")
             # Navigate to game page directly if no creds
             try:
-                logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to {game_thread_url} (anonymous).")
-                page.goto(game_thread_url, wait_until="domcontentloaded", timeout=30000)
+                logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to {game_thread_url} (anonymous). waited for networkidle")
+                page.goto(game_thread_url, wait_until="networkidle", timeout=45000)
                 logger_scraper.info(f"EXTRACT_GAME_DATA: Successfully navigated to {game_thread_url}. Current URL: {page.url}")
+                page.wait_for_load_state("domcontentloaded", timeout=10000) 
                 page.wait_for_timeout(2000) 
             except Exception as e_anon_nav:
                 logger_scraper.error(f"EXTRACT_GAME_DATA: Error navigating to game page {game_thread_url} (anonymous): {e_anon_nav}", exc_info=True)
-                browser.close()
-                return None
+                # browser.close() # Screenshot below
+                # return None
         
-        # --- Debug Screenshot (Moved after game page load and login check) ---
+        # --- Debug Screenshot (Taken on the page state after login attempt and navigation to game thread) ---
+        # This will show the state of game_thread_url, regardless of login success path.
         try:
             timestamp = time.strftime("%Y%m%d-%H%M%S")
-            screenshot_filename = f"debug_screenshot_gamepage_{timestamp}.png" # Clarified filename
+            screenshot_filename = f"debug_screenshot_gamepage_FINAL_{timestamp}.png"
             screenshot_path = f"/data/{screenshot_filename}" 
             page.screenshot(path=screenshot_path, full_page=True)
-            logger_scraper.info(f"EXTRACT_GAME_DATA: Saved debug screenshot (post login verification) to '{screenshot_path}'")
+            logger_scraper.info(f"EXTRACT_GAME_DATA: Saved FINAL debug screenshot to '{screenshot_path}'. Logged in: {final_page_logged_in_status}")
         except Exception as e_screenshot:
-            logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to take debug screenshot: {e_screenshot}")
+            logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to take FINAL debug screenshot: {e_screenshot}")
         # --- END Screenshot ---
 
         if not final_page_logged_in_status and (username and password):
