@@ -432,53 +432,74 @@ def extract_game_data(game_thread_url, username=None, password=None):
 
         # --- ADDED: Parse full_description for more details as a fallback ---
         if data['full_description']:
-            desc_text_lower = data['full_description'].lower()
+            desc_text_to_search = data['full_description'] # Use original casing for extraction, lower for matching
+            desc_text_lower = desc_text_to_search.lower()
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Attempting to parse details from full_description. Snippet: {desc_text_to_search[:300]}")
+
             # Language
             if not data['language'] or data['language'] == "Not found":
-                lang_match = re.search(r"language(?:s)?:\s*([\w\s,]+(?:and[\w\s,]+)*)", desc_text_lower, re.IGNORECASE)
+                # Regex: "language" (optional 's'), optional colon, optional spaces/newlines, then capture group.
+                # Capture group: word characters, spaces, commas, 'and'.
+                lang_match = re.search(r"language(?:s)?\\s*:\\s*([\\w\\s,]+(?:and[\\w\\s,]+)*)", desc_text_lower, re.IGNORECASE)
                 if lang_match:
-                    # Try to get original casing from the full_description based on match
                     try:
-                        original_lang_text = data['full_description'][lang_match.start(1):lang_match.end(1)]
+                        original_lang_text = desc_text_to_search[lang_match.start(1):lang_match.end(1)]
                         data['language'] = original_lang_text.strip()
-                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred language from description: {data['language']}")
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred language from description: '{data['language']}'")
                     except Exception as e_lang_extract:
-                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original language casing: {e_lang_extract}, using lower: {lang_match.group(1).strip()}")
+                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original language casing: {e_lang_extract}, using lower: '{lang_match.group(1).strip()}'")
                         data['language'] = lang_match.group(1).strip()
+                else:
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Language pattern not found in description.")
             
             # Censorship
             if not data['censorship'] or data['censorship'] == "Not found":
-                censorship_match = re.search(r"censored?:\s*(\w+)", desc_text_lower, re.IGNORECASE)
+                # Regex: "censored" (optional 'd'), optional colon, optional spaces/newlines, then capture group for the value.
+                # Capture group: one or more word characters (e.g., "Yes", "No", "Partial")
+                censorship_match = re.search(r"censor(?:ed)?\\s*:\\s*([\\w\\-]+)", desc_text_lower, re.IGNORECASE)
                 if censorship_match:
                     try:
-                        original_cens_text = data['full_description'][censorship_match.start(1):censorship_match.end(1)]
+                        original_cens_text = desc_text_to_search[censorship_match.start(1):censorship_match.end(1)]
                         data['censorship'] = original_cens_text.strip()
-                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred censorship from description: {data['censorship']}")
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred censorship from description: '{data['censorship']}'")
                     except Exception as e_cens_extract:
-                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original censorship casing: {e_cens_extract}, using lower: {censorship_match.group(1).strip()}")
+                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original censorship casing: {e_cens_extract}, using lower: '{censorship_match.group(1).strip()}'")
                         data['censorship'] = censorship_match.group(1).strip()
+                else:
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Censorship pattern not found in description.")
 
             # Version (if not found by title or dl list)
             if not data['version'] or data['version'] == "Not found":
-                version_desc_match = re.search(r"version:\s*([\w\.\-]+)", desc_text_lower, re.IGNORECASE)
+                # Regex: "version", optional colon, optional spaces/newlines, then capture group.
+                # Capture group: word chars, dots, hyphens (e.g., "0.1.2b", "1.0-final")
+                version_desc_match = re.search(r"version\\s*:\\s*([\\w\\.\\-]+)", desc_text_lower, re.IGNORECASE)
                 if version_desc_match:
                     try:
-                        original_ver_text = data['full_description'][version_desc_match.start(1):version_desc_match.end(1)]
+                        original_ver_text = desc_text_to_search[version_desc_match.start(1):version_desc_match.end(1)]
                         data['version'] = original_ver_text.strip()
-                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred version from description: {data['version']}")
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred version from description: '{data['version']}'")
                     except Exception as e_ver_extract:
-                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original version casing: {e_ver_extract}, using lower: {version_desc_match.group(1).strip()}")
+                        logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original version casing: {e_ver_extract}, using lower: '{version_desc_match.group(1).strip()}'")
                         data['version'] = version_desc_match.group(1).strip()
+                else:
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Version pattern not found in description.")
             
-            # OS (This is more for informational, not a primary field yet, but can be useful for tags or extended info)
-            # Could add to tags or a new "extra_info" field later if needed.
-            os_match = re.search(r"os:\s*([\w\s,]+(?:and[\w\s,]+)*)", desc_text_lower, re.IGNORECASE)
+            # OS
+            # Regex: "os", optional colon, optional spaces/newlines, then capture group.
+            # Capture group: word characters, spaces, commas, 'and'.
+            os_match = re.search(r"os\\s*:\\s*([\\w\\s,]+(?:and[\\w\\s,]+)*)", desc_text_lower, re.IGNORECASE)
             if os_match:
                 try:
-                    original_os_text = data['full_description'][os_match.start(1):os_match.end(1)]
-                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found OS info in description: {original_os_text.strip()}")
-                except:
-                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found OS info in description (lower): {os_match.group(1).strip()}")
+                    original_os_text = desc_text_to_search[os_match.start(1):os_match.end(1)]
+                    # This field is not directly stored in data['os'] yet, just logged for now.
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found OS info in description: '{original_os_text.strip()}'")
+                except Exception as e_os_extract:
+                    logger_scraper.warning(f"SCRAPER_DATA (URL: {game_thread_url}): Error extracting original OS casing: {e_os_extract}, using lower: '{os_match.group(1).strip()}'")
+                    logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Found OS info in description (lower): '{os_match.group(1).strip()}'")
+            else:
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): OS pattern not found in description.")
+        else:
+            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): No full_description available to parse for further details.")
         # --- END ADDED ---
 
         for key, value in data.items():
