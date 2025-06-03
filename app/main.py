@@ -741,6 +741,7 @@ def add_game_to_my_list(db_path: str,
         # ---- Fields for scraping decisions in add_game ----
         existing_description = None
         existing_scraper_last_run_at = None
+        logger.info(f"ADD_GAME_TO_MY_LIST (User: {user_id}, Game: {name_to_use}): Initializing, existing_description='{existing_description}', existing_scraper_last_run_at='{existing_scraper_last_run_at}'.") # ADDED LOG
         # ---- End Fields for scraping decisions ----
 
         # Try to get the game from the main 'games' table
@@ -755,6 +756,7 @@ def add_game_to_my_list(db_path: str,
             db_image_url = game_row[4] # This can be None
             existing_description = game_row[5] # Store existing description
             existing_scraper_last_run_at = game_row[6] # Store existing scrape timestamp
+            logger.info(f"ADD_GAME_TO_MY_LIST (User: {user_id}, Game: {name_to_use}): Found existing game in 'games' table. existing_description='{existing_description}', existing_scraper_last_run_at='{existing_scraper_last_run_at}'.") # ADDED LOG
             
             update_fields = []
             update_values = []
@@ -857,11 +859,13 @@ def add_game_to_my_list(db_path: str,
         should_scrape_details_on_add = False
         if game_id_in_db: # Ensure we have a game_id to work with
             if not existing_description or not existing_scraper_last_run_at:
-                logger.info(f"Game '{name_to_use}' (ID: {game_id_in_db}) is missing description or has not been scraped. Scheduling scrape.")
+                logger.info(f"ADD_GAME_TO_MY_LIST (User: {user_id}, Game: {name_to_use}, ID: {game_id_in_db}): Condition MET for scrape: existing_description is '{existing_description}' OR existing_scraper_last_run_at is '{existing_scraper_last_run_at}'. Setting should_scrape_details_on_add = True.") # MODIFIED LOG
                 should_scrape_details_on_add = True
+            else: # ADDED ELSE BLOCK FOR LOGGING
+                logger.info(f"ADD_GAME_TO_MY_LIST (User: {user_id}, Game: {name_to_use}, ID: {game_id_in_db}): Condition NOT MET for scrape: existing_description is '{existing_description}' AND existing_scraper_last_run_at is '{existing_scraper_last_run_at}'. Setting should_scrape_details_on_add = False.") # ADDED LOG
         
         if should_scrape_details_on_add:
-            logger.info(f"Attempting to scrape additional data for game during add/update: {name_to_use} ({f95_url})")
+            logger.info(f"ADD_GAME_TO_MY_LIST (User: {user_id}, Game: {name_to_use}): Decision: Attempting to scrape additional data for game during add/update: {name_to_use} ({f95_url}) because should_scrape_details_on_add is True.") # MODIFIED LOG
             primary_admin_id_for_scraper = get_primary_admin_user_id(db_path)
             f95_username_scraper, f95_password_scraper = None, None
             if primary_admin_id_for_scraper is not None:
@@ -1768,7 +1772,7 @@ def _determine_specific_game_status(f95_client: F95ApiClient, game_url: str, gam
         logger.error(f"Error checking status '{target_status_prefix}' for game '{game_name}': {e}", exc_info=True)
         return None
 
-def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, played_game_row_id: int, user_id: int): # Added user_id
+def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, played_game_row_id: int, user_id: int, force_scrape: bool = False):
     """
     Checks a single game for updates (version, RSS date) and then for status changes
     (COMPLETED, ABANDONED, ON-HOLD) based on the logic requested.
@@ -2151,31 +2155,44 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
 
             # --- Start Scraper Logic Integration ---
             should_scrape_game_details = False
-            if description_from_db is None: # Never been scraped (or description is explicitly NULL)
-                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) has no description. Scheduling scrape.")
+            reason_for_scrape = "" # For logging
+
+            if force_scrape:
                 should_scrape_game_details = True
-            elif not scraper_last_run_at_str: # Never been scraped (no timestamp)
-                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) has not been scraped before (no timestamp). Scheduling scrape.")
-                should_scrape_game_details = True
-            elif has_primary_update: # If core RSS data changed (name, version, date), consider re-scraping
-                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) was updated via RSS. Considering re-scrape.")
-                # Optionally, add debounce check here too if RSS updates are frequent but scraping is heavy
-                should_scrape_game_details = True # For now, always re-scrape if primary RSS data changes
+                reason_for_scrape = "Manual sync (force_scrape=True)"
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}, Game: {log_name_for_notification}, ID: {game_id}): {reason_for_scrape}. Scheduling scrape.")
             
-            if not should_scrape_game_details and scraper_last_run_at_str: # If not already scheduled, check debounce for periodic refresh
-                try:
-                    last_run_dt = datetime.fromisoformat(scraper_last_run_at_str)
-                    if datetime.now(timezone.utc) - last_run_dt > timedelta(days=SCRAPER_DEBOUNCE_DAYS):
-                        logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) last scraped on {scraper_last_run_at_str}. Re-scraping due to age (>{SCRAPER_DEBOUNCE_DAYS} days).")
-                        should_scrape_game_details = True
-                    else:
-                        logger.info(f"SCHEDULER/SYNC (User: {user_id}): Game '{log_name_for_notification}' (ID: {game_id}) last scraped on {scraper_last_run_at_str}. Skipping re-scrape due to debounce.")
-                except ValueError as e_date_parse_scrape:
-                    logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Could not parse scraper_last_run_at_str '{scraper_last_run_at_str}' for game '{log_name_for_notification}'. Error: {e_date_parse_scrape}. Will attempt to re-scrape.")
+            if not should_scrape_game_details: # Only evaluate other conditions if not already forced
+                if description_from_db is None: # Never been scraped (or description is explicitly NULL)
                     should_scrape_game_details = True
+                    reason_for_scrape = "No description found"
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}, Game: {log_name_for_notification}, ID: {game_id}): {reason_for_scrape}. Scheduling scrape.")
+                elif not scraper_last_run_at_str: # Never been scraped (no timestamp)
+                    should_scrape_game_details = True
+                    reason_for_scrape = "No previous scrape timestamp"
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}, Game: {log_name_for_notification}, ID: {game_id}): {reason_for_scrape}. Scheduling scrape.")
+                elif has_primary_update: # If core RSS data changed (name, version, date), consider re-scraping
+                    should_scrape_game_details = True
+                    reason_for_scrape = "Primary RSS data updated"
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}, Game: {log_name_for_notification}, ID: {game_id}): {reason_for_scrape}. Scheduling scrape.")
+                # Debounce check only if other conditions aren't met and timestamp exists
+                elif scraper_last_run_at_str: 
+                    try:
+                        last_run_dt = datetime.fromisoformat(scraper_last_run_at_str)
+                        if datetime.now(timezone.utc) - last_run_dt > timedelta(days=SCRAPER_DEBOUNCE_DAYS):
+                            should_scrape_game_details = True
+                            reason_for_scrape = f"Debounce period ({SCRAPER_DEBOUNCE_DAYS} days) passed"
+                            logger.info(f"SCHEDULER/SYNC (User: {user_id}, Game: {log_name_for_notification}, ID: {game_id}): {reason_for_scrape}. Last scraped on {scraper_last_run_at_str}. Re-scraping.")
+                        else:
+                            logger.info(f"SCHEDULER/SYNC (User: {user_id}, Game: {log_name_for_notification}, ID: {game_id}): Skipping re-scrape due to debounce. Last scraped on {scraper_last_run_at_str}.")
+                    except ValueError as e_date_parse_scrape:
+                        should_scrape_game_details = True
+                        reason_for_scrape = "Unparseable scrape timestamp"
+                        logger.warning(f"SCHEDULER/SYNC (User: {user_id}, Game: {log_name_for_notification}, ID: {game_id}): {reason_for_scrape} ('{scraper_last_run_at_str}'). Error: {e_date_parse_scrape}. Will attempt to re-scrape.")
             
             if should_scrape_game_details:
-                logger.info(f"SCHEDULER/SYNC (User: {user_id}): Attempting to scrape additional data for game: {log_name_for_notification} ({game_url})")
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}, Game: {log_name_for_notification}, ID: {game_id}): Final decision: Scraping. Reason: '{reason_for_scrape if reason_for_scrape else 'Previously determined'}'.") # Log the final reason
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}, Game: {log_name_for_notification}, ID: {game_id}): {reason_for_scrape}. Scheduling scrape.")
                 primary_admin_id_for_scraper = get_primary_admin_user_id(db_path)
                 f95_username_scraper, f95_password_scraper = None, None
                 if primary_admin_id_for_scraper is not None:
@@ -2189,7 +2206,7 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                     # Ensure F95ApiClient is instantiated for scraping if not already available or if scoped differently
                     # For this function, f95_client is passed in, so we should use it.
                     scraped_data = extract_game_data(game_url, username=f95_username_scraper, password=f95_password_scraper)
-                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Raw scraped_data received from extract_game_data for '{log_name_for_notification}': {scraped_data}") # DEBUG LOG
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}): Raw scraped_data received from extract_game_data for '{log_name_for_notification}': {{str(scraped_data)[:500] + '...' if len(str(scraped_data)) > 500 else str(scraped_data)}}") # DEBUG LOG with truncation
                     if scraped_data:
                         logger.info(f"SCHEDULER/SYNC (User: {user_id}): Successfully scraped data for '{log_name_for_notification}'. Adding to update_fields.")
                         
@@ -2282,7 +2299,7 @@ def scheduled_games_update_check(db_path: str, f95_client: F95ApiClient):
             
                 for i, played_game_row_id in enumerate(played_game_ids_for_user):
                     logger.info(f"SCHEDULER (User: {user_id_to_check}): Processing game {i+1}/{games_to_check_for_this_user_count} (PlayedID: {played_game_row_id})")
-                    check_single_game_update_and_status(db_path, user_specific_f95_client, played_game_row_id, user_id_to_check) # Pass user_specific_f95_client
+                    check_single_game_update_and_status(db_path, user_specific_f95_client, played_game_row_id, user_id_to_check) # Pass user_specific_f95_client, force_scrape defaults to False
                     total_games_checked_for_all_users +=1
                     # Optional: time.sleep(1) 
                 
@@ -2301,12 +2318,13 @@ def scheduled_games_update_check(db_path: str, f95_client: F95ApiClient):
     
     logger.info(f"--- Scheduled games update check finished for all users (processed {total_games_checked_for_all_users} applicable games across all users) ---")
 
-def sync_all_my_games_for_user(db_path: str, f95_client: F95ApiClient, user_id: int):
+def sync_all_my_games_for_user(db_path: str, f95_client: F95ApiClient, user_id: int, force_scrape: bool = False):
     """
     Manually triggers an update check for all relevant games for a specific user.
     Only processes games where 'notify_for_updates' is true and game is not COMPLETED or ABANDONED.
+    Can be forced to scrape using the force_scrape parameter.
     """
-    logger.info(f"--- Starting manual sync for all relevant games for user_id: {user_id} ---")
+    logger.info(f"--- Starting manual sync for all relevant games for user_id: {user_id} (force_scrape={force_scrape}) ---")
     
     conn = None
     games_processed_count = 0
@@ -2336,7 +2354,7 @@ def sync_all_my_games_for_user(db_path: str, f95_client: F95ApiClient, user_id: 
         for i, played_game_row_id in enumerate(played_game_ids_for_user):
             logger.info(f"MANUAL_SYNC_ALL (User: {user_id}): Processing game {i+1}/{total_games_to_sync} (PlayedID: {played_game_row_id})")
             try:
-                check_single_game_update_and_status(db_path, f95_client, played_game_row_id, user_id)
+                check_single_game_update_and_status(db_path, f95_client, played_game_row_id, user_id, force_scrape=force_scrape)
                 games_processed_count += 1
             except Exception as e_single:
                 logger.error(f"MANUAL_SYNC_ALL (User: {user_id}): Error syncing played_game_id {played_game_row_id}: {e_single}", exc_info=True)

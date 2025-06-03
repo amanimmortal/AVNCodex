@@ -64,34 +64,35 @@ flask_app.secret_key = os.urandom(24) # Needed for flash messages
 IMAGE_CACHE_DIR_FS = "/data/image_cache" # Filesystem path for Flask to find images
 
 # --- Background Task for Sync All ---
-def sync_all_for_user_background_task(app_context, user_id_to_sync, db_path_to_use):
+def sync_all_for_user_background_task(app_context, user_id_to_sync, db_path_to_use, force_scrape_flag: bool = False):
     with app_context.app_context():
         # Create a new F95ApiClient instance for this thread
         # This assumes F95ApiClient() can be instantiated without external state issues
         # or that its state (like session cookies) is handled appropriately if needed for the task.
         # For sync_all_my_games_for_user, it primarily needs to make new requests.
         local_f95_client = F95ApiClient() 
-        flask_app.logger.info(f"Background sync: Starting for user_id {user_id_to_sync}.")
+        flask_app.logger.info(f"Background sync: Starting for user_id {user_id_to_sync} (force_scrape={force_scrape_flag}).")
         try:
             processed_count, total_count = sync_all_my_games_for_user(
                 db_path=db_path_to_use, 
                 f95_client=local_f95_client, 
-                user_id=user_id_to_sync
+                user_id=user_id_to_sync,
+                force_scrape=force_scrape_flag
             )
             if total_count > 0:
-                flask_app.logger.info(f"Background sync: Completed for user_id {user_id_to_sync}. Synced {processed_count}/{total_count} games.")
+                flask_app.logger.info(f"Background sync: Completed for user_id {user_id_to_sync} (force_scrape={force_scrape_flag}). Synced {processed_count}/{total_count} games.")
                 # Optionally: Here you could use a different mechanism to notify the user,
                 # e.g., writing to a user-specific notifications table in the DB,
                 # or using Flask-SocketIO if you add real-time updates.
                 # For now, the user will see updates on next page load/refresh via standard notifications.
             else:
-                flask_app.logger.info(f"Background sync: Completed for user_id {user_id_to_sync}. No relevant games found to sync.")
+                flask_app.logger.info(f"Background sync: Completed for user_id {user_id_to_sync} (force_scrape={force_scrape_flag}). No relevant games found to sync.")
         except Exception as e:
-            flask_app.logger.error(f"Background sync: Error for user_id {user_id_to_sync}: {e}", exc_info=True)
+            flask_app.logger.error(f"Background sync: Error for user_id {user_id_to_sync} (force_scrape={force_scrape_flag}): {e}", exc_info=True)
         finally:
             if local_f95_client:
                 local_f95_client.close_session()
-            flask_app.logger.info(f"Background sync: Task finished for user_id {user_id_to_sync}.")
+            flask_app.logger.info(f"Background sync: Task finished for user_id {user_id_to_sync} (force_scrape={force_scrape_flag}).")
 
 # --- Helper Function Definitions ---
 # These need to be defined before they are used by module-level calls or routes.
@@ -645,6 +646,7 @@ def acknowledge_update_route(played_game_id):
 @login_required
 def edit_details_route(played_game_id):
     user_id = session.get('user_id')
+    flask_app.logger.info(f"EDIT_DETAILS_ROUTE: Received played_game_id: {played_game_id} for user_id: {user_id}") # Log IDs
     game_details = get_my_played_game_details(DB_PATH, user_id, played_game_id)
 
     if not game_details:
@@ -734,9 +736,9 @@ def manual_sync_route(played_game_id):
             game_name_for_flash = game_details_before_sync.get('name', game_name_for_flash)
 
         local_f95_client = F95ApiClient() # Create client for this request
-        check_single_game_update_and_status(DB_PATH, local_f95_client, played_game_row_id=played_game_id, user_id=g.user['id'])
+        check_single_game_update_and_status(DB_PATH, local_f95_client, played_game_row_id=played_game_id, user_id=g.user['id'], force_scrape=True)
         
-        flash(f"Manual sync initiated for '{game_name_for_flash}'. Check notifications for any updates.", 'success')
+        flash(f"Manual sync (forced scrape) initiated for '{game_name_for_flash}'. Check notifications for any updates.", 'success')
     except Exception as e:
         flask_app.logger.error(f"Error during manual sync for user {g.user['id']}, played_game_id {played_game_id}: {e}", exc_info=True)
         flash(f"Manual sync failed for '{game_name_for_flash}'. Error: {str(e)[:100]}", 'error') 
@@ -758,15 +760,15 @@ def manual_sync_all_route():
         # in the same way as the main thread during startup.
         sync_thread = threading.Thread(
             target=sync_all_for_user_background_task, 
-            args=(app_for_thread, g.user['id'], DB_PATH)
+            args=(app_for_thread, g.user['id'], DB_PATH, True)
         )
         sync_thread.daemon = True # Allows main program to exit even if threads are still running (optional)
         sync_thread.start()
         
-        flash("Sync for all monitored games has been started in the background. Updates will appear in notifications once processing is complete.", 'info')
+        flash("Force sync for all monitored games has been started in the background. Updates will appear in notifications once processing is complete.", 'info')
     except Exception as e:
-        flask_app.logger.error(f"Error starting background sync all for user {g.user['id']}: {e}", exc_info=True)
-        flash("Failed to start the background sync process. Please check the logs.", 'error') 
+        flask_app.logger.error(f"Error starting background force sync all for user {g.user['id']}: {e}", exc_info=True)
+        flash("Failed to start the background force sync process. Please check the logs.", 'error') 
     return redirect(url_for('index'))
 
 @flask_app.route('/settings', methods=['GET', 'POST'])
