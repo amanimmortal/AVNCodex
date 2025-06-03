@@ -279,7 +279,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 try:
                     # Scroll into view if necessary, then click.
                     button_element.scroll_into_view_if_needed(timeout=5000)
-                    if button_element.is_visible(timeout=5000) and button_element.is_enabled(timeout=5000):
+                    if button_element.is_visible() and button_element.is_enabled():
                         button_element.click(timeout=5000) 
                         page.wait_for_timeout(1500) # Increased wait after each spoiler click for content to load
                         logger_scraper.debug(f"EXTRACT_GAME_DATA: Clicked spoiler button {i+1}.")
@@ -540,8 +540,8 @@ def extract_game_data(game_thread_url, username=None, password=None):
             # Search for patterns like "Release Date: YYYY-MM-DD", "Released: ...", etc.
             # This is a simple text search in the bbWrapper for now.
             release_date_patterns = [
-                r"(?:Release Date|Released|Initial Release|First Release)\s*[:\-]?\s*[A-Za-z0-9,\s./-]+",
-                r"<strong>(?:Release Date|Released|Initial Release|First Release)\s*[:\-]?\s*</strong>\s*[A-Za-z0-9,\s./-]+)" # If bolded label
+                r"(?:Release Date|Released|Initial Release|First Release)\s*[:\-]?\s*([A-Za-z0-9,\s./-]+)",
+                r"<strong>(?:Release Date|Released|Initial Release|First Release)\s*[:\-]?\s*</strong>\s*([A-Za-z0-9,\s./-]+)" # If bolded label
             ]
             bb_wrapper_text_for_dates = bb_wrapper.get_text(separator="\\n") # Get text with newlines for better context
             for pattern in release_date_patterns:
@@ -568,8 +568,8 @@ def extract_game_data(game_thread_url, username=None, password=None):
 
             # 6. OS Listing (General Platform Information from post body)
             os_patterns = [
-                r"(?:Platform|OS|Systems|Support[s]?)\s*[:\-]?\s*[A-Za-z0-9,\s/&()WindowsLinuxMacAndroidPC]+",
-                r"<strong>(?:Platform|OS|Systems|Support[s]?)\s*[:\-]?\s*</strong>\s*[A-Za-z0-9,\s/&()WindowsLinuxMacAndroidPC]+)"
+                r"(?:Platform|OS|Systems|Support[s]?)\s*[:\-]?\s*([A-Za-z0-9,\s/&()WindowsLinuxMacAndroidPC]+)",
+                r"<strong>(?:Platform|OS|Systems|Support[s]?)\s*[:\-]?\s*</strong>\s*([A-Za-z0-9,\s/&()WindowsLinuxMacAndroidPC]+)"
             ]
             for pattern in os_patterns:
                 match = re.search(pattern, bb_wrapper_text_for_dates, re.IGNORECASE) # Use bb_wrapper_text_for_dates again
