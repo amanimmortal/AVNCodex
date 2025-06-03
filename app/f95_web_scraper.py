@@ -200,9 +200,13 @@ def extract_game_data(game_thread_url, username=None, password=None):
 
         # --- ADDED: Debug Screenshot ---
         try:
-            screenshot_path = "debug_screenshot_game_page.png" # Consider making path configurable or unique if multiple runs
+            # Make filename unique with a timestamp
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            screenshot_filename = f"debug_screenshot_{timestamp}.png"
+            # Save to the /data directory, assuming it's mapped and writable
+            screenshot_path = f"/data/{screenshot_filename}" 
             page.screenshot(path=screenshot_path, full_page=True)
-            logger_scraper.info(f"EXTRACT_GAME_DATA: Saved debug screenshot to '{screenshot_path}'")
+            logger_scraper.info(f"EXTRACT_GAME_DATA: Saved debug screenshot to '{screenshot_path}' (inside container, ensure /data is mapped to host)")
         except Exception as e_screenshot:
             logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to take debug screenshot: {e_screenshot}")
         # --- END ADDED ---
