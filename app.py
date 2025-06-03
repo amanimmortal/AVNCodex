@@ -656,7 +656,7 @@ def edit_details_route(played_game_id):
     # Convert game_details (which might be a sqlite3.Row) to a dictionary
     # to make it easier to work with and add/modify keys for the template.
     game_data_for_template = dict(game_details)
-    flask_app.logger.info(f"EDIT_DETAILS_ROUTE (User: {user_id}, PlayedID: {played_game_id}): game_data_for_template before defaults: {{game_data_for_template}}") # ADDED LOG
+    flask_app.logger.info(f"EDIT_DETAILS_ROUTE (User: {user_id}, PlayedID: {played_game_id}): game_data_for_template before defaults: {game_data_for_template}") # CORRECTED F-STRING
 
     if request.method == 'POST':
         user_notes = request.form.get('user_notes')

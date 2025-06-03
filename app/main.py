@@ -1152,7 +1152,7 @@ def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) 
         row = cursor.fetchone()
         if row:
             game_dict = dict(row)
-            logger.info(f"GET_MY_PLAYED_GAME_DETAILS (User: {user_id}, PlayedID: {played_game_id}): Raw data from DB: {{game_dict}}") # ADDED LOG
+            logger.info(f"GET_MY_PLAYED_GAME_DETAILS (User: {user_id}, PlayedID: {played_game_id}): Raw data from DB: {game_dict}") # CORRECTED F-STRING
             
             # Determine if acknowledgement is needed BEFORE formatting rss_pub_date for display
             needs_ack = False

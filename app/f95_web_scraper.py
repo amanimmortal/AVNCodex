@@ -212,6 +212,49 @@ def extract_game_data(game_thread_url, username=None, password=None):
             data['title'] = page_title_element.get_text(strip=True).replace(" | F95zone", "")
         logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Extracted title: {data['title']}")
 
+        # --- ADDED: Attempt to parse Engine, Version, Author from title as a fallback ---
+        if data['title']:
+            # Version: Look for patterns like [v0.1.2], (v0.1.2), v0.1.2, ver 0.1.2, version 0.1.2
+            version_match = re.search(r'(?:\[|\(|ver(?:sion)?\s*)\s*(v?(?:\d+\.)+\d+\w*)\s*(?:\]|\))?', data['title'], re.IGNORECASE)
+            if version_match and not data['version']: # Only if not already found
+                data['version'] = version_match.group(1)
+                logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred version from title: {data['version']}")
+
+            # Author: Look for pattern like [AuthorName] or (AuthorName) at the end of title
+            # Avoid matching version numbers if they are also in brackets
+            author_match = re.search(r'(?:\[|\()([^\[\]()]*?)(?:\]|\))\s*$', data['title'])
+            if author_match:
+                potential_author = author_match.group(1).strip()
+                # Avoid using if it looks like a version number or is very short
+                if not re.fullmatch(r'v?\d+(\.\d+)*\w*', potential_author, re.IGNORECASE) and len(potential_author) > 2:
+                    if not data['author'] or data['author'] == 'Not found': # Only if not already found or is default 'Not found'
+                        data['author'] = potential_author
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred author from title: {data['author']}")
+            
+            # Engine: Look for common engine names at the start or in brackets/parentheses
+            # This is a simplified check; more robust would list known engines
+            engine_keywords = ['ren\'py', 'unity', 'rpg maker', 'html', 'unreal engine', 'qsp', 'tyranobuilder', 'wolf rpg']
+            title_lower = data['title'].lower()
+            for eng_key in engine_keywords:
+                if eng_key in title_lower:
+                    # Try to extract the exact casing from original title if found in brackets/parentheses
+                    engine_match_in_brackets = re.search(r'(?:\[|\()(' + re.escape(eng_key) + r')(?:\]|\))', data['title'], re.IGNORECASE)
+                    if engine_match_in_brackets and (not data['engine'] or data['engine'] == 'Not found'):
+                        data['engine'] = engine_match_in_brackets.group(1)
+                        logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred engine from title (in brackets): {data['engine']}")
+                        break
+                    # Else, use the keyword itself if found and no engine yet
+                    elif (not data['engine'] or data['engine'] == 'Not found'):
+                        # Find the original casing if possible
+                        try:
+                            start_index = title_lower.find(eng_key)
+                            original_casing_engine = data['title'][start_index : start_index + len(eng_key)]
+                            data['engine'] = original_casing_engine
+                            logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): Inferred engine from title (substring): {data['engine']}")
+                            break
+                        except: # Should not happen with `in` check, but as a safeguard
+                            pass
+        # --- END ADDED ---
 
         first_post_article = soup.find('article', class_='message--post') 
         if first_post_article:
@@ -348,12 +391,14 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 elif 'language' in dt_text and not data['language']:
                     data['language'] = dd_text
                 elif 'status' in dt_text and not data['status']:
+                    # Check if the status from dls is more specific than one from title (if any)
+                    # For now, dls source is more direct, so it can override title inference for status
                     data['status'] = dd_text
                 elif 'censorship' in dt_text and not data['censorship']:
                     data['censorship'] = dd_text
-                elif 'developer' in dt_text and not data['author']: # Prioritize author from first post
+                elif 'developer' in dt_text and (not data['author'] or data['author'] == 'Not found'): # Prioritize author from first post, then title, then this
                     data['author'] = dd_text
-                elif 'version' in dt_text and not data['version']:
+                elif 'version' in dt_text and (not data['version'] or data['version'] == 'Not found'): # Title inference can be overridden by more specific dl list
                      data['version'] = dd_text
         
         logger_scraper.info(f"SCRAPER_DATA (URL: {game_thread_url}): After dls - Engine: {data['engine']}, Lang: {data['language']}, Status: {data['status']}, Cens: {data['censorship']}, Author: {data['author']}, Version: {data['version']}")
@@ -387,7 +432,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 data[key] = ["Not found"] if key in ["tags", "download_links"] else "Not found"
 
     # CRITICAL LOG: Final dictionary to be returned, ensure it includes the URL it was for.
-    logger_scraper.info(f"SCRAPER_RETURN (URL: {game_thread_url}): Final data dictionary: {data}")
+    logger_scraper.info(f"SCRAPER_RETURN (URL: {game_thread_url}): Final data dictionary after all processing including title inference: {data}")
     return data
 
 if __name__ == '__main__':
