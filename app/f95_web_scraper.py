@@ -134,19 +134,42 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 login_function_returned_true = login_to_f95zone(page, username, password)
                 logger_scraper.info(f"EXTRACT_GAME_DATA: login_to_f95zone function returned: {login_function_returned_true}. Current URL after call: {page.url}")
 
+                # --- ADDED: Explicit check on current page immediately after login_to_f95zone returns ---
+                current_page_login_status_after_login_func = False
+                if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
+                    logger_scraper.info(f"EXTRACT_GAME_DATA: POST-LOGIN_FUNC CHECK (URL: {page.url}): Logout/account indicators FOUND. Login seems to have worked on this page.")
+                    current_page_login_status_after_login_func = True
+                else:
+                    logger_scraper.warning(f"EXTRACT_GAME_DATA: POST-LOGIN_FUNC CHECK (URL: {page.url}): Logout/account indicators NOT FOUND. Login may have failed or redirected to a non-logged-in page.")
+                # --- END ADDED CHECK ---
+
                 # Regardless of what login_to_f95zone returned, navigate to the game thread
-                logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to game thread URL: {game_thread_url} AFTER login attempt.")
-                page.goto(game_thread_url, wait_until="domcontentloaded", timeout=30000)
-                logger_scraper.info(f"EXTRACT_GAME_DATA: Successfully navigated to {game_thread_url}. Current URL: {page.url}")
-                page.wait_for_timeout(2000) # Allow page to settle
+                logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to game thread URL: {game_thread_url} AFTER login attempt and post-login_func check.")
+                page.goto(game_thread_url, wait_until="networkidle", timeout=45000) # Wait for network to be idle
+                logger_scraper.info(f"EXTRACT_GAME_DATA: Successfully navigated to {game_thread_url} (waited for networkidle). Current URL: {page.url}")
+                page.wait_for_load_state("domcontentloaded", timeout=10000) # Ensure DOM is loaded
+                page.wait_for_timeout(3000) # Extra wait for JS rendering
 
                 # Now, definitively check if logged in on the GAME PAGE
-                if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
-                    logger_scraper.info(f"EXTRACT_GAME_DATA: CONFIRMED LOGGED IN on game page ({page.url}) based on presence of logout/account indicators.")
-                    final_page_logged_in_status = True
-                else:
-                    logger_scraper.warning(f"EXTRACT_GAME_DATA: FAILED TO CONFIRM LOGIN on game page ({page.url}). Logout/account indicators NOT FOUND. Content may be restricted.")
+                # Priority 1: Check for indicators that user is NOT logged in
+                login_button_on_game_page = page.query_selector("a[href*='/login']") # Common login link
+                register_button_on_game_page = page.query_selector("a[href*='/register']") # Common register link
+                # More specific selectors for F95zone login/register buttons if known, e.g., based on text or class
+                # Example: page.locator("a.button", has_text=re.compile(r"log in", re.IGNORECASE)).count() > 0 or \
+                #          page.locator("a.button", has_text=re.compile(r"register", re.IGNORECASE)).count() > 0
+
+                if login_button_on_game_page or register_button_on_game_page:
+                    logger_scraper.warning(f"EXTRACT_GAME_DATA: DEFINITIVELY NOT LOGGED IN on game page ({page.url}). Found Login/Register buttons.")
                     final_page_logged_in_status = False
+                else:
+                    # Priority 2: If no explicit NOT logged in indicators, check for POSITIVE logged in indicators
+                    logger_scraper.info(f"EXTRACT_GAME_DATA: No obvious Login/Register buttons found on game page ({page.url}). Checking for positive login indicators (logout/account links).")
+                    if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
+                        logger_scraper.info(f"EXTRACT_GAME_DATA: CONFIRMED LOGGED IN on game page ({page.url}) based on presence of logout/account indicators.")
+                        final_page_logged_in_status = True
+                    else:
+                        logger_scraper.warning(f"EXTRACT_GAME_DATA: LOGIN INDETERMINATE on game page ({page.url}). No Login/Register buttons AND no Logout/Account indicators found. Assuming NOT logged in for restricted content.")
+                        final_page_logged_in_status = False # Treat as not logged in if indeterminate
 
             except Exception as e_login_nav:
                 logger_scraper.error(f"EXTRACT_GAME_DATA: Error during login navigation or game page load: {e_login_nav}", exc_info=True)
