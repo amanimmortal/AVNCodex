@@ -23,6 +23,16 @@ def login_to_f95zone(page, username, password, target_url_after_login=None):
         page.fill("input[name='password']", password)
         logger_scraper.info("Login Attempt: Filled password.")
 
+        # --- ADDED SCREENSHOT: After fields are filled ---
+        try:
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            screenshot_path = f"/data/debug_screenshot_02_login_fields_filled_{timestamp}.png"
+            page.screenshot(path=screenshot_path, full_page=True)
+            logger_scraper.info(f"Login Attempt: Saved screenshot (fields filled) to '{screenshot_path}'")
+        except Exception as e_screenshot:
+            logger_scraper.error(f"Login Attempt: Failed to take screenshot (fields filled): {e_screenshot}")
+        # --- END SCREENSHOT ---
+
         login_button = page.locator("button.button--primary", has_text="Log in")
         
         if not login_button or login_button.count() == 0: 
@@ -44,6 +54,15 @@ def login_to_f95zone(page, username, password, target_url_after_login=None):
                 try:
                     page.wait_for_load_state("domcontentloaded", timeout=15000) # Wait for DOM after click
                     logger_scraper.info(f"Login Attempt: DOM loaded after login click. Current URL: {page.url}")
+                    # --- ADDED SCREENSHOT: After login click and DOM load ---
+                    try:
+                        timestamp = time.strftime("%Y%m%d-%H%M%S")
+                        screenshot_path = f"/data/debug_screenshot_03_post_login_click_landing_{timestamp}.png"
+                        page.screenshot(path=screenshot_path, full_page=True)
+                        logger_scraper.info(f"Login Attempt: Saved screenshot (post-click landing) to '{screenshot_path}'")
+                    except Exception as e_screenshot:
+                        logger_scraper.error(f"Login Attempt: Failed to take screenshot (post-click landing): {e_screenshot}")
+                    # --- END SCREENSHOT ---
                 except Exception as e_dom_wait:
                     logger_scraper.warning(f"Login Attempt: Timeout waiting for DOM load after login click. Current URL: {page.url}. Error: {e_dom_wait}")
 
@@ -183,7 +202,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
     logger_scraper.info(f"EXTRACT_GAME_DATA: Starting extraction for: {game_thread_url}")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         )
@@ -196,6 +215,16 @@ def extract_game_data(game_thread_url, username=None, password=None):
                 page.goto("https://f95zone.to/login/login", wait_until="domcontentloaded", timeout=30000)
                 logger_scraper.info(f"EXTRACT_GAME_DATA: On login page. Current URL: {page.url}. Attempting login via login_to_f95zone function, targeting game thread url directly.")
                 
+                # --- ADDED SCREENSHOT: Initial Login Page (before calling login_to_f95zone) ---
+                try:
+                    timestamp = time.strftime("%Y%m%d-%H%M%S")
+                    screenshot_path = f"/data/debug_screenshot_01_initial_login_page_{timestamp}.png"
+                    page.screenshot(path=screenshot_path, full_page=True)
+                    logger_scraper.info(f"EXTRACT_GAME_DATA: Saved screenshot (initial login page) to '{screenshot_path}'")
+                except Exception as e_screenshot:
+                    logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to take screenshot (initial login page): {e_screenshot}")
+                # --- END SCREENSHOT ---
+
                 # Call login_to_f95zone, passing the game_thread_url as the target for final login verification.
                 # The function will navigate to game_thread_url if initial login actions seem successful.
                 final_page_logged_in_status = login_to_f95zone(page, username, password, target_url_after_login=game_thread_url)
@@ -242,7 +271,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
         # This will show the state of game_thread_url, regardless of login success path.
         try:
             timestamp = time.strftime("%Y%m%d-%H%M%S")
-            screenshot_filename = f"debug_screenshot_gamepage_FINAL_{timestamp}.png"
+            screenshot_filename = f"debug_screenshot_04_gamepage_FINAL_{timestamp}.png" # Renamed for consistency
             screenshot_path = f"/data/{screenshot_filename}" 
             page.screenshot(path=screenshot_path, full_page=True)
             logger_scraper.info(f"EXTRACT_GAME_DATA: Saved FINAL debug screenshot to '{screenshot_path}'. Logged in: {final_page_logged_in_status}")
