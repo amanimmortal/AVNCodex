@@ -16,6 +16,15 @@ def login_to_f95zone(page, username, password):
     """
     try:
         logger_scraper.info("Login Attempt: Initiated.")
+        
+        # --- ADDED: Check if already logged in on the current page --- 
+        # This check is done on the page provided to this function.
+        logger_scraper.info(f"Login Attempt: Current URL at start of login_to_f95zone: {page.url}")
+        if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
+            logger_scraper.info("Login Attempt: Already logged in (detected logout link, account element, or username link on current page). Skipping form fill/click.")
+            return True
+        # --- END ADDED CHECK ---
+
         page.fill("input[name='login']", username)
         logger_scraper.info("Login Attempt: Filled username.")
         page.fill("input[name='password']", password)
@@ -34,14 +43,11 @@ def login_to_f95zone(page, username, password):
         if login_button.count() > 0:
             button_to_click = login_button.first
             try:
-                logger_scraper.info(f"Login Attempt: Found login button. Waiting for it to be visible and enabled...")
-                button_to_click.wait_for(state="visible", timeout=5000) 
-                button_to_click.wait_for(state="enabled", timeout=5000) 
-                logger_scraper.info(f"Login Attempt: Login button is visible and enabled. Attempting click now...")
+                logger_scraper.info(f"Login Attempt: Found login button. Attempting click now...")
                 button_to_click.click(timeout=25000) 
                 logger_scraper.info("Login Attempt: Playwright click() call for login button completed.")
             except Exception as e_click_wait:
-                logger_scraper.error(f"LOGIN ERROR: Error while waiting for login button state or during the click action itself: {e_click_wait}")
+                logger_scraper.error(f"LOGIN ERROR: Error during the click action itself: {e_click_wait}")
                 return False
         else:
             logger_scraper.error("LOGIN ERROR: Could not find a clickable login button on the page after all fallbacks.")
@@ -58,6 +64,7 @@ def login_to_f95zone(page, username, password):
         except Exception as e_wait_indicator:
             logger_scraper.warning(f"Login Attempt: Timeout or error waiting for login result indicator. Error: {e_wait_indicator}")
             logger_scraper.info(f"Login Attempt: Current URL after login click attempt and wait for indicator: {page.url}")
+            # Even if wait times out, proceed to check selectors directly as a fallback
 
         if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
             logger_scraper.info("Login Attempt: Logout link or account element or username link found. Login appears successful.")
