@@ -325,23 +325,26 @@ class F95ApiClient:
                     attempt_with_proxy_activated = True
                     activated_proxy_on_this_403 = True
                 
-                # Retry for 429 (Too Many Requests) or 5xx server errors, OR if we just activated proxies due to a 403
-                if e.response.status_code == 429 or e.response.status_code >= 500 or activated_proxy_on_this_403:
+                # Retry for 403 (Forbidden), 429 (Too Many Requests) or 5xx server errors, 
+                # OR if we just activated proxies due to a 403 on a direct attempt.
+                if e.response.status_code == 403 or e.response.status_code == 429 or e.response.status_code >= 500 or activated_proxy_on_this_403:
                     if attempt < self.max_attempts - 1:
                         self.logger.info(f"HTTPError {e.response.status_code} is retryable or proxy activated. Continuing to attempt {attempt + 2}/{self.max_attempts}.")
-                        # Ensure proxy is used on next attempt if it was just activated
-                        if activated_proxy_on_this_403 and not self.current_proxy: # Force proxy selection if not already set by loop start
-                            if not self._set_random_proxy():
-                                self.logger.warning("Failed to set a proxy after 403, next attempt might still be direct if no proxies left.")
                         
-                        # Add delay for 429 or general retry
+                        # If proxies are enabled and available, always try to set a new one for the next attempt after these errors.
+                        if self.use_proxies and self.available_proxies:
+                            self.logger.info(f"Forcing new proxy selection after HTTP {e.response.status_code} on {log_proxy_info}.")
+                            if not self._set_random_proxy():
+                                self.logger.warning("Failed to set a new proxy for the next attempt. It might be direct or use a previous proxy if one was already set and not cleared.")
+                        
+                        # Add delay, especially for 429
                         time.sleep(self.retry_delay_seconds * (1 + (e.response.status_code == 429)))
-                        continue
+                        continue # Proceed to the next attempt in the loop
                     else:
-                        self.logger.error(f"All {self.max_attempts} attempts failed. Last HTTPError: {e.response.status_code}")
+                        self.logger.error(f"All {self.max_attempts} attempts failed. Last HTTPError: {e.response.status_code} on {log_proxy_info}")
                 else:
                     # For other HTTP errors (e.g., 400, 401, 404), don't retry, return the response immediately.
-                    self.logger.error(f"Non-retryable HTTPError {e.response.status_code}. Returning error response immediately.")
+                    self.logger.error(f"Non-retryable HTTPError {e.response.status_code} on {log_proxy_info}. Returning error response immediately.")
                     return e.response 
             
             except Exception as e: # Catch any other unexpected errors during the request
