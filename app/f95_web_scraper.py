@@ -112,10 +112,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
     Extracts detailed information from an F95zone game thread page.
     Uses Playwright for navigation and login if credentials are provided.
     """
-    # CRITICAL LOG: Log the received game_thread_url AT THE VERY START
     logger_scraper.info(f"EXTRACT_GAME_DATA: Entered function. Initial game_thread_url='{game_thread_url}', Username provided: {'Yes' if username else 'No'}.")
-    
-    # This log was previously print(), now using logger.
     logger_scraper.info(f"EXTRACT_GAME_DATA: Starting extraction for: {game_thread_url}")
 
     with sync_playwright() as p:
@@ -124,45 +121,76 @@ def extract_game_data(game_thread_url, username=None, password=None):
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         )
         page = context.new_page()
+        final_page_logged_in_status = False # Track if we are logged in on the GAME page
 
-        logged_in = False
         if username and password:
             try:
-                logger_scraper.info("EXTRACT_GAME_DATA: Navigating to login page for authentication...")
+                logger_scraper.info("EXTRACT_GAME_DATA: Navigating to login page (https://f95zone.to/login/login) to ensure fresh login attempt.")
                 page.goto("https://f95zone.to/login/login", wait_until="domcontentloaded", timeout=30000)
-                logger_scraper.info(f"EXTRACT_GAME_DATA: On login page. Current URL: {page.url}")
-                if login_to_f95zone(page, username, password):
-                    logger_scraper.info("EXTRACT_GAME_DATA: Login function returned True.")
-                    logged_in = True
+                logger_scraper.info(f"EXTRACT_GAME_DATA: On login page. Current URL: {page.url}. Attempting login via login_to_f95zone function.")
+                
+                # Call login_to_f95zone. This function will try to fill the form.
+                # Its return value is based on its own checks, but we'll re-verify on the game page.
+                login_function_returned_true = login_to_f95zone(page, username, password)
+                logger_scraper.info(f"EXTRACT_GAME_DATA: login_to_f95zone function returned: {login_function_returned_true}. Current URL after call: {page.url}")
+
+                # Regardless of what login_to_f95zone returned, navigate to the game thread
+                logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to game thread URL: {game_thread_url} AFTER login attempt.")
+                page.goto(game_thread_url, wait_until="domcontentloaded", timeout=30000)
+                logger_scraper.info(f"EXTRACT_GAME_DATA: Successfully navigated to {game_thread_url}. Current URL: {page.url}")
+                page.wait_for_timeout(2000) # Allow page to settle
+
+                # Now, definitively check if logged in on the GAME PAGE
+                if page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username"):
+                    logger_scraper.info(f"EXTRACT_GAME_DATA: CONFIRMED LOGGED IN on game page ({page.url}) based on presence of logout/account indicators.")
+                    final_page_logged_in_status = True
                 else:
-                    logger_scraper.warning("EXTRACT_GAME_DATA: Login function returned False. Scraping will proceed without authentication.")
+                    logger_scraper.warning(f"EXTRACT_GAME_DATA: FAILED TO CONFIRM LOGIN on game page ({page.url}). Logout/account indicators NOT FOUND. Content may be restricted.")
+                    final_page_logged_in_status = False
+
             except Exception as e_login_nav:
-                logger_scraper.error(f"EXTRACT_GAME_DATA: Error navigating to login page or during login process: {e_login_nav}", exc_info=True)
-                logger_scraper.warning("EXTRACT_GAME_DATA: Scraping will proceed without authentication.")
+                logger_scraper.error(f"EXTRACT_GAME_DATA: Error during login navigation or game page load: {e_login_nav}", exc_info=True)
+                # Try to take a screenshot even on error here to see the page state
+                timestamp = time.strftime("%Y%m%d-%H%M%S")
+                error_screenshot_path = f"/data/debug_screenshot_login_error_{timestamp}.png"
+                try:
+                    page.screenshot(path=error_screenshot_path, full_page=True)
+                    logger_scraper.info(f"EXTRACT_GAME_DATA: Saved error screenshot to '{error_screenshot_path}'")
+                except Exception as es_err:
+                    logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to take error screenshot: {es_err}")
+                browser.close()
+                return None # Critical failure if login process errors out before game page check
         else:
-            logger_scraper.info("EXTRACT_GAME_DATA: No credentials provided. Scraping as anonymous user.")
-
-        logger_scraper.info(f"EXTRACT_GAME_DATA: Attempting to fetch game thread URL: {game_thread_url}")
+            logger_scraper.info("EXTRACT_GAME_DATA: No credentials provided. Proceeding as anonymous.")
+            # Navigate to game page directly if no creds
+            try:
+                logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to {game_thread_url} (anonymous).")
+                page.goto(game_thread_url, wait_until="domcontentloaded", timeout=30000)
+                logger_scraper.info(f"EXTRACT_GAME_DATA: Successfully navigated to {game_thread_url}. Current URL: {page.url}")
+                page.wait_for_timeout(2000) 
+            except Exception as e_anon_nav:
+                logger_scraper.error(f"EXTRACT_GAME_DATA: Error navigating to game page {game_thread_url} (anonymous): {e_anon_nav}", exc_info=True)
+                browser.close()
+                return None
         
+        # --- Debug Screenshot (Moved after game page load and login check) ---
         try:
-            logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to {game_thread_url} with Playwright before spoiler clicks...")
-            page.goto(game_thread_url, wait_until="domcontentloaded", timeout=30000)
-            logger_scraper.info(f"EXTRACT_GAME_DATA: Successfully navigated to {game_thread_url}. Current URL: {page.url}")
-            
-            # --- ADDED: Re-verify login on game page ---
-            if logged_in: # Only if we attempted login
-                page.wait_for_timeout(1000) # Brief pause for page to settle
-                if not (page.query_selector("a[href='/logout/']") or page.query_selector(".p-account") or page.query_selector("a.p-navgroup-link--username")):
-                    logger_scraper.warning(f"EXTRACT_GAME_DATA: Login re-verification FAILED on game page ({page.url}). Expected login indicators not found. Content might be restricted.")
-                else:
-                    logger_scraper.info(f"EXTRACT_GAME_DATA: Login re-verification SUCCEEDED on game page ({page.url}).")
-            # --- END ADDED ---
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            screenshot_filename = f"debug_screenshot_gamepage_{timestamp}.png" # Clarified filename
+            screenshot_path = f"/data/{screenshot_filename}" 
+            page.screenshot(path=screenshot_path, full_page=True)
+            logger_scraper.info(f"EXTRACT_GAME_DATA: Saved debug screenshot (post login verification) to '{screenshot_path}'")
+        except Exception as e_screenshot:
+            logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to take debug screenshot: {e_screenshot}")
+        # --- END Screenshot ---
 
-            page.wait_for_timeout(2000) 
-        except Exception as e_nav_game_page:
-            logger_scraper.error(f"EXTRACT_GAME_DATA: Error navigating to game page {game_thread_url} before spoiler interaction: {e_nav_game_page}", exc_info=True)
-            browser.close()
-            return None
+        if not final_page_logged_in_status and (username and password):
+             logger_scraper.warning(f"EXTRACT_GAME_DATA: Proceeding with scrape on {game_thread_url}, but login was NOT confirmed on the game page. Data might be incomplete.")
+        elif final_page_logged_in_status:
+             logger_scraper.info(f"EXTRACT_GAME_DATA: Proceeding with scrape on {game_thread_url} with confirmed login.")
+        else: # Anonymous
+             logger_scraper.info(f"EXTRACT_GAME_DATA: Proceeding with scrape on {game_thread_url} as anonymous user.")
+
 
         logger_scraper.info("EXTRACT_GAME_DATA: Attempting to find and click spoiler buttons...")
         spoiler_buttons_selector = "button.bbCodeSpoiler-button"
@@ -196,20 +224,7 @@ def extract_game_data(game_thread_url, username=None, password=None):
         except Exception as e_find_spoilers:
             logger_scraper.error(f"EXTRACT_GAME_DATA: Error finding or interacting with spoiler buttons: {e_find_spoilers}", exc_info=True)
 
-        page.wait_for_timeout(5000) # INCREASED: Wait after all spoiler clicks
-
-        # --- ADDED: Debug Screenshot ---
-        try:
-            # Make filename unique with a timestamp
-            timestamp = time.strftime("%Y%m%d-%H%M%S")
-            screenshot_filename = f"debug_screenshot_{timestamp}.png"
-            # Save to the /data directory, assuming it's mapped and writable
-            screenshot_path = f"/data/{screenshot_filename}" 
-            page.screenshot(path=screenshot_path, full_page=True)
-            logger_scraper.info(f"EXTRACT_GAME_DATA: Saved debug screenshot to '{screenshot_path}' (inside container, ensure /data is mapped to host)")
-        except Exception as e_screenshot:
-            logger_scraper.error(f"EXTRACT_GAME_DATA: Failed to take debug screenshot: {e_screenshot}")
-        # --- END ADDED ---
+        page.wait_for_timeout(5000) # Wait after all spoiler clicks
 
         logger_scraper.debug(f"EXTRACT_GAME_DATA: Getting HTML content after spoiler clicks. Current URL: {page.url}")
         html_content = page.content()
