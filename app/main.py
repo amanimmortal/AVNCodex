@@ -1137,6 +1137,8 @@ def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) 
                 g.id AS game_db_id, g.f95_url, g.name, g.version, g.author, g.image_url, 
                 g.rss_pub_date, g.completed_status, g.first_added_to_db, 
                 g.last_seen_on_rss, g.last_updated_in_db,
+                g.description, g.changelog_text, g.engine, g.language, g.censorship, -- Added scraped fields
+                g.tags_json, g.download_links_json, g.scraper_last_run_at,        -- Added scraped fields
                 upg.id AS played_game_id, upg.user_notes, upg.user_rating, 
                 upg.notify_for_updates, upg.date_added_to_played_list,
                 upg.last_notified_version, upg.last_notified_rss_pub_date,
@@ -1150,6 +1152,7 @@ def get_my_played_game_details(db_path: str, user_id: int, played_game_id: int) 
         row = cursor.fetchone()
         if row:
             game_dict = dict(row)
+            logger.info(f"GET_MY_PLAYED_GAME_DETAILS (User: {user_id}, PlayedID: {played_game_id}): Raw data from DB: {{game_dict}}") # ADDED LOG
             
             # Determine if acknowledgement is needed BEFORE formatting rss_pub_date for display
             needs_ack = False
@@ -2231,11 +2234,40 @@ def check_single_game_update_and_status(db_path: str, f95_client: F95ApiClient, 
                         update_fields['tags_json'] = json.dumps(scraped_data.get('tags')) if scraped_data.get('tags') else None
                         update_fields['download_links_json'] = json.dumps(scraped_data.get('download_links')) if scraped_data.get('download_links') else None
                         update_fields['scraper_last_run_at'] = datetime.now(timezone.utc).isoformat()
+                        # Note: The actual DB commit for these update_fields happens *after* this block, 
+                        # once all potential updates (primary RSS, status, scraped) are collected.
                     else:
                         logger.warning(f"SCHEDULER/SYNC (User: {user_id}): Scraping returned no data for game: {log_name_for_notification}")
                 except Exception as e_scrape_sync:
                     logger.error(f"SCHEDULER/SYNC (User: {user_id}): Error scraping data for game {log_name_for_notification} ({game_url}): {e_scrape_sync}", exc_info=True)
             # --- End Scraper Logic Integration ---
+
+            # --- Combined DB Update for all changes (Primary RSS, Status, Scraped Details) ---
+            if update_fields: # If there are any fields to update (from RSS, status change, or scraping)
+                # Add last_updated_in_db and last_seen_on_rss for any update
+                update_fields['last_updated_in_db'] = datetime.now(timezone.utc).isoformat()
+                # Only update last_seen_on_rss if the update originated from an RSS check (has_primary_update)
+                if has_primary_update: # has_primary_update is true if name, version, date, author, or image changed via RSS
+                    update_fields['last_seen_on_rss'] = datetime.now(timezone.utc).isoformat()
+
+                set_clause_parts = [f"{key} = ?" for key in update_fields.keys()]
+                set_clause = ", ".join(set_clause_parts)
+                final_params = list(update_fields.values()) + [game_id]
+                
+                try:
+                    cursor.execute(f"UPDATE games SET {set_clause} WHERE id = ?", tuple(final_params))
+                    conn.commit()
+                    logger.info(f"SCHEDULER/SYNC (User: {user_id}, GameID: {game_id}): Successfully committed updates to 'games' table. Fields updated: {list(update_fields.keys())}") # MODIFIED LOG
+
+                    # Update local variables if they were part of the update, for notification consistency
+                    if 'name' in update_fields: original_name_for_notification = update_fields['name']
+                    if 'version' in update_fields: original_version_for_notification = update_fields['version']
+                    
+                except sqlite3.Error as e_update_combined:
+                     logger.error(f"SCHEDULER/SYNC (User: {user_id}, Game: {original_name_for_notification}, GameID: {game_id}): DB error during combined update: {e_update_combined}")
+            else:
+                logger.info(f"SCHEDULER/SYNC (User: {user_id}, Game: {original_name_for_notification}, GameID: {game_id}): No changes identified for DB update (RSS, status, or scrape).")
+            # --- End Combined DB Update --- 
 
     except sqlite3.Error as e:
         logger.error(f"SCHEDULER/SYNC (User: {user_id}): Database error in check_single_game_update_and_status for played_game_id {played_game_row_id}: {e}", exc_info=True)
