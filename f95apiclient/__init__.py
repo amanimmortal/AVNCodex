@@ -573,6 +573,21 @@ class F95ApiClient:
                 # F95Zone RSS uses 'published' for the date
                 game_data['rss_pub_date'] = item.get("published") # Format: 'Sat, 18 May 2024 10:00:00 GMT'
 
+                # Extract status from tags
+                tags = [t.get('term', '') for t in item.get('tags', [])]
+                status = "Ongoing" # Default assumption if no other status tag found
+                # F95Zone tags are case-sensitive usually, but let's be safe
+                tags_lower = [t.lower() for t in tags]
+                
+                if "completed" in tags_lower:
+                    status = "Completed"
+                elif "on hold" in tags_lower:
+                    status = "On Hold"
+                elif "abandoned" in tags_lower:
+                    status = "Abandoned"
+                
+                game_data['completed_status'] = status
+                
                 # Extract image URL from description HTML using regex
                 image_url_from_rss = None
                 if item.get("description", ""):

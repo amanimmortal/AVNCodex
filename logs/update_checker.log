@@ -1,0 +1,132 @@
+2025-12-07 18:21:40,855 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 18:21:40,861 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: -5
+2025-12-07 18:21:40,863 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 18:21:40,864 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Testing Mode (Every 5 Minutes).
+2025-12-07 18:26:40,874 - INFO - AVNCodex - scheduler - --- Scheduled Job Started ---
+2025-12-07 18:26:59,480 - INFO - AVNCodex - scheduler - --- Scheduled Job Finished ---
+2025-12-07 18:27:20,898 - INFO - AVNCodex - database - Setting 'pushover_user_key' for user 1 saved with value: '4fBvDFXjbs7RKhJKvrbUnPtx9bptKm'
+2025-12-07 18:27:20,907 - INFO - AVNCodex - database - Setting 'pushover_api_token' for user 1 saved with value: 'asueu6xyppz71svba37ckyibvdng8x'
+2025-12-07 18:27:20,915 - INFO - AVNCodex - database - Setting 'notify_on_game_add' for user 1 saved with value: 'True'
+2025-12-07 18:27:20,924 - INFO - AVNCodex - database - Setting 'notify_on_game_delete' for user 1 saved with value: 'True'
+2025-12-07 18:27:20,934 - INFO - AVNCodex - database - Setting 'notify_on_game_update' for user 1 saved with value: 'True'
+2025-12-07 18:27:20,943 - INFO - AVNCodex - database - Setting 'notify_on_status_change_completed' for user 1 saved with value: 'True'
+2025-12-07 18:27:20,952 - INFO - AVNCodex - database - Setting 'notify_on_status_change_abandoned' for user 1 saved with value: 'True'
+2025-12-07 18:27:20,960 - INFO - AVNCodex - database - Setting 'notify_on_status_change_on_hold' for user 1 saved with value: 'True'
+2025-12-07 18:27:20,969 - INFO - AVNCodex - database - Setting 'f95_username' for user 1 saved with value: 'amanimmortal'
+2025-12-07 18:27:20,977 - INFO - AVNCodex - database - Setting 'f95_password' for user 1 saved with value: '27L5ueFMUZ4NmAz'
+2025-12-07 18:27:20,985 - INFO - AVNCodex - database - Setting 'update_schedule_hours_global' for user 1 saved with value: '12'
+2025-12-07 18:27:20,992 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-07 18:27:20,993 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Existing job removed for rescheduling.
+2025-12-07 18:27:20,993 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-07 18:27:27,012 - INFO - AVNCodex - database - Setting 'pushover_user_key' for user 1 saved with value: '4fBvDFXjbs7RKhJKvrbUnPtx9bptKm'
+2025-12-07 18:27:27,020 - INFO - AVNCodex - database - Setting 'pushover_api_token' for user 1 saved with value: 'asueu6xyppz71svba37ckyibvdng8x'
+2025-12-07 18:27:27,028 - INFO - AVNCodex - database - Setting 'notify_on_game_add' for user 1 saved with value: 'True'
+2025-12-07 18:27:27,037 - INFO - AVNCodex - database - Setting 'notify_on_game_delete' for user 1 saved with value: 'True'
+2025-12-07 18:27:27,045 - INFO - AVNCodex - database - Setting 'notify_on_game_update' for user 1 saved with value: 'True'
+2025-12-07 18:27:27,053 - INFO - AVNCodex - database - Setting 'notify_on_status_change_completed' for user 1 saved with value: 'True'
+2025-12-07 18:27:27,069 - INFO - AVNCodex - database - Setting 'notify_on_status_change_abandoned' for user 1 saved with value: 'True'
+2025-12-07 18:27:27,089 - INFO - AVNCodex - database - Setting 'notify_on_status_change_on_hold' for user 1 saved with value: 'True'
+2025-12-07 18:27:27,102 - INFO - AVNCodex - database - Setting 'f95_username' for user 1 saved with value: 'amanimmortal'
+2025-12-07 18:27:27,113 - INFO - AVNCodex - database - Setting 'f95_password' for user 1 saved with value: '27L5ueFMUZ4NmAz'
+2025-12-07 18:27:27,122 - INFO - AVNCodex - database - Setting 'update_schedule_hours_global' for user 1 saved with value: '24'
+2025-12-07 18:27:27,130 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 18:27:27,131 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Existing job removed for rescheduling.
+2025-12-07 18:27:27,131 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 18:28:33,676 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 18:28:33,677 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 18:28:36,852 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 18:28:36,858 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 18:28:36,860 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 18:28:36,861 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 18:28:37,199 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 18:28:37,199 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 18:28:39,186 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 18:28:39,191 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 18:28:39,194 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 18:28:39,195 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 18:28:41,072 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 18:28:41,078 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 18:28:41,080 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 18:28:41,081 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 18:28:52,989 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Update: Eternum
+2025-12-07 18:28:53,444 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete
+2025-12-07 18:34:56,177 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 18:34:56,178 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 18:34:56,767 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 18:34:56,767 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 19:35:59,083 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 19:35:59,089 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 19:35:59,091 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 19:35:59,091 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 19:36:01,031 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 19:36:01,040 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 19:36:01,042 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 19:36:01,043 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 19:38:01,123 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 19:38:01,124 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 19:38:01,914 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 19:38:01,920 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 19:38:01,921 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 19:38:01,922 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 19:56:28,164 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 19:56:28,165 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 19:56:28,217 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 19:56:28,217 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 19:56:29,455 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 19:56:29,462 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 19:56:29,465 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 19:56:29,466 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 19:56:31,382 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 19:56:31,387 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 19:56:31,389 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 19:56:31,389 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 19:57:34,037 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 19:57:34,037 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 19:57:34,758 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 19:57:34,763 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 19:57:34,765 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 19:57:34,765 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 19:58:54,327 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 19:58:54,328 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 19:58:54,990 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 19:58:54,997 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 19:58:54,999 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 19:58:55,000 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 20:02:10,331 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 20:02:10,332 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 20:02:11,159 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 20:02:11,168 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 20:02:11,171 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 20:02:11,172 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 20:49:28,401 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 20:49:28,402 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 20:49:28,471 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 20:49:28,472 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 20:49:31,315 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 20:49:31,320 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 20:49:31,324 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 20:49:31,324 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 20:49:33,210 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 20:49:33,214 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 20:49:33,216 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 20:49:33,217 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 20:50:58,968 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 20:50:58,968 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 20:50:59,020 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 20:50:59,020 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 20:51:01,176 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 20:51:01,182 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 20:51:01,185 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 20:51:01,185 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 20:51:02,632 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-07 20:51:02,632 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-07 20:51:05,206 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 20:51:05,211 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 20:51:05,214 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 20:51:05,214 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 20:51:07,137 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-07 20:51:07,142 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-07 20:51:07,145 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-07 20:51:07,145 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-07 20:51:13,589 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Update: Eternum
+2025-12-07 20:51:14,092 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete

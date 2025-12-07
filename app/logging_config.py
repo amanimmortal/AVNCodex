@@ -2,37 +2,58 @@ import logging
 import os
 import sys
 
+from logging.handlers import RotatingFileHandler
+
 # --- Constants ---
-# These might be better in a config file, but for now we keep them here or in a config module
-# LOG_FILE_PATH = "/data/logs/update_checker.log" 
-# Better to use an environment variable or a default relative path for portability
-LOG_FILE_PATH = os.getenv("LOG_FILE_PATH", "/data/logs/update_checker.log")
+# Default to a local 'logs' directory if not specified
+DEFAULT_LOG_PATH = os.path.join(os.getcwd(), "logs", "update_checker.log")
+LOG_FILE_PATH = os.getenv("LOG_FILE_PATH", DEFAULT_LOG_PATH)
 
 def setup_logging():
-    """Configures logging for the application."""
+    """Configures logging for the application with rotation."""
     # Ensure log directory exists
-    log_dir = os.path.dirname(LOG_FILE_PATH)
-    # Check and create directory before basicConfig tries to open the file handler
+    log_dir = os.path.dirname(os.path.abspath(LOG_FILE_PATH))
+    
     if not os.path.exists(log_dir):
         try:
             os.makedirs(log_dir, exist_ok=True)
-            # If logger isn't configured yet, a simple print might be necessary for this initial step
             print(f"Log directory created: {log_dir}") 
         except OSError as e:
             print(f"Critical error: Could not create log directory {log_dir}. Error: {e}")
-            # Decide on fallback or exit strategy if logging is critical
-            # For now, allow to proceed, basicConfig might fail or log to current dir if path invalid.
+            # Continue, handlers might fail or just output to console
+            
+    # Create a custom logger
+    logger = logging.getLogger("AVNCodex")
+    logger.setLevel(logging.INFO)
     
-    logging.basicConfig(
-        level=logging.INFO, 
-        format='%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(message)s',
-        handlers=[
-            logging.FileHandler(LOG_FILE_PATH, mode='a'), # Append to log file
-            logging.StreamHandler() # Also print to console
-        ]
-    )
-    # Silence excessively verbose loggers (e.g., urllib3)
+    # Avoid adding handlers multiple times if function is called repeatedly
+    if not logger.handlers:
+        # Formatter
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(message)s')
+
+        # File Handler (Rotating)
+        try:
+            file_handler = RotatingFileHandler(
+                LOG_FILE_PATH, 
+                maxBytes=5*1024*1024, # 5 MB
+                backupCount=5,
+                encoding='utf-8',
+                delay=False
+            )
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        except Exception as e:
+            print(f"Failed to set up file logging: {e}")
+
+        # Console Handler
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+
+    # Silence excessively verbose loggers
     logging.getLogger("urllib3").setLevel(logging.WARNING)
-    return logging.getLogger("AVNCodex") # Use a fixed name or __name__ if called from here
+    logging.getLogger("werkzeug").setLevel(logging.WARNING) # Optional: quiet flask dev server request logs if too noisy
+    
+    return logger
 
 logger = setup_logging()

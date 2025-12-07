@@ -31,7 +31,10 @@
             {% endfor %}
         </ul>
         <p class="text-muted">(Current Version: {{ notif.current_version }})</p>
-        {# Add a 'Mark as seen' button here later #}
+        <form method="POST" action="{{ url_for('acknowledge_update', played_game_id=notif.played_game_id) }}"
+            class="mt-2">
+            <button type="submit" class="btn btn-sm btn-outline-primary">Acknowledge / Clear</button>
+        </form>
     </div>
     {% endfor %}
 </section>

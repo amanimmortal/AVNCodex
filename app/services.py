@@ -467,7 +467,7 @@ def get_my_played_games(db_path, user_id, name_filter=None, min_rating_filter=No
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         query = """
-            SELECT upg.id as played_game_id, g.id as game_id, g.name, g.version, g.image_url, 
+            SELECT upg.id as played_game_id, g.id as game_id, g.name, g.version, g.image_url, g.f95_url, g.author, g.engine,
                    g.rss_pub_date, g.completed_status, upg.user_rating, upg.user_notes, upg.notify_for_updates,
                    upg.last_notified_version, upg.user_acknowledged_version
             FROM user_played_games upg
@@ -578,17 +578,20 @@ def check_for_my_updates(db_path, user_id):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT upg.id as played_game_id, g.name, g.version as current_ver, upg.last_notified_version as last_ver
+            SELECT upg.id as played_game_id, g.name, g.version as current_ver, g.f95_url, upg.last_notified_version as last_notified_ver, upg.user_acknowledged_version as last_ack_ver
             FROM user_played_games upg
             JOIN games g ON upg.game_id = g.id
             WHERE upg.user_id = ? AND upg.notify_for_updates = 1
         """, (user_id,))
         for row in cursor.fetchall():
-            if row['current_ver'] != row['last_ver']:
+            # Use user_acknowledged_version to determine if we should show the notification banner
+            if row['current_ver'] != row['last_ack_ver']:
                  notifications.append({
                      'played_game_id': row['played_game_id'],
                      'game_name': row['name'],
-                     'reasons': [f"Version update: {row['last_ver']} -> {row['current_ver']}"]
+                     'game_url': row['f95_url'],
+                     'current_version': row['current_ver'],
+                     'reasons': [f"Version update: {row['last_ack_ver']} -> {row['current_ver']}"]
                  })
     finally:
         conn.close()
@@ -623,13 +626,42 @@ def check_single_game_update_and_status(db_path, f95_client, played_game_row_id,
             
             updated = False
             if match:
-                if match.get('version') != game['version']:
-                    cursor.execute("UPDATE games SET version=?, last_updated_in_db=? WHERE id=?",
-                                   (match['version'], datetime.now(timezone.utc).isoformat(), game['id']))
-                    updated = True
-                    # Notify logic here (omitted for brevity in this re-write, but critical in real app)
+                changes = []
+                params = []
+                
+                # 1. Version Check
+                if match.get('version') and match['version'] != game['version']:
+                    changes.append("version=?")
+                    params.append(match['version'])
                     if get_setting(db_path, 'notify_on_game_update', 'False', user_id=user_id) == 'True':
                          send_pushover_notification(db_path, user_id, f"Update: {game['name']}", f"Version: {match['version']}", url=game['f95_url'])
+
+                # 2. Status Check
+                new_status = match.get('completed_status')
+                if new_status and new_status != game['completed_status']:
+                    changes.append("completed_status=?")
+                    params.append(new_status)
+                    
+                    # Notify on status change
+                    notif_key = None
+                    if new_status == 'Completed': notif_key = 'notify_on_status_change_completed'
+                    elif new_status == 'On Hold': notif_key = 'notify_on_status_change_on_hold'
+                    elif new_status == 'Abandoned': notif_key = 'notify_on_status_change_abandoned'
+                    
+                    if notif_key and get_setting(db_path, notif_key, 'False', user_id=user_id) == 'True':
+                        send_pushover_notification(db_path, user_id, f"Status Change: {game['name']}", f"New Status: {new_status}", url=game['f95_url'])
+
+                # 3. Pub Date Check
+                if match.get('rss_pub_date') and match['rss_pub_date'] != game['rss_pub_date']:
+                    changes.append("rss_pub_date=?")
+                    params.append(match['rss_pub_date'])
+
+                if changes:
+                     changes.append("last_updated_in_db=?")
+                     params.append(datetime.now(timezone.utc).isoformat())
+                     params.append(game['id'])
+                     cursor.execute(f"UPDATE games SET {', '.join(changes)} WHERE id=?", tuple(params))
+                     updated = True
 
             if updated: conn.commit()
             
