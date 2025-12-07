@@ -16,11 +16,11 @@
         <div class="user-actions">
         {% if g.user %}
             <span>Logged in as: {{ g.user.username }}</span>
-            <a href="{{ url_for('settings_route') }}">Settings</a>
-            <a href="{{ url_for('logout_route') }}">Logout</a>
+            <a href="{{ url_for('settings') }}">Settings</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
         {% else %}
-            <a href="{{ url_for('login_route') }}">Login</a>
-            <a href="{{ url_for('register_route') }}">Register</a>
+            <a href="{{ url_for('login') }}">Login</a>
+            <a href="{{ url_for('register') }}">Register</a>
         {% endif %}
         </div>
     </div>
@@ -39,9 +39,9 @@
                     <li><a href="{{ url_for('index') }}">My Monitored Games</a></li>
                     <li><a href="{{ url_for('search') }}">Search & Add New Game</a></li>
                     {% if g.user %}
-                    <li><a href="{{ url_for('settings_route') }}">Settings</a></li>
+                    <li><a href="{{ url_for('settings') }}">Settings</a></li>
                     {% if g.user.is_admin %}
-                    <li><a href="{{ url_for('admin_users_route') }}">User Management</a></li>
+                    <li><a href="{{ url_for('admin_users') }}">User Management</a></li>
                     {% endif %}
                     {% endif %}
                     {# User management link for admin could go here later #}

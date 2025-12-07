@@ -117,32 +117,13 @@ The application uses an SQLite database (`f95_games.db`) with the following main
 
 ### Local Development
 
-1.  **Prerequisites**: Python 3.x.
-2.  **Create a virtual environment** (recommended):
-    ```bash
-    python -m venv .venv
-    # On Linux/macOS:
-    source .venv/bin/activate
-    # On Windows (PowerShell):
-    .venv\Scripts\Activate.ps1
-    # On Windows (CMD):
-    .venv\Scripts\activate.bat
-    ```
-3.  **Install dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-4.  **Create a `data` directory** in the project root if it doesn't exist (for the SQLite database and logs):
-    ```bash
-    mkdir data
-    mkdir data/logs 
-    ```
-    *Note: The application (`app/main.py`) is configured to place the database and logs in `/data/` by default. For local development without Docker, ensure this path is writable or adjust `DB_PATH` and `LOG_FILE_PATH` in `app/main.py` if necessary.*
-5.  **Run the Flask application**:
-    ```bash
-    python app.py
-    ```
-6.  The application will be accessible at `http://localhost:5000`. The first user to register becomes an admin.
+For a detailed step-by-step guide for Windows, please see [LOCAL_SETUP.md](LOCAL_SETUP.md).
+
+**Quick Summary**:
+1.  Install dependencies: `pip install -r requirements.txt`
+2.  Install Playwright: `playwright install chromium`
+3.  Run the application: `python run_app.py`
+
 
 ## Troubleshooting
 

@@ -1,0 +1,177 @@
+Metadata-Version: 2.1
+Name: python-pushover2
+Version: 0.5
+Summary: Comprehensive bindings and command line utility for the Pushover notification service
+Home-page: https://github.com/Thibauth/python-pushover
+Author: Thibaut Horel, patched by m4rkw
+Author-email: thibaut.horel+pushover@gmail.com
+License: GNU GPLv3
+Platform: UNKNOWN
+License-File: LICENSE
+License-File: AUTHORS.rst
+Requires-Dist: requests >=1.0
+
+``python-pushover`` aims at providing comprehensive Python bindings for the API
+of the `Pushover Notification Service`_ as documented here__.
+
+.. _Pushover Notification Service: https://pushover.net/ 
+.. __: https://pushover.net/api
+
+** This is a fork of python-pushover with patches for the latest Python3 **
+
+** No other changes have been made **
+
+Installation
+------------
+
+You can install python-pushover2 from Pypi_ with:
+
+.. code-block:: bash
+
+    $ pip install python-pushover
+
+Or you can install it directly from GitHub_:
+
+.. code-block:: bash
+
+    git clone https://github.com/m4rkw/python-pushover2.git
+    cd python-pushover2
+    pip install .
+
+.. _Pypi: https://pypi.python.org/pypi/python-pushover2/
+.. _GitHub: https://github.com/m4rkw/python-pushover2
+
+Overview
+--------
+
+After being imported, the module must be initialized by calling the ``init``
+function with a valid application token. Thus, a typical use of the
+``pushover`` module looks like this:
+
+.. code-block:: python
+
+    from pushover import init, Client
+
+    init("<token>")
+    Client("<user-key>").send_message("Hello!", title="Hello")
+
+You can also pass the ``api_token`` optional argument to ``Client`` to
+initialize the module at the same time:
+
+.. code-block:: python
+
+    from pushover import Client
+
+    client = Client("<user-key>", api_token="<api-token>")
+    client.send_message("Hello!", title="Hello")
+
+Attachments can be sent with the ``attachment`` parameter which takes as
+argument as file object:
+
+.. code-block:: python
+
+    with open('/path/to/my/image.png', 'rb') as image:
+        client.send_message('Message with image', attachment=image)
+
+Command line
+~~~~~~~~~~~~
+
+``python-pushover`` also comes with a command line utility ``pushover`` that
+you can use as follows:
+
+.. code-block:: bash
+
+    pushover --api-token <api-token> --user-key <user-key> "Hello!"
+
+Use ``pushover --help`` to see the list of available options.
+
+Configuration
+~~~~~~~~~~~~~
+
+Both the ``pushover`` module and the ``pushover`` command line utility support
+reading arguments from a configuration file.
+
+The most basic configuration file looks like this:
+
+.. code-block:: ini
+
+    [Default]
+    api_token=aaaaaa
+    user_key=xxxxxx
+
+You can have additional sections and specify a device as well:
+
+.. code-block:: ini
+
+    [Sam-iPhone]
+    api_token=bbbbbb
+    user_key=yyyyyy
+    device=iPhone
+
+``python-pushover`` will attempt to read the configuration from
+``~/.pushoverrc`` by default. The section to read can be specified by using the
+``profile`` argument. With the configuration file above, you can send a message
+by simply doing:
+
+.. code-block:: python
+
+    from pushover import Client
+
+    Client().send_message("Hello!", title="Hello")
+
+or ``pushover --title "Hello" "Hello!"`` from the command line.
+
+API
+---
+
+You can access the full API documentation here__.
+
+.. __: http://pythonhosted.org/python-pushover/#module-pushover
+
+Contributors
+------------
+
+* Sam Birch <sam.m.birch@gmail.com>
+* Crupuk
+* chevell
+* drachenminister
+* Thibaut Horel <thibaut.horel@gmail.com>
+* Filip Lundborg <filip@filipl.se>
+* Philip Lundrigan <philipbl@cs.utah.edu>
+* Steve Miller <copart@gmail.com>
+
+Changes
+-------
+
+0.4 (2018-05-13)
+~~~~~~~~~~~~~~~~
+
+* Add support for ``expire`` and ``retry`` parameters to the command line for
+  ``priority=2`` messages
+* Add support for attachments
+
+0.3 (2016-12-29)
+~~~~~~~~~~~~~~~~
+
+* Add support for the Glances API
+* Add a ``cancel`` function to ``MessageRequest`` objects to cancel high
+  priority messages
+* Add support for html message styling
+* Fix bug in MessageRequest.poll for ``priority=2`` requests
+
+0.2 (2014-08-16)
+~~~~~~~~~~~~~~~~
+
+* Fix bug when using current timestamp
+* Add a ``pushover`` command line utility
+* Add Python 3 support
+* Add configuration file feature
+* Easier and more compact Client class creation
+* Switch to ``setuptools`` for easier installation and dependencies handling
+
+0.1 (2013-04-16)
+~~~~~~~~~~~~~~~~
+
+Initial Release
+
+

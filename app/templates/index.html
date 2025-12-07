@@ -3,181 +3,195 @@
 {% block title %}My Monitored Games - AVN Codex{% endblock %}
 
 {% block main_content %}
-    {# Hidden div to pass data to JavaScript #}
-    <div id="app-config" 
-         data-pushover-config-missing="{{ pushover_config_missing|tojson }}" 
-         data-settings-url="{{ url_for('settings_route') }}"
-         style="display: none;"></div>
+{# Hidden div to pass data to JavaScript #}
+<div id="app-config" data-pushover-config-missing="{{ pushover_config_missing|tojson }}"
+    data-settings-url="{{ url_for('settings') }}" style="display: none;"></div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <ul class="flash-messages">
-                {% for category, message in messages %}
-                    <li class="{{ category }}">{{ message }}</li>
-                {% endfor %}
-            </ul>
-        {% endif %}
-    {% endwith %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<ul class="flash-messages">
+    {% for category, message in messages %}
+    <li class="{{ category }}">{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endwith %}
 
-    {% if notifications %}
-        <section class="notifications-section">
-            <h2>Notifications ({{ notifications|length }})</h2>
-            {% for notif in notifications %}
-                <div class="notification-item">
-                    <strong><a href="{{ notif.game_url }}" target="_blank">{{ notif.game_name }}</a></strong>
-                    {% if notif.is_newly_completed %} <span class="game-status-tag status-completed">(Newly COMPLETED!)</span>{% endif %}
-                    <ul class="notification-reasons">
-                        {% for reason in notif.reasons %}
-                            <li>{{ reason }}</li>
-                        {% endfor %}
-                    </ul>
-                    <p class="text-muted">(Current Version: {{ notif.current_version }})</p>
-                    {# Add a 'Mark as seen' button here later #}
-                </div>
+{% if notifications %}
+<section class="notifications-section">
+    <h2>Notifications ({{ notifications|length }})</h2>
+    {% for notif in notifications %}
+    <div class="notification-item">
+        <strong><a href="{{ notif.game_url }}" target="_blank">{{ notif.game_name }}</a></strong>
+        {% if notif.is_newly_completed %} <span class="game-status-tag status-completed">(Newly COMPLETED!)</span>{%
+        endif %}
+        <ul class="notification-reasons">
+            {% for reason in notif.reasons %}
+            <li>{{ reason }}</li>
             {% endfor %}
-        </section>
-    {% endif %}
+        </ul>
+        <p class="text-muted">(Current Version: {{ notif.current_version }})</p>
+        {# Add a 'Mark as seen' button here later #}
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
 
-    <section class="played-games-section">
-        <div class="played-games-header">
-            <h2>My Monitored Games ({{ played_games|length }})</h2>
-            <div class="header-actions">
-                <form action="{{ url_for('manual_sync_all_route') }}" method="POST" style="display: inline-block;">
-                    <button type="submit" class="btn btn-sm btn-info sync-all-btn">
-                        <span class="sync-text">Sync All Monitored</span>
-                        <span class="sync-spinner" style="display: none;">
-                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                            Syncing All...
-                        </span>
-                    </button>
-                </form>
-                <button id="toggle-view-btn" class="btn btn-outline-secondary btn-sm" style="margin-left: 10px;">
-                    Switch to Grid View
+<section class="played-games-section">
+    <div class="played-games-header">
+        <h2>My Monitored Games ({{ played_games|length }})</h2>
+        <div class="header-actions">
+            <form action="{{ url_for('manual_sync_all') }}" method="POST" style="display: inline-block;">
+                <button type="submit" class="btn btn-sm btn-info sync-all-btn">
+                    <span class="sync-text">Sync All Monitored</span>
+                    <span class="sync-spinner" style="display: none;">
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        Syncing All...
+                    </span>
                 </button>
-            </div>
+            </form>
+            <button id="toggle-view-btn" class="btn btn-outline-secondary btn-sm" style="margin-left: 10px;">
+                Switch to Grid View
+            </button>
         </div>
+    </div>
 
-        <div id="played-games-list" class="list-view"> {# Default to list-view #}
-            {% if played_games or current_filters.name_filter or current_filters.min_rating_filter != 'any' %}
-                {# Show list if there are games OR if filters are active (to show 'no results' message) #}
-                {% if played_games %}
-                    {% for game in played_games %}
-                        <article class="card game-card">
-                            <div class="card-banner-area">
-                                {% if game.image_url %}
-                                    <img src="{{ game.image_url }}" alt="{{ game.name }}" class="card-image-banner">
-                                {% else %}
-                                    <div class="card-image-banner-placeholder">{{ game.name }}</div>
-                                {% endif %}
-                            </div>
-                            <div class="card-main-content-area">
-                                <div class="card-details">
-                                    <h3>
-                                        <a href="{{ game.f95_url }}" target="_blank">{{ game.name }}</a>
-                                        {# Use game.status (scraped) if available, otherwise fall back to game.completed_status (from RSS/manual) #}
-                                        {% set display_status = game.status if game.status and game.status not in ['Not found', 'Not yet scraped'] else game.completed_status %}
-                                        {% if display_status %}
-                                            <span class="game-status-tag status-{{ display_status.lower().replace(' ', '_').replace('-', '_') }}">
-                                                {{ display_status | replace('_', ' ') | title }}
-                                            </span>
-                                        {% endif %}
-                                    </h3>
-                                    <p><strong>Version:</strong> {{ game.version if game.version else 'N/A' }}</p>
-                                    <p><strong>Author:</strong> {{ game.author if game.author else 'N/A' }}</p>
-                                    {# Add Engine if available and not 'Not found' #}
-                                    {% if game.engine and game.engine not in ['Not found', 'Not yet scraped'] %}
-                                    <p><strong>Engine:</strong> {{ game.engine }}</p>
-                                    {% endif %}
-                                    <p class="text-muted"><strong>Last Updated:</strong> {{ game.rss_pub_date if game.rss_pub_date else 'N/A' }}</p>
-                                </div>
-                                <div class="card-content">
-                                     <p><strong>Added:</strong> {{ game.date_added_to_played_list.split('T')[0] if game.date_added_to_played_list else 'N/A'}}</p>
-                                     <p><strong>Rating:</strong> {{ '%d'|format(game.user_rating|int) if game.user_rating is not none else 'Not Rated' }} / 5</p>
-                                     <p><strong>Notes:</strong> {{ game.user_notes if game.user_notes else 'No notes.' }}</p>
-                                     <p class="text-muted"><strong>Notify:</strong> {{ 'Yes' if game.notify_for_updates else 'No' }}</p>
-                                </div>
-                                <div class="card-actions {% if game.needs_acknowledgement_flag %}acknowledgement-pending{% endif %}">
-                                    <div class="standard-actions">
-                                        <div class="left-actions">
-                                            <a href="{{ url_for('edit_details_route', played_game_id=game.played_game_id) }}" class="btn btn-primary btn-sm">Edit Details</a>
-                                            <form action="{{ url_for('manual_sync_route', played_game_id=game.played_game_id) }}" method="POST" style="display: inline-block; margin-left: 5px;">
-                                                <button type="submit" class="btn btn-sm btn-secondary sync-btn">
-                                                    <span class="sync-text">Sync</span>
-                                                    <span class="sync-spinner" style="display: none;">
-                                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                                                        Syncing...
-                                                    </span>
-                                                </button>
-                                            </form>
-                                        </div>
-                                        <form method="POST" action="{{ url_for('delete_game_route', played_game_id=game.played_game_id) }}" class="delete-form" onsubmit="return confirm('Are you sure you want to remove this game from your list? This action cannot be undone.');">
-                                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                                        </form>
-                                    </div>
-                                    {% if game.needs_acknowledgement_flag %}
-                                    <form method="POST" action="{{ url_for('acknowledge_update_route', played_game_id=game.played_game_id) }}" class="acknowledge-form">
-                                        <button type="submit" class="btn btn-info btn-sm">Acknowledge Update</button>
-                                    </form>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </article>
-                    {% endfor %}
+    <div id="played-games-list" class="list-view"> {# Default to list-view #}
+        {% if played_games or current_filters.name_filter or current_filters.min_rating_filter != 'any' %}
+        {# Show list if there are games OR if filters are active (to show 'no results' message) #}
+        {% if played_games %}
+        {% for game in played_games %}
+        <article class="card game-card">
+            <div class="card-banner-area">
+                {% if game.image_url %}
+                <img src="{{ game.image_url }}" alt="{{ game.name }}" class="card-image-banner">
                 {% else %}
-                    <p>No games found. Please clear filters or add more games.</p>
+                <div class="card-image-banner-placeholder">{{ game.name }}</div>
                 {% endif %}
-            {% else %}
-                <p>No games found. Please add more games or use filters.</p>
-            {% endif %}
-        </div> {# End #played-games-list #}
-    </section>
+            </div>
+            <div class="card-main-content-area">
+                <div class="card-details">
+                    <h3>
+                        <a href="{{ game.f95_url }}" target="_blank">{{ game.name }}</a>
+                        {# Use game.status (scraped) if available, otherwise fall back to game.completed_status (from
+                        RSS/manual) #}
+                        {% set display_status = game.status if game.status and game.status not in ['Not found', 'Not yet
+                        scraped'] else game.completed_status %}
+                        {% if display_status %}
+                        <span
+                            class="game-status-tag status-{{ display_status.lower().replace(' ', '_').replace('-', '_') }}">
+                            {{ display_status | replace('_', ' ') | title }}
+                        </span>
+                        {% endif %}
+                    </h3>
+                    <p><strong>Version:</strong> {{ game.version if game.version else 'N/A' }}</p>
+                    <p><strong>Author:</strong> {{ game.author if game.author else 'N/A' }}</p>
+                    {# Add Engine if available and not 'Not found' #}
+                    {% if game.engine and game.engine not in ['Not found', 'Not yet scraped'] %}
+                    <p><strong>Engine:</strong> {{ game.engine }}</p>
+                    {% endif %}
+                    <p class="text-muted"><strong>Last Updated:</strong> {{ game.rss_pub_date if game.rss_pub_date else
+                        'N/A' }}</p>
+                </div>
+                <div class="card-content">
+                    <p><strong>Added:</strong> {{ game.date_added_to_played_list.split('T')[0] if
+                        game.date_added_to_played_list else 'N/A'}}</p>
+                    <p><strong>Rating:</strong> {{ '%d'|format(game.user_rating|int) if game.user_rating is not none
+                        else 'Not Rated' }} / 5</p>
+                    <p><strong>Notes:</strong> {{ game.user_notes if game.user_notes else 'No notes.' }}</p>
+                    <p class="text-muted"><strong>Notify:</strong> {{ 'Yes' if game.notify_for_updates else 'No' }}</p>
+                </div>
+                <div class="card-actions {% if game.needs_acknowledgement_flag %}acknowledgement-pending{% endif %}">
+                    <div class="standard-actions">
+                        <div class="left-actions">
+                            <a href="{{ url_for('edit_game', played_game_id=game.played_game_id) }}"
+                                class="btn btn-primary btn-sm">Edit Details</a>
+                            <form action="{{ url_for('manual_sync_game', played_game_id=game.played_game_id) }}"
+                                method="POST" style="display: inline-block; margin-left: 5px;">
+                                <button type="submit" class="btn btn-sm btn-secondary sync-btn">
+                                    <span class="sync-text">Sync</span>
+                                    <span class="sync-spinner" style="display: none;">
+                                        <span class="spinner-border spinner-border-sm" role="status"
+                                            aria-hidden="true"></span>
+                                        Syncing...
+                                    </span>
+                                </button>
+                            </form>
+                        </div>
+                        <form method="POST" action="{{ url_for('delete_game', played_game_id=game.played_game_id) }}"
+                            class="delete-form"
+                            onsubmit="return confirm('Are you sure you want to remove this game from your list? This action cannot be undone.');">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                    </div>
+                    {% if game.needs_acknowledgement_flag %}
+                    <form method="POST" action="{{ url_for('acknowledge_update', played_game_id=game.played_game_id) }}"
+                        class="acknowledge-form">
+                        <button type="submit" class="btn btn-info btn-sm">Acknowledge Update</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+        {% else %}
+        <p>No games found. Please clear filters or add more games.</p>
+        {% endif %}
+        {% else %}
+        <p>No games found. Please add more games or use filters.</p>
+        {% endif %}
+    </div> {# End #played-games-list #}
+</section>
 {% endblock %}
 
 {% block sidebar %}
-    {{ super() }} {# Includes the default menu from base.html #}
-    <hr>
-    <h4>Filters & Sort</h4>
-    <form method="GET" action="{{ url_for('index') }}" id="filter-sort-form">
-        <div class="mb-3">
-            <label for="name_filter" class="form-label">Filter by Name:</label>
-            <input type="text" class="form-control form-control-sm" id="name_filter" name="name_filter" value="{{ current_filters.name_filter }}">
-        </div>
-        <div class="mb-3">
-            <label for="min_rating_filter" class="form-label">Min. Rating:</label>
-            <select class="form-select form-select-sm" id="min_rating_filter" name="min_rating_filter">
-                <option value="any" {% if current_filters.min_rating_filter == 'any' %}selected{% endif %}>Any Rating</option>
-                <option value="0" {% if current_filters.min_rating_filter == '0' %}selected{% endif %}>0+ Stars</option>
-                <option value="1" {% if current_filters.min_rating_filter == '1' %}selected{% endif %}>1+ Star</option>
-                <option value="2" {% if current_filters.min_rating_filter == '2' %}selected{% endif %}>2+ Stars</option>
-                <option value="3" {% if current_filters.min_rating_filter == '3' %}selected{% endif %}>3+ Stars</option>
-                <option value="4" {% if current_filters.min_rating_filter == '4' %}selected{% endif %}>4+ Stars</option>
-                <option value="5" {% if current_filters.min_rating_filter == '5' %}selected{% endif %}>5 Stars</option>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label for="sort_by" class="form-label">Sort by:</label>
-            <select class="form-select form-select-sm" id="sort_by" name="sort_by">
-                <option value="name" {% if current_filters.sort_by == 'name' %}selected{% endif %}>Name</option>
-                <option value="last_updated" {% if current_filters.sort_by == 'last_updated' %}selected{% endif %}>Last Updated</option>
-                <option value="date_added" {% if current_filters.sort_by == 'date_added' %}selected{% endif %}>Date Added</option>
-                <option value="rating" {% if current_filters.sort_by == 'rating' %}selected{% endif %}>My Rating</option>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label for="sort_order" class="form-label">Order:</label>
-            <select class="form-select form-select-sm" id="sort_order" name="sort_order">
-                <option value="ASC" {% if current_filters.sort_order == 'ASC' %}selected{% endif %}>Ascending</option>
-                <option value="DESC" {% if current_filters.sort_order == 'DESC' %}selected{% endif %}>Descending</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-info btn-sm w-100 mb-2">Apply Filters / Sort</button>
-        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm w-100">Clear Filters</a>
-    </form>
-    {# Add index-specific sidebar content here if needed #}
-    {# <p class="text-muted">Filter by status, tags, etc.</p> #}
+{{ super() }} {# Includes the default menu from base.html #}
+<hr>
+<h4>Filters & Sort</h4>
+<form method="GET" action="{{ url_for('index') }}" id="filter-sort-form">
+    <div class="mb-3">
+        <label for="name_filter" class="form-label">Filter by Name:</label>
+        <input type="text" class="form-control form-control-sm" id="name_filter" name="name_filter"
+            value="{{ current_filters.name_filter }}">
+    </div>
+    <div class="mb-3">
+        <label for="min_rating_filter" class="form-label">Min. Rating:</label>
+        <select class="form-select form-select-sm" id="min_rating_filter" name="min_rating_filter">
+            <option value="any" {% if current_filters.min_rating_filter=='any' %}selected{% endif %}>Any Rating</option>
+            <option value="0" {% if current_filters.min_rating_filter=='0' %}selected{% endif %}>0+ Stars</option>
+            <option value="1" {% if current_filters.min_rating_filter=='1' %}selected{% endif %}>1+ Star</option>
+            <option value="2" {% if current_filters.min_rating_filter=='2' %}selected{% endif %}>2+ Stars</option>
+            <option value="3" {% if current_filters.min_rating_filter=='3' %}selected{% endif %}>3+ Stars</option>
+            <option value="4" {% if current_filters.min_rating_filter=='4' %}selected{% endif %}>4+ Stars</option>
+            <option value="5" {% if current_filters.min_rating_filter=='5' %}selected{% endif %}>5 Stars</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label for="sort_by" class="form-label">Sort by:</label>
+        <select class="form-select form-select-sm" id="sort_by" name="sort_by">
+            <option value="name" {% if current_filters.sort_by=='name' %}selected{% endif %}>Name</option>
+            <option value="last_updated" {% if current_filters.sort_by=='last_updated' %}selected{% endif %}>Last
+                Updated</option>
+            <option value="date_added" {% if current_filters.sort_by=='date_added' %}selected{% endif %}>Date Added
+            </option>
+            <option value="rating" {% if current_filters.sort_by=='rating' %}selected{% endif %}>My Rating</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label for="sort_order" class="form-label">Order:</label>
+        <select class="form-select form-select-sm" id="sort_order" name="sort_order">
+            <option value="ASC" {% if current_filters.sort_order=='ASC' %}selected{% endif %}>Ascending</option>
+            <option value="DESC" {% if current_filters.sort_order=='DESC' %}selected{% endif %}>Descending</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-info btn-sm w-100 mb-2">Apply Filters / Sort</button>
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm w-100">Clear Filters</a>
+</form>
+{# Add index-specific sidebar content here if needed #}
+{# <p class="text-muted">Filter by status, tags, etc.</p> #}
 {% endblock %}
 
 {% block scripts %}
 {{ super() }} {# Include scripts from base if any #}
 <script src="{{ url_for('static', filename='js/main-index.js') }}"></script>
-{% endblock %} 
+{% endblock %}

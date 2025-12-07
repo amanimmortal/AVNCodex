@@ -7,88 +7,112 @@
     <h2>Application Settings</h2>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <ul class="flash-messages">
-                {% for category, message in messages %}
-                    <li class="{{ category }}">{{ message }}</li>
-                {% endfor %}
-            </ul>
-        {% endif %}
+    {% if messages %}
+    <ul class="flash-messages">
+        {% for category, message in messages %}
+        <li class="{{ category }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
     {% endwith %}
 
-    <form method="POST" action="{{ url_for('settings_route') }}" class="mt-3">
+    <form method="POST" action="{{ url_for('settings') }}" class="mt-3">
         <h4>F95zone Credentials (Global - Admin Only)</h4>
-        <p class="text-muted">These credentials are used by the system to log in and scrape detailed game information. Only the primary admin can change these.</p>
+        <p class="text-muted">These credentials are used by the system to log in and scrape detailed game information.
+            Only the primary admin can change these.</p>
         <div class="mb-3">
             <label for="f95_username" class="form-label">F95zone Username</label>
-            <input type="text" class="form-control" id="f95_username" name="f95_username" value="{{ current_settings.f95_username }}" {{ '' if can_edit_global_settings else 'disabled' }}>
+            <input type="text" class="form-control" id="f95_username" name="f95_username"
+                value="{{ current_settings.f95_username }}" {{ '' if can_edit_global_settings else 'disabled' }}>
         </div>
         <div class="mb-3">
             <label for="f95_password" class="form-label">F95zone Password</label>
-            <input type="password" class="form-control" id="f95_password" name="f95_password" value="{{ current_settings.f95_password }}" {{ '' if can_edit_global_settings else 'disabled' }}>
+            <input type="password" class="form-control" id="f95_password" name="f95_password"
+                value="{{ current_settings.f95_password }}" {{ '' if can_edit_global_settings else 'disabled' }}>
             {% if not can_edit_global_settings %}
             <small class="form-text text-muted">Only the primary admin can modify F95zone credentials.</small>
             {% endif %}
         </div>
-        
+
         <hr class="my-4">
         <h4>Account Security</h4>
         <div class="mb-3">
-            <a href="{{ url_for('change_password_route') }}" class="btn btn-secondary">Change Password</a>
+            <a href="{{ url_for('change_password') }}" class="btn btn-secondary">Change Password</a>
         </div>
 
         <hr class="my-4">
         <h4>Pushover Notification Settings</h4>
         <div class="mb-3">
             <label for="pushover_user_key" class="form-label">Pushover User Key:</label>
-            <input type="text" class="form-control" id="pushover_user_key" name="pushover_user_key" value="{{ current_settings.pushover_user_key }}">
+            <input type="text" class="form-control" id="pushover_user_key" name="pushover_user_key"
+                value="{{ current_settings.pushover_user_key }}">
         </div>
         <div class="mb-3">
             <label for="pushover_api_key" class="form-label">Pushover API Token/Key:</label>
-            <input type="password" class="form-control" id="pushover_api_key" name="pushover_api_key" value="{{ current_settings.pushover_api_key }}">
+            <input type="password" class="form-control" id="pushover_api_key" name="pushover_api_key"
+                value="{{ current_settings.pushover_api_key }}">
             <div class="form-text">Your Pushover application's API token.</div>
         </div>
 
         <h5>Notify on:</h5>
         <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="notify_on_game_add" name="notify_on_game_add" {% if current_settings.notify_on_game_add %}checked{% endif %}>
+            <input class="form-check-input" type="checkbox" id="notify_on_game_add" name="notify_on_game_add" {% if
+                current_settings.notify_on_game_add %}checked{% endif %}>
             <label class="form-check-label" for="notify_on_game_add">Game Added to List</label>
         </div>
         <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="notify_on_game_delete" name="notify_on_game_delete" {% if current_settings.notify_on_game_delete %}checked{% endif %}>
+            <input class="form-check-input" type="checkbox" id="notify_on_game_delete" name="notify_on_game_delete" {%
+                if current_settings.notify_on_game_delete %}checked{% endif %}>
             <label class="form-check-label" for="notify_on_game_delete">Game Deleted from List</label>
         </div>
         <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="notify_on_game_update" name="notify_on_game_update" {% if current_settings.notify_on_game_update %}checked{% endif %}>
+            <input class="form-check-input" type="checkbox" id="notify_on_game_update" name="notify_on_game_update" {%
+                if current_settings.notify_on_game_update %}checked{% endif %}>
             <label class="form-check-label" for="notify_on_game_update">Game Update (Version/Date Change)</label>
         </div>
         <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="notify_on_status_change_completed" name="notify_on_status_change_completed" {% if current_settings.notify_on_status_change_completed %}checked{% endif %}>
+            <input class="form-check-input" type="checkbox" id="notify_on_status_change_completed"
+                name="notify_on_status_change_completed" {% if current_settings.notify_on_status_change_completed
+                %}checked{% endif %}>
             <label class="form-check-label" for="notify_on_status_change_completed">Status Change: Completed</label>
         </div>
         <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="notify_on_status_change_abandoned" name="notify_on_status_change_abandoned" {% if current_settings.notify_on_status_change_abandoned %}checked{% endif %}>
+            <input class="form-check-input" type="checkbox" id="notify_on_status_change_abandoned"
+                name="notify_on_status_change_abandoned" {% if current_settings.notify_on_status_change_abandoned
+                %}checked{% endif %}>
             <label class="form-check-label" for="notify_on_status_change_abandoned">Status Change: Abandoned</label>
         </div>
         <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" id="notify_on_status_change_on_hold" name="notify_on_status_change_on_hold" {% if current_settings.notify_on_status_change_on_hold %}checked{% endif %}>
+            <input class="form-check-input" type="checkbox" id="notify_on_status_change_on_hold"
+                name="notify_on_status_change_on_hold" {% if current_settings.notify_on_status_change_on_hold
+                %}checked{% endif %}>
             <label class="form-check-label" for="notify_on_status_change_on_hold">Status Change: On Hold</label>
         </div>
 
         <hr class="my-4">
         <h4>Global Update Schedule (Admin Only)</h4>
-        <p class="text-muted">Configure how often the system checks all users' followed games for updates and status changes. This is a global setting managed by the primary admin.</p>
+        <p class="text-muted">Configure how often the system checks all users' followed games for updates and status
+            changes. This is a global setting managed by the primary admin.</p>
         <div class="mb-3">
             <label for="update_schedule_hours" class="form-label">Master Update Check Interval</label>
-            <select class="form-select" id="update_schedule_hours" name="update_schedule_hours" {{ '' if can_edit_global_settings else 'disabled' }}>
-                <option value="-5" {% if current_settings.update_schedule_hours == '-5' %}selected{% endif %}>Every 5 Minutes (Testing)</option>
-                <option value="-1" {% if current_settings.update_schedule_hours == '-1' %}selected{% endif %}>Manual Only (Background task disabled)</option>
-                <option value="1" {% if current_settings.update_schedule_hours == '1' %}selected{% endif %}>Every Hour</option>
-                <option value="3" {% if current_settings.update_schedule_hours == '3' %}selected{% endif %}>Every 3 Hours</option>
-                <option value="6" {% if current_settings.update_schedule_hours == '6' %}selected{% endif %}>Every 6 Hours</option>
-                <option value="12" {% if current_settings.update_schedule_hours == '12' %}selected{% endif %}>Every 12 Hours</option>
-                <option value="24" {% if current_settings.update_schedule_hours == '24' %}selected{% endif %}>Every 24 Hours</option>
-                <option value="48" {% if current_settings.update_schedule_hours == '48' %}selected{% endif %}>Every 48 Hours</option>
+            <select class="form-select" id="update_schedule_hours" name="update_schedule_hours" {{ '' if
+                can_edit_global_settings else 'disabled' }}>
+                <option value="-5" {% if current_settings.update_schedule_hours=='-5' %}selected{% endif %}>Every 5
+                    Minutes (Testing)</option>
+                <option value="-1" {% if current_settings.update_schedule_hours=='-1' %}selected{% endif %}>Manual Only
+                    (Background task disabled)</option>
+                <option value="1" {% if current_settings.update_schedule_hours=='1' %}selected{% endif %}>Every Hour
+                </option>
+                <option value="3" {% if current_settings.update_schedule_hours=='3' %}selected{% endif %}>Every 3 Hours
+                </option>
+                <option value="6" {% if current_settings.update_schedule_hours=='6' %}selected{% endif %}>Every 6 Hours
+                </option>
+                <option value="12" {% if current_settings.update_schedule_hours=='12' %}selected{% endif %}>Every 12
+                    Hours</option>
+                <option value="24" {% if current_settings.update_schedule_hours=='24' %}selected{% endif %}>Every 24
+                    Hours</option>
+                <option value="48" {% if current_settings.update_schedule_hours=='48' %}selected{% endif %}>Every 48
+                    Hours</option>
             </select>
             {% if not can_edit_global_settings %}
             <small class="form-text text-muted">Only the primary admin can modify the global update schedule.</small>
@@ -105,29 +129,42 @@
 {# Custom CSS for settings page if needed, or add to main style.css #}
 <style>
     .settings-container {
-        background-color: #2a2a2e; /* Consistent with edit form and cards */
+        background-color: #2a2a2e;
+        /* Consistent with edit form and cards */
         padding: 20px;
         border-radius: 4px;
         border: 1px solid #333;
     }
-    .form-select, .form-control {
-        max-width: 400px; /* Keep inputs from being overly wide */
+
+    .form-select,
+    .form-control {
+        max-width: 400px;
+        /* Keep inputs from being overly wide */
     }
+
     .form-check-label {
-        padding-left: 0.5em; /* Space between switch and label text */
+        padding-left: 0.5em;
+        /* Space between switch and label text */
     }
+
     /* Add more specific spacing for settings form elements */
     .settings-container .form-label {
-        margin-bottom: 0.5rem; /* Space below label */
-        display: block; /* Ensure it takes full line if not already */
+        margin-bottom: 0.5rem;
+        /* Space below label */
+        display: block;
+        /* Ensure it takes full line if not already */
     }
+
     .settings-container .form-text {
-        margin-top: 0.5rem; /* Space above help text */
+        margin-top: 0.5rem;
+        /* Space above help text */
     }
-    .settings-container .form-select + .form-text,
-    .settings-container .form-control + .form-text {
-        margin-top: 0.5rem; /* Specific rule for text after select/input */
+
+    .settings-container .form-select+.form-text,
+    .settings-container .form-control+.form-text {
+        margin-top: 0.5rem;
+        /* Specific rule for text after select/input */
     }
 </style>
 
-{% endblock %} 
+{% endblock %}
