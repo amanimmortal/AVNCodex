@@ -479,9 +479,11 @@ class F95ApiClient:
             self.is_logged_in = False
             return {'success': False, 'status_code': 'REQUEST_EXCEPTION', 'message': f"Login request failed: {e}"}
 
-    def get_latest_game_data_from_rss(self, limit=90, search_term: str = None, completion_status_filter: str = None) -> list[dict]:
+    def get_latest_game_data_from_rss(self, limit=90, search_term: str = None, completion_status_filter: str = None, 
+                                      tags: list = None, notags: list = None, engines: list = None) -> list[dict]:
         """
         Fetches and parses game data from the F95Zone RSS feed using the new _make_request method.
+        Supports filtering by Tags, Engines, and Status.
         """
         base_rss_url = f"{self.base_url}/sam/latest_alpha/latest_data.php"
         url_params_dict = {'cmd': 'rss', 'cat': 'games', 'rows': str(limit)}
@@ -493,6 +495,8 @@ class F95ApiClient:
             self.logger.info(f"Fetching RSS feed, limit: {limit}")
 
         prefix_params = []
+        
+        # Status Filter
         if completion_status_filter:
             if completion_status_filter == "completed":
                 prefix_params.append(("prefixes[]", "18"))
@@ -508,6 +512,35 @@ class F95ApiClient:
             elif completion_status_filter == "abandoned":
                  prefix_params.append(("prefixes[]", "22"))
                  self.logger.info("Filtering RSS for: Abandoned games")
+        
+        # Engine Filter
+        if engines:
+            for engine_id in engines:
+                prefix_params.append(("prefixes[]", str(engine_id)))
+            self.logger.info(f"Filtering RSS for Engines: {engines}")
+
+        # Tags Filter (Include)
+        if tags:
+            # RSS uses tags=ID,ID,ID format or multiple tags[]?
+            # From research: tags=1507 (single). For multiple? 
+            # Usually URL parameters repeat: tags[]=1&tags[]=2 OR comma separated tags=1,2
+            # The browser documentation example uses 'tags=1507'.
+            # Looking at F95 structure, it often uses lists. Let's try appending tuples.
+            # However, looking at the user provided URL: tags=1507.
+            # Let's assume list format 'tags[]' like prefixes for safety, OR single 'tags' if it's one.
+            # Wait, the screenshot showed 'Select a tag...'. 
+            # If standard XenForo/F95, likely list.
+            # But the user example `tags=1507` suggests simple param. 
+            # Let's use list tuples to be safe with requests: tags[]
+            for tag_id in tags:
+                prefix_params.append(("tags[]", str(tag_id))) 
+            self.logger.info(f"Filtering RSS for Tags: {tags}")
+
+        # Tags Filter (Exclude)
+        if notags:
+            for tag_id in notags:
+                prefix_params.append(("notags[]", str(tag_id)))
+            self.logger.info(f"Filtering RSS to Exclude Tags: {notags}")
         
         # Construct query string manually for list-like parameters if requests encode them differently than expected
         # For "prefixes[]=18", requests typically encodes params={'prefixes[]': '18'} as prefixes%5B%5D=18
@@ -574,6 +607,7 @@ class F95ApiClient:
                 game_data['rss_pub_date'] = item.get("published") # Format: 'Sat, 18 May 2024 10:00:00 GMT'
 
                 # Extract status from tags
+                # feedparser puts categories/tags into 'tags' list of dicts: [{'term': 'TagName', 'scheme': None, 'label': None}]
                 tags = [t.get('term', '') for t in item.get('tags', [])]
                 status = "Ongoing" # Default assumption if no other status tag found
                 # F95Zone tags are case-sensitive usually, but let's be safe
@@ -581,7 +615,7 @@ class F95ApiClient:
                 
                 if "completed" in tags_lower:
                     status = "Completed"
-                elif "on hold" in tags_lower:
+                elif "on hold" in tags_lower or "onhold" in tags_lower: # Fixed: Check for 'onhold' (no space) too
                     status = "On Hold"
                 elif "abandoned" in tags_lower:
                     status = "Abandoned"
@@ -598,6 +632,7 @@ class F95ApiClient:
                     
                     game_data['image_url'] = image_url_from_rss # Store original URL or None
                 else: # No description or no img_match
+
                     game_data['image_url'] = None
                 
                 # Ensure essential fields are present

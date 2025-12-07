@@ -248,7 +248,7 @@ def process_rss_feed(db_path, client):
             if should_scrape and f95_username and f95_password:
                 logger.info(f"Scraping detailed data for: {name}")
                 try:
-                    scraped = extract_game_data(f95_url, username=f95_username, password=f95_password)
+                    scraped = extract_game_data(f95_url, username=f95_username, password=f95_password, requests_session=client.session)
                     if scraped:
                         scrape_sql = """
                             UPDATE games SET description=?, engine=?, language=?, censorship=?, 
@@ -665,13 +665,37 @@ def check_single_game_update_and_status(db_path, f95_client, played_game_row_id,
 
             if updated: conn.commit()
             
-            # 2. Scrape Force
-            if force_scrape:
-                scraped = extract_game_data(game['f95_url']) # Add auth if consistent
+            # 2. Scrape (Force OR Missing Data)
+            # Retrieve Admin Credentials for Scraping
+            primary_admin_id = get_primary_admin_user_id(db_path)
+            f95_username, f95_password = None, None
+            if primary_admin_id:
+                f95_username = get_setting(db_path, 'f95_username', user_id=primary_admin_id)
+                f95_password = get_setting(db_path, 'f95_password', user_id=primary_admin_id)
+
+            should_force_scrape = force_scrape or (not game['description']) or (not game['tags_json']) 
+            
+            if should_force_scrape and f95_username and f95_password:
+                logger.info(f"Sync-driven scraping for: {game['name']}")
+                scraped = extract_game_data(game['f95_url'], username=f95_username, password=f95_password, requests_session=f95_client.session)
                 if scraped:
-                    # Update description etc
-                    cursor.execute("UPDATE games SET description=?, last_updated_in_db=? WHERE id=?", 
-                                   (scraped.get('full_description'), datetime.now(timezone.utc).isoformat(), game['id']))
+                    scrape_sql = """
+                        UPDATE games SET 
+                            description=?, engine=?, language=?, censorship=?, 
+                            tags_json=?, download_links_json=?, 
+                            completed_status=?, os_list=?, release_date=?, thread_updated_date=?,
+                            scraper_last_run_at=?, last_updated_in_db=?
+                        WHERE id=?
+                    """
+                    scrape_params = (
+                        scraped.get('full_description'), scraped.get('engine'),
+                        scraped.get('language'), scraped.get('censorship'),
+                        json.dumps(scraped.get('tags')), json.dumps(scraped.get('download_links')),
+                        scraped.get('status'), scraped.get('os_general_list'), scraped.get('release_date'), scraped.get('thread_updated_date'),
+                        datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), 
+                        game['id']
+                    )
+                    cursor.execute(scrape_sql, scrape_params)
                     conn.commit()
 
         except Exception as e:
