@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, jsonify, g
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, jsonify, g, send_from_directory
 from functools import wraps
 import os
 import sys
@@ -257,6 +257,10 @@ def search():
              flash('Please enter at least 3 characters.', 'warning')
              
     return render_template('search.html', results=results, search_term=search_term, search_attempted=search_attempted)
+
+@flask_app.route('/cached_images/<path:filename>')
+def serve_cached_image(filename):
+    return send_from_directory(IMAGE_CACHE_DIR_FS, filename)
 
 @flask_app.route('/search_games_api', methods=['GET'])
 @login_required
