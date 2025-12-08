@@ -224,13 +224,40 @@ def process_rss_feed(db_path, client):
                 
                 if not existing_desc or not existing_last_scrape:
                     should_scrape = True
-                elif existing_last_scrape:
-                    try:
-                        last_run_dt = datetime.fromisoformat(existing_last_scrape)
-                        if datetime.now(timezone.utc) - last_run_dt > timedelta(days=SCRAPER_DEBOUNCE_DAYS):
+                else:
+                    # Check for missing tags or download links in existing data
+                    is_missing_data = False
+                    if not row.get('tags_json') or 'Not found' in row['tags_json'] or row['tags_json'] == '[]':
+                         is_missing_data = True
+                    if not row.get('download_links_json') or row['download_links_json'] == '[]':
+                         is_missing_data = True
+                    else:
+                        # Check if links are just "Login" or irrelevant
+                        try:
+                            links = json.loads(row['download_links_json'])
+                            has_valid_game_link = False
+                            for l in links:
+                                if "Log in or register" in l.get('text', ''):
+                                    is_missing_data = True
+                                    break
+                                os_type = l.get('os_type', 'unknown').lower()
+                                if os_type not in ['extras', 'monitor', 'unknown', 'source code']:
+                                    has_valid_game_link = True
+                            
+                            if not has_valid_game_link and not is_missing_data:
+                                 is_missing_data = True
+                        except json.JSONDecodeError:
+                            is_missing_data = True
+
+                    if is_missing_data:
+                         should_scrape = True
+                    elif existing_last_scrape:
+                        try:
+                            last_run_dt = datetime.fromisoformat(existing_last_scrape)
+                            if datetime.now(timezone.utc) - last_run_dt > timedelta(days=SCRAPER_DEBOUNCE_DAYS):
+                                should_scrape = True
+                        except ValueError:
                             should_scrape = True
-                    except ValueError:
-                        should_scrape = True
 
                 update_fields = {
                     'name': name, 'version': item.get('version'), 'author': item.get('author'),
@@ -507,7 +534,26 @@ def get_my_played_game_details(db_path, user_id, played_game_id):
             WHERE upg.id = ? AND upg.user_id = ?
         """, (played_game_id, user_id))
         row = cursor.fetchone()
-        return dict(row) if row else None
+        if row:
+            data = dict(row)
+            # Deserialize JSON fields
+            try:
+                if data.get('tags_json'):
+                    data['tags'] = json.loads(data['tags_json'])
+                else:
+                    data['tags'] = []
+            except (json.JSONDecodeError, TypeError):
+                data['tags'] = []
+
+            try:
+                if data.get('download_links_json'):
+                    data['download_links'] = json.loads(data['download_links_json'])
+                else:
+                    data['download_links'] = []
+            except (json.JSONDecodeError, TypeError):
+                data['download_links'] = []
+            return data
+        return None
     finally:
         conn.close()
 
@@ -673,7 +719,25 @@ def check_single_game_update_and_status(db_path, f95_client, played_game_row_id,
                 f95_username = get_setting(db_path, 'f95_username', user_id=primary_admin_id)
                 f95_password = get_setting(db_path, 'f95_password', user_id=primary_admin_id)
 
-            should_force_scrape = force_scrape or (not game['description']) or (not game['tags_json']) 
+            should_force_scrape = force_scrape or (not game['description']) or (not game['tags_json']) or ('Not found' in game['tags_json']) or (not game['download_links_json']) or (game['download_links_json'] == '[]') 
+            
+            # Enhanced check for bad download links (Login required or no valid OS)
+            if not should_force_scrape and game['download_links_json']:
+                try:
+                    links = json.loads(game['download_links_json'])
+                    has_valid_game_link = False
+                    for l in links:
+                        if "Log in or register" in l.get('text', ''):
+                            should_force_scrape = True
+                            break
+                        os_type = l.get('os_type', 'unknown').lower()
+                        if os_type not in ['extras', 'monitor', 'unknown', 'source code']:
+                            has_valid_game_link = True
+                    
+                    if not has_valid_game_link:
+                        should_force_scrape = True
+                except:
+                    should_force_scrape = True 
             
             if should_force_scrape and f95_username and f95_password:
                 logger.info(f"Sync-driven scraping for: {game['name']}")

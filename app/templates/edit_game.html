@@ -40,43 +40,66 @@
                     <h5 class="mt-3">Tags:</h5>
                     {% if game.tags and game.tags is iterable and game.tags[0] != 'Not found' and game.tags[0] != 'Error
                     decoding tags' %}
-                    <ul class="list-inline">
+                    <div class="d-flex flex-wrap gap-1">
                         {% for tag in game.tags %}
-                        <li class="list-inline-item"><span class="badge bg-secondary">{{ tag }}</span></li>
+                        <span
+                            class="badge rounded-pill bg-secondary bg-opacity-75 text-white border border-secondary">{{
+                            tag }}</span>
                         {% endfor %}
-                    </ul>
+                    </div>
                     {% else %}
-                    <p>{{ game.tags[0] if game.tags and game.tags is iterable else 'No tags available or not scraped.'
-                        }}</p>
+                    <p class="text-muted fst-italic">{{ game.tags[0] if game.tags and game.tags is iterable else 'No
+                        tags available.' }}</p>
                     {% endif %}
 
                     <h5 class="mt-3">Description:</h5>
                     {% if game.description and game.description not in ['Not found', 'Not yet scraped'] %}
-                    <div class="game-description p-3 rounded"
-                        style="max-height: 200px; overflow-y: auto; white-space: pre-wrap; background-color: #2c3034; color: #e1e1e1; border: 1px solid #444;">
+                    <div class="game-description p-3 rounded shadow-sm"
+                        style="max-height: 250px; overflow-y: auto; white-space: pre-wrap; background-color: #212529; color: #f8f9fa; border: 1px solid #343a40; font-size: 0.95rem;">
                         {{ game.description }}
                     </div>
                     {% else %}
-                    <p>{{ game.description | default('Not available') }}</p>
+                    <p class="text-muted">{{ game.description | default('Not available') }}</p>
                     {% endif %}
 
 
-                    <h5 class="mt-3">Download Links:</h5>
+                    <h5 class="mt-4">Download Links:</h5>
                     {% if game.download_links and game.download_links is iterable and game.download_links[0].text !=
                     'Error decoding download links' and game.download_links[0].text != 'Not found' %}
-                    <ul>
+
+                    {% set os_labels = {'win': 'Windows', 'mac': 'Mac', 'linux': 'Linux', 'android': 'Android',
+                    'extras': 'Extras', 'unknown': 'Other'} %}
+                    {% set os_order = ['win', 'mac', 'linux', 'android', 'extras', 'unknown'] %}
+
+                    <div class="ms-2">
+                        {% for os_code in os_order %}
+                        {# Check if any links exist for this OS #}
+                        {% set ns = namespace(found=false) %}
                         {% for link in game.download_links %}
-                        <li>
-                            <a href="{{ link.url }}" target="_blank">
-                                {{ link.text | default('Download Link') }}
-                                {% if link.url %}({{ link.url | truncate(50, True) }}){% endif %}
-                            </a>
-                        </li>
+                        {% if link.os_type == os_code %}
+                        {% set ns.found = true %}
+                        {% endif %}
                         {% endfor %}
-                    </ul>
+
+                        {% if ns.found %}
+                        <h6 class="text-uppercase text-secondary fw-bold mt-2"
+                            style="font-size: 0.8rem; letter-spacing: 0.5px;">{{ os_labels[os_code] }}</h6>
+                        <div class="d-flex flex-wrap gap-2 mb-2">
+                            {% for link in game.download_links %}
+                            {% if link.os_type == os_code %}
+                            <a href="{{ link.url }}" target="_blank" class="btn btn-sm btn-outline-primary shadow-sm"
+                                style="min-width: 100px;">
+                                <i class="bi bi-download me-1"></i> {{ link.text }}
+                            </a>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+
                     {% else %}
-                    <p>{{ game.download_links[0].text if game.download_links and game.download_links is iterable and
-                        game.download_links[0].text else 'No download links available or not scraped.' }}</p>
+                    <p class="text-muted fst-italic">{{ 'No download links available.' }}</p>
                     {% endif %}
                 </div>
             </div>

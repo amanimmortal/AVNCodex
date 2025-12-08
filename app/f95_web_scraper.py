@@ -7,7 +7,8 @@ import logging
 from datetime import datetime
 
 # Create a logger specific to this module
-logger_scraper = logging.getLogger(__name__)
+# Use the central logger
+from app.logging_config import logger as logger_scraper
 
 # --- Parsing Function (Shared by Requests and Playwright) ---
 def parse_game_page_content(html_content, game_thread_url):
@@ -151,25 +152,47 @@ def parse_game_page_content(html_content, game_thread_url):
                 elem_text_lower = elem.get_text(strip=True).lower()
             
             if (elem_text_lower and any(kw in elem_text_lower for kw in stop_keywords) and len(elem_text_lower) < 70) or elem.name == 'dl':
-                is_likely_section_header = True
+                # Check for "Overview" header exception - if it's just "Overview" we might want to skip the header but continue content
                 if "overview" in elem_text_lower or "description" in elem_text_lower or "plot" in elem_text_lower or "story" in elem_text_lower:
-                     is_likely_section_header = False 
+                     continue # Skip the header itself, but don't break the loop
+                
+                is_likely_section_header = True
                 if is_likely_section_header:
                     break
             
             if isinstance(elem, str):
-                if elem.strip(): desc_elements.append(elem.strip())
+                cleaned_text = elem.strip()
+                if cleaned_text: 
+                     # Remove literal "\n" characters if they appear in text (common in some raw dumps) and standard newlines
+                     cleaned_text = cleaned_text.replace("\\n", " ").replace("\n", " ")
+                     desc_elements.append(cleaned_text)
             elif elem.name not in ['script', 'style', 'iframe', 'form', 'input', 'textarea', 'select', 'button']:
                 if elem.name == 'div' and 'bbCodeSpoiler' in elem.get('class', []):
                     button_text_spoiler = elem.find('button', class_='bbCodeSpoiler-button')
                     if button_text_spoiler and not any(kw in button_text_spoiler.get_text(strip=True).lower() for kw in stop_keywords):
-                         desc_elements.append(button_text_spoiler.get_text(strip=True))
+                         spoiler_text = button_text_spoiler.get_text(strip=True).replace("\\n", " ").replace("\n", " ")
+                         desc_elements.append(spoiler_text)
+                elif elem.name == 'br':
+                    desc_elements.append("\n") # Mark paragraph breaks explicitly
                 else:
-                    text = elem.get_text(separator='\n', strip=True)
+                    text = elem.get_text(separator=' ', strip=True) # Use space separator for inline tags
                     if "You don't have permission to view the spoiler content" not in text and "Log in or register now" not in text:
+                        text = text.replace("\\n", " ").replace("\n", " ")
                         desc_elements.append(text)
         
-        data['full_description'] = "\n".join(filter(None, desc_elements)).strip()
+        # smart join: join with spaces, but respect explicit newlines we added for <br>
+        full_desc_str = ""
+        for item in desc_elements:
+            if item == "\n":
+                full_desc_str += "\n\n"
+            else:
+                # Collapse multiple spaces
+                clean_item = re.sub(r'\s+', ' ', item).strip()
+                if clean_item:
+                    full_desc_str += clean_item + " "
+        
+        data['full_description'] = re.sub(r'\n{3,}', '\n\n', full_desc_str).strip()
+
         if not data['full_description']:
              data['full_description'] = bb_wrapper.get_text(separator='\n', strip=True)
 
@@ -242,63 +265,108 @@ def parse_game_page_content(html_content, game_thread_url):
         
         # Download Links
         raw_download_links = []
-        support_link_domains = ['patreon.com', 'subscribestar.adult', 'discord.gg', 'discord.com', 'itch.io', 'buymeacoffee.com', 'ko-fi.com', 'store.steampowered.com', 'paypal.com', 'subscribestar.com']
+        support_link_domains = ['patreon.com', 'subscribestar.adult', 'discord.gg', 'discord.com', 'itch.io', 'buymeacoffee.com', 'ko-fi.com', 'store.steampowered.com', 'paypal.com', 'subscribestar.com', 'gumroad.com', 'fanbox.cc', 'fantia.jp', 'boosty.to']
         download_section_headers_texts = ['download', 'links', 'files']
-        os_section_keywords = ['windows', 'pc', 'linux', 'mac', 'macos', 'osx', 'android'] 
+        download_elements = bb_wrapper.descendants
         
+        # Add 'win' to keywords list explicitly
+        os_section_keywords = ['windows', 'pc', 'linux', 'mac', 'macos', 'osx', 'android', 'win']
         current_section_os = None
-        for elem in bb_wrapper.children:
-            if isinstance(elem, str): continue
-
-            current_element_text_lower = ""
-            is_header_like = False
-            if elem.name in ['h1','h2','h3','h4','strong','b','p']:
-                current_element_text_lower = elem.get_text(strip=True).lower()
-                is_header_like = True
-
-            if is_header_like and any(hdr_kw in current_element_text_lower for hdr_kw in download_section_headers_texts) and len(current_element_text_lower) < 50:
-                current_section_os = None
-            elif is_header_like and any(os_kw in current_element_text_lower for os_kw in os_section_keywords) and len(current_element_text_lower) < 30:
-                current_section_os = None
-                if any(kw in current_element_text_lower for kw in ['windows', 'pc']): current_section_os = 'win'
-                elif 'linux' in current_element_text_lower: current_section_os = 'linux'
-                elif any(kw in current_element_text_lower for kw in ['mac', 'osx', 'macos']): current_section_os = 'mac'
-                elif 'android' in current_element_text_lower: current_section_os = 'android'
-
-            links_to_check = []
-            if elem.name == 'a' and elem.get('href'):
-                links_to_check.append(elem)
-            else:
-                links_to_check.extend(elem.find_all('a', href=True))
+        
+        for elem in download_elements:
+             # Skip empty text or irrelevant tags
+             if isinstance(elem, str):
+                 text_content = str(elem).strip()
+                 if not text_content: continue
+                 # Text node analysis
+                 current_element_text_lower = text_content.lower()
+                 is_header_like = True # Treat significant text nodes as potential headers
+             elif elem.name in ['h1','h2','h3','h4','strong','b','p','span','div','u','li']:
+                 current_element_text_lower = elem.get_text(separator=' ', strip=True).lower()
+                 is_header_like = True
+             elif elem.name == 'a':
+                 # Link processing happens below
+                 current_element_text_lower = "" 
+                 is_header_like = False
+             else:
+                 continue
             
-            for link_tag in links_to_check:
-                href = link_tag.get('href')
-                text = link_tag.get_text(strip=True)
+             if is_header_like and len(current_element_text_lower) >= 2:
+                 # Check for OS keywords
+                 # We allow checking the START of long text blocks (e.g. div wrappers)
+                 text_to_check = current_element_text_lower[:100] 
+                 
+                 found_os = False
+                 if any(os_kw in text_to_check for os_kw in os_section_keywords):
+                     if any(kw in text_to_check for kw in ['windows', 'pc', 'win ', 'win/']): current_section_os = 'win'
+                     elif 'linux' in text_to_check: current_section_os = 'linux'
+                     elif any(kw in text_to_check for kw in ['mac', 'osx', 'macos']): current_section_os = 'mac'
+                     elif 'android' in text_to_check: current_section_os = 'android'
+                     
+                     # Check if we are inside a restricted spoiler (Split/Update/Patch)
+                     # This overrides the OS detection if found
+                     try:
+                         # Traverse up to find bbCodeSpoiler
+                         parent = elem.parent if isinstance(elem, str) else elem
+                         ancestor_spoilers = parent.find_parents('div', class_='bbCodeSpoiler')
+                         for spoiler_div in ancestor_spoilers:
+                             btn = spoiler_div.find('button', class_='bbCodeSpoiler-button')
+                             if btn:
+                                 btn_text = btn.get_text(strip=True).lower()
+                                 if any(bad in btn_text for bad in ['split', 'update', 'part', 'extra', 'patch']):
+                                     current_section_os = 'extras'
+                                     break
+                     except: pass
+                     
+                     found_os = True
                 
-                if not href or href.startswith(('#', 'mailto:', 'javascript:')) or "f95zone.to/account/" in href or "f95zone.to/members/" in href : continue
-                if "attachments.f95zone.to" in href.lower(): continue
+                 # If valid OS found, we update. 
+                 # If not, check if it's a generic "Download" header which should reset the OS
+                 if not found_os:
+                     # Check strict headers
+                     if any(hdr_kw in text_to_check for hdr_kw in download_section_headers_texts) and len(text_to_check) < 50:
+                         current_section_os = None
+                     elif any(kw in text_to_check for kw in ['translation', 'patch', 'mod', 'extra', 'update', 'split', 'part ']):
+                         current_section_os = 'extras'
 
-                try:
-                    link_domain = re.match(r"https://?([^/]+)", href).group(1).replace("www.", "")
-                    if any(support_domain in link_domain for support_domain in support_link_domains): continue
-                except: pass
+             if elem.name == 'a' and elem.get('href'):
+                 href = elem.get('href')
+                 text = elem.get_text(strip=True)
+                 
+                 if not href or href.startswith(('#', 'mailto:', 'javascript:')) or "f95zone.to/account/" in href or "f95zone.to/members/" in href : continue
+                 if "attachments.f95zone.to" in href.lower(): continue
 
-                if "f95zone.to/threads/" in href and not any(ext in href.lower() for ext in ['.zip', '.rar', '.apk', '.7z', '.exe', '.patch', '.mod']):
-                    if not any(kw in text.lower() for kw in ['mod', 'patch', 'translation', 'download', 'fix', 'guide']): continue
+                 try:
+                     link_domain = re.match(r"https://?([^/]+)", href).group(1).replace("www.", "")
+                     if any(support_domain in link_domain for support_domain in support_link_domains): continue
+                 except: pass
 
-                link_os = 'unknown'
-                if current_section_os: 
-                    link_os = current_section_os
-                else:
-                    text_lower = text.lower()
-                    href_lower = href.lower()
-                    if any(kw in text_lower for kw in ['win ', ' pc ', '.exe', '[win]', '(win)', '_pc.']) or any(kw in href_lower for kw in ['_pc.', '.exe']): link_os = 'win'
-                    elif any(kw in text_lower for kw in ['linux', '.deb', '.sh', '[linux]', '(linux)', '_linux.']) or any(kw in href_lower for kw in ['_linux.', '.sh']): link_os = 'linux'
-                    elif any(kw in text_lower for kw in ['mac', 'osx', '.dmg', '[mac]', '(mac)', '_mac.']) or any(kw in href_lower for kw in ['_mac.', '.dmg']): link_os = 'mac'
-                    elif any(kw in text_lower for kw in ['android', '.apk', '[android]', '(android)', '_apk.']) or any(kw in href_lower for kw in ['_apk.', '.apk']): link_os = 'android'
-                    elif any(kw in text_lower for kw in ['extra', 'patch', 'mod', 'dlc', 'optional', 'bonus', 'soundtrack', 'guide']): link_os = 'extras'
-                
-                raw_download_links.append({'text': text, 'url': href, 'os_determined': link_os})
+                 if "f95zone.to/threads/" in href and not any(ext in href.lower() for ext in ['.zip', '.rar', '.apk', '.7z', '.exe', '.patch', '.mod']):
+                     if not any(kw in text.lower() for kw in ['mod', 'patch', 'translation', 'download', 'fix', 'guide', 'update', 'part']): continue
+
+                 link_os = 'unknown'
+                 
+                 # Force 'extras' for specific keywords in link text or url (overrides section OS)
+                 is_extra_content = False
+                 lower_text = text.lower()
+                 lower_href = href.lower()
+                 
+                 if any(kw in lower_text for kw in ['update', 'patch', 'fix', 'mod', 'translation', 'guide', 'walkthrough', 'part ']) or \
+                    any(kw in lower_href for kw in ['.part1', '.part2', '.part3', '.part4', '.part5']):
+                     link_os = 'extras'
+                     is_extra_content = True
+
+                 if not is_extra_content:
+                     if current_section_os: 
+                         link_os = current_section_os
+                     else:
+                         if any(kw in lower_text for kw in ['win ', ' pc ', '.exe', '[win]', '(win)', 'windows', '(pc)', '[pc]']) or any(kw in lower_href for kw in ['_pc.', '.exe']): link_os = 'win'
+                         elif any(kw in lower_text for kw in ['linux', '.deb', '.sh', '[linux]', '(linux)', '_linux.']) or any(kw in lower_href for kw in ['_linux.', '.sh']): link_os = 'linux'
+                         elif any(kw in lower_text for kw in ['mac', 'osx', '.dmg', '[mac]', '(mac)', '_mac.']) or any(kw in lower_href for kw in ['_mac.', '.dmg']): link_os = 'mac'
+                         elif any(kw in lower_text for kw in ['android', '.apk', '[android]', '(android)', '_apk.']) or any(kw in lower_href for kw in ['_apk.', '.apk']): link_os = 'android'
+                         elif any(kw in lower_text for kw in ['extra', 'dlc', 'optional', 'bonus', 'soundtrack']): link_os = 'extras'
+                 
+                 raw_download_links.append({'text': text, 'url': href, 'os_determined': link_os})
 
         unique_links_map = {}
         for link_info in raw_download_links:
@@ -318,42 +386,69 @@ def parse_game_page_content(html_content, game_thread_url):
                 data['download_links'].append({'text': link['text'], 'url': link['url'], 'os_type': link['os_determined']})
 
     # --- Tags ---
+    # --- Tags ---
     data['tags'] = []
-    genre_spoiler_found_tags = False
     
-    if bb_wrapper: 
-        spoilers_for_tags = bb_wrapper.find_all('div', class_='bbCodeSpoiler')
-        for spoiler in spoilers_for_tags:
-            button = spoiler.find('button', class_='bbCodeSpoiler-button')
-            content_div = spoiler.find('div', class_='bbCodeSpoiler-content')
-            if button and content_div and "genre" in button.get_text(strip=True).lower():
-                raw_tags_text = content_div.get_text(separator=',', strip=True)
-                if raw_tags_text:
-                    parsed_tags = [tag.strip() for tag in raw_tags_text.split(',') if tag.strip()]
-                    data['tags'].extend(parsed_tags)
-                    genre_spoiler_found_tags = True
-                break
+    # Priority 1: System Tags (Header/Title area) - usually js-tagList or tagGroup
+    system_tags_found = False
     
-    if not genre_spoiler_found_tags:
-        if tags_span_container := soup.find('span', class_='js-tagList'):
-            tag_links = tags_span_container.find_all('a', class_='tagItem')
-            for tag_link in tag_links:
-                tag_text = tag_link.get_text(strip=True)
-                if tag_text not in data['tags']: data['tags'].append(tag_text)
+    # Check for XenForo 2.x standard tag list
+    if tags_span_container := soup.find('span', class_='js-tagList'):
+        tag_links = tags_span_container.find_all('a', class_='tagItem')
+        for tag_link in tag_links:
+            tag_text = tag_link.get_text(strip=True)
+            if tag_text not in data['tags']: 
+                data['tags'].append(tag_text)
+                system_tags_found = True
 
-    if not data['tags']: 
+    if not system_tags_found:
         if tags_container := soup.find('div', class_='tagGroup'):
             tag_links = tags_container.find_all('a', class_='tagItem')
             for tag_link in tag_links:
                 tag_text = tag_link.get_text(strip=True)
-                if tag_text not in data['tags']: data['tags'].append(tag_text)
-        elif bb_wrapper: 
-            if tags_dt := bb_wrapper.find('dt', string=lambda t: t and 'tags' in t.lower()):
-                if tags_dd := tags_dt.find_next_sibling('dd'): 
-                    tag_links = tags_dd.find_all('a')
-                    for tag_link in tag_links:
-                        tag_text = tag_link.get_text(strip=True)
-                        if tag_text not in data['tags']: data['tags'].append(tag_text)
+                if tag_text not in data['tags']:
+                    data['tags'].append(tag_text)
+                    system_tags_found = True
+
+    # Priority 2: Spoiler "Genre/Tags" in post (Fallback)
+    if not system_tags_found and bb_wrapper: 
+        spoilers_for_tags = bb_wrapper.find_all('div', class_='bbCodeSpoiler')
+        for spoiler in spoilers_for_tags:
+            button = spoiler.find('button', class_='bbCodeSpoiler-button')
+            content_div = spoiler.find('div', class_='bbCodeSpoiler-content')
+            
+            should_parse_tags = False
+            if button:
+                btn_text_lower = button.get_text(strip=True).lower()
+                if "genre" in btn_text_lower or "tags" in btn_text_lower:
+                    should_parse_tags = True
+            
+            # Fallback: Check if the content div itself has "Tags:" string at start if button text was generic
+            if not should_parse_tags and content_div:
+                 content_text_start = content_div.get_text(separator=' ', strip=True)[:20].lower()
+                 if "tags" in content_text_start:
+                     should_parse_tags = True
+
+            if should_parse_tags and content_div:
+                raw_tags_text = content_div.get_text(separator=',', strip=True)
+                # Remove "Tags:" prefix if present
+                raw_tags_text = re.sub(r'(?i)^tags:?\s*', '', raw_tags_text)
+                
+                if raw_tags_text:
+                    parsed_tags = [tag.strip() for tag in raw_tags_text.split(',') if tag.strip()]
+                    for pt in parsed_tags:
+                        if pt not in data['tags']: data['tags'].append(pt)
+                    # We found tags in spoiler, stop looking
+                    break
+    
+    # Priority 3: Old/Legacy formats
+    if not data['tags'] and bb_wrapper: 
+        if tags_dt := bb_wrapper.find('dt', string=lambda t: t and 'tags' in t.lower()):
+            if tags_dd := tags_dt.find_next_sibling('dd'): 
+                tag_links = tags_dd.find_all('a')
+                for tag_link in tag_links:
+                    tag_text = tag_link.get_text(strip=True)
+                    if tag_text not in data['tags']: data['tags'].append(tag_text)
 
     # --- DL Lists ---
     dls = soup.find_all('dl')
@@ -497,8 +592,16 @@ def extract_game_data(game_thread_url, username=None, password=None, requests_se
                     logger_scraper.info("EXTRACT_GAME_DATA: Requests fetch successful. Parsing content...")
                     result = parse_game_page_content(response.content, game_thread_url)
                     if result and result.get('title') != "Not found":
-                        logger_scraper.info("EXTRACT_GAME_DATA: Lightweight extraction successful.")
-                        return result
+                        # Check if data qualifies as "Complete" - if not, we might want to fall back to Playwright
+                        # e.g. if Tags are missing or Download links are empty, it might be a Guest view issue
+                        missing_tags = not result.get('tags') or result['tags'] == ["Not found"]
+                        missing_links = not result.get('download_links')
+                        
+                        if missing_tags or missing_links:
+                             logger_scraper.warning("EXTRACT_GAME_DATA: Lightweight extraction incomplete (missing tags/links). Falling back to Playwright.")
+                        else:
+                            logger_scraper.info("EXTRACT_GAME_DATA: Lightweight extraction successful.")
+                            return result
                     else:
                         logger_scraper.warning("EXTRACT_GAME_DATA: Lightweight extraction yielded empty data. Falling back.")
             else:

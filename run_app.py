@@ -337,7 +337,7 @@ def manual_sync_game(played_game_id):
             try:
                 # Signature: check_single_game_update_and_status(db_path, f95_client, played_game_row_id, user_id, force_scrape=False)
                 # Note: manual_sync_game passes 'played_game_id' which corresponds to 'played_game_row_id' (upg.id)
-                check_single_game_update_and_status(DB_PATH, client, game_id, user_id)
+                check_single_game_update_and_status(DB_PATH, client, game_id, user_id, force_scrape=True)
                 
                 # Notify completion
                 if get_setting(DB_PATH, 'notify_on_sync_complete', 'True', user_id=user_id) == 'True':
