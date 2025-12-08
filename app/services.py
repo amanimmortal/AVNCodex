@@ -713,16 +713,29 @@ def check_single_game_update_and_status(db_path, f95_client, played_game_row_id,
             
             # --- Image Existence/Recovery Check ---
             is_image_missing = False
-            if not game['image_url']:
+            image_url_in_db = game['image_url']
+
+            if not image_url_in_db:
                 is_image_missing = True
                 logger.info(f"Game {game['name']} has no image_url in DB.")
-            elif game['image_url'].startswith("/cached_images/"):
+            elif image_url_in_db.startswith("/cached_images/"):
                 # verify file existence
-                img_filename = os.path.basename(game['image_url'])
+                img_filename = os.path.basename(image_url_in_db)
                 img_fs_path = os.path.join(IMAGE_CACHE_DIR_FS, img_filename)
                 if not os.path.exists(img_fs_path):
                     is_image_missing = True
                     logger.info(f"Game {game['name']} has missing image file at {img_fs_path}.")
+            elif image_url_in_db.startswith("http"):
+                # Remote URL in DB - Try to cache it directly
+                logger.info(f"Game {game['name']} has remote image URL: {image_url_in_db}. Attempting to cache.")
+                new_cache = f95_client.cache_image_from_url(image_url_in_db)
+                if new_cache:
+                    cursor.execute("UPDATE games SET image_url = ? WHERE id = ?", (new_cache, game['id']))
+                    conn.commit()
+                    logger.info(f"Successfully cached remote image for {game['name']}")
+                else:
+                    is_image_missing = True # Failed to cache remote, try other sources
+                    logger.warning(f"Failed to cache existing remote image for {game['name']}. Marking as missing.")
             
             if is_image_missing and match and match.get('image_url'):
                 # Try to recover from RSS first
