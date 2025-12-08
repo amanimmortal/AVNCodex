@@ -11,7 +11,7 @@ services:
     volumes:
       # Make sure the host path '/mnt/user/appdata/avnupdatechecker/data' exists on your Unraid system.
       # The container path '/data' must remain, as the app expects it.
-      - /mnt/user/appdata/avnupdatechecker/data:/data
+      - /mnt/user/appdata/avncodex-dev/data:/data
     environment:
       # FLASK_RUN_PORT tells the app inside the container which port to listen on.
       # It's sourced from config.env, then defaults here, then the Dockerfile default.

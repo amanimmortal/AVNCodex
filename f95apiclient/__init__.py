@@ -10,9 +10,10 @@ import random # Added for random sampling and proxy selection
 import urllib.parse # Added for URL encoding
 import time # Added for retry delay
 from typing import Optional
-import os # Added for OS path operations
 import hashlib # Added for generating unique filenames
 from urllib.parse import urlparse # To get path and extension from URL
+import json
+import os # Added for OS path operations
 
 # Setup basic logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -98,12 +99,9 @@ class F95ApiClient:
         self.current_proxy = None # Initialize current_proxy
 
         if self.use_proxies:
-            self._load_proxies()
-            if self.available_proxies:
-                self._set_random_proxy()
-            else:
-                self.logger.warning("Proxy usage is enabled, but no proxies were loaded. Proceeding without proxies.")
-                self.session.proxies = {}
+            # Lazy load: Do not load proxies here. They will be loaded on first use (failure of direct connection).
+            self.logger.info("Proxy usage is enabled. Proxies will be loaded lazily if direct connection fails.")
+            self.session.proxies = {} # Default to no proxy initially
         else:
             self.logger.info("Proxy usage is disabled by configuration.")
             self.session.proxies = {}
@@ -188,26 +186,70 @@ class F95ApiClient:
     def _load_proxies(self):
         """
         Attempts to load lists of HTTP/HTTPS and SOCKS5 proxies.
+        Implements Caching: Checks 'resources/proxy_cache.json' first.
         """
         self.available_proxies = [] # Clear any existing proxies
         
-        # Fetch HTTPS proxies (which can be used for HTTP/HTTPS traffic)
-        # Requests library uses 'http' as scheme for these proxies for both http and https URLs
-        self._fetch_proxy_list(HTTP_PROXY_LIST_URL, "http") 
-                                                       
-        # Fetch SOCKS5 proxies
-        self._fetch_proxy_list(SOCKS5_PROXY_LIST_URL, "socks5h") # Using socks5h for remote DNS resolution
+        cache_file = os.path.join(os.getcwd(), 'resources', 'proxy_cache.json')
+        cache_valid = False
+        
+        # 1. Try Cache
+        if os.path.exists(cache_file):
+            try:
+                msg = ""
+                with open(cache_file, 'r') as f:
+                    cache_data = json.load(f)
+                    
+                timestamp = cache_data.get('timestamp', 0)
+                cached_proxies = cache_data.get('proxies', [])
+                
+                # Check age (e.g., 1 hour = 3600 seconds)
+                if time.time() - timestamp < 3600 and cached_proxies:
+                    # Convert list of lists/tuples back to tuples if needed (json loads as lists)
+                    self.available_proxies = [tuple(p) for p in cached_proxies]
+                    self.logger.info(f"Loaded {len(self.available_proxies)} proxies from cache ({cache_file}).")
+                    cache_valid = True
+                else:
+                     msg = "Cache expired."
+            except Exception as e:
+                self.logger.warning(f"Failed to load proxy cache: {e}")
+        
+        # 2. Fetch from Web if Cache Invalid
+        if not cache_valid:
+            self.logger.info(f"Fetching fresh proxies (Cache invalid/missing).")
+            
+            # Fetch HTTPS proxies (which can be used for HTTP/HTTPS traffic)
+            self._fetch_proxy_list(HTTP_PROXY_LIST_URL, "http") 
+                                                           
+            # Fetch SOCKS5 proxies
+            self._fetch_proxy_list(SOCKS5_PROXY_LIST_URL, "socks5h") 
 
-        if self.available_proxies:
-            random.shuffle(self.available_proxies) # Shuffle the combined list
-            self.logger.info(f"Total {len(self.available_proxies)} proxies loaded and shuffled (HTTPS/SOCKS5).")
-        else:
-            self.logger.warning("No proxies were loaded from any source.")
+            if self.available_proxies:
+                random.shuffle(self.available_proxies) # Shuffle the combined list
+                self.logger.info(f"Total {len(self.available_proxies)} proxies loaded and shuffled (HTTPS/SOCKS5).")
+                
+                # Save to Cache
+                try:
+                    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                    with open(cache_file, 'w') as f:
+                        json.dump({
+                            'timestamp': time.time(),
+                            'proxies': self.available_proxies
+                        }, f)
+                    self.logger.info(f"Saved proxies to cache: {cache_file}")
+                except Exception as e:
+                     self.logger.warning(f"Failed to save proxy cache: {e}")
+            else:
+                self.logger.warning("No proxies were loaded from any source.")
             
     def _set_random_proxy(self):
         """
         Configures the session to use one randomly selected proxy from self.available_proxies.
         """
+        if not self.available_proxies:
+            # Lazy Load Trigger
+            self._load_proxies()
+            
         if not self.available_proxies:
             self.logger.debug("No available proxies to set.")
             self.session.proxies = {} # Ensure no proxy is set
@@ -325,23 +367,26 @@ class F95ApiClient:
                     attempt_with_proxy_activated = True
                     activated_proxy_on_this_403 = True
                 
-                # Retry for 429 (Too Many Requests) or 5xx server errors, OR if we just activated proxies due to a 403
-                if e.response.status_code == 429 or e.response.status_code >= 500 or activated_proxy_on_this_403:
+                # Retry for 403 (Forbidden), 429 (Too Many Requests) or 5xx server errors, 
+                # OR if we just activated proxies due to a 403 on a direct attempt.
+                if e.response.status_code == 403 or e.response.status_code == 429 or e.response.status_code >= 500 or activated_proxy_on_this_403:
                     if attempt < self.max_attempts - 1:
                         self.logger.info(f"HTTPError {e.response.status_code} is retryable or proxy activated. Continuing to attempt {attempt + 2}/{self.max_attempts}.")
-                        # Ensure proxy is used on next attempt if it was just activated
-                        if activated_proxy_on_this_403 and not self.current_proxy: # Force proxy selection if not already set by loop start
-                            if not self._set_random_proxy():
-                                self.logger.warning("Failed to set a proxy after 403, next attempt might still be direct if no proxies left.")
                         
-                        # Add delay for 429 or general retry
+                        # If proxies are enabled and available, always try to set a new one for the next attempt after these errors.
+                        if self.use_proxies and self.available_proxies:
+                            self.logger.info(f"Forcing new proxy selection after HTTP {e.response.status_code} on {log_proxy_info}.")
+                            if not self._set_random_proxy():
+                                self.logger.warning("Failed to set a new proxy for the next attempt. It might be direct or use a previous proxy if one was already set and not cleared.")
+                        
+                        # Add delay, especially for 429
                         time.sleep(self.retry_delay_seconds * (1 + (e.response.status_code == 429)))
-                        continue
+                        continue # Proceed to the next attempt in the loop
                     else:
-                        self.logger.error(f"All {self.max_attempts} attempts failed. Last HTTPError: {e.response.status_code}")
+                        self.logger.error(f"All {self.max_attempts} attempts failed. Last HTTPError: {e.response.status_code} on {log_proxy_info}")
                 else:
                     # For other HTTP errors (e.g., 400, 401, 404), don't retry, return the response immediately.
-                    self.logger.error(f"Non-retryable HTTPError {e.response.status_code}. Returning error response immediately.")
+                    self.logger.error(f"Non-retryable HTTPError {e.response.status_code} on {log_proxy_info}. Returning error response immediately.")
                     return e.response 
             
             except Exception as e: # Catch any other unexpected errors during the request
@@ -476,9 +521,11 @@ class F95ApiClient:
             self.is_logged_in = False
             return {'success': False, 'status_code': 'REQUEST_EXCEPTION', 'message': f"Login request failed: {e}"}
 
-    def get_latest_game_data_from_rss(self, limit=90, search_term: str = None, completion_status_filter: str = None) -> list[dict]:
+    def get_latest_game_data_from_rss(self, limit=90, search_term: str = None, completion_status_filter: str = None, 
+                                      tags: list = None, notags: list = None, engines: list = None) -> list[dict]:
         """
         Fetches and parses game data from the F95Zone RSS feed using the new _make_request method.
+        Supports filtering by Tags, Engines, and Status.
         """
         base_rss_url = f"{self.base_url}/sam/latest_alpha/latest_data.php"
         url_params_dict = {'cmd': 'rss', 'cat': 'games', 'rows': str(limit)}
@@ -490,6 +537,8 @@ class F95ApiClient:
             self.logger.info(f"Fetching RSS feed, limit: {limit}")
 
         prefix_params = []
+        
+        # Status Filter
         if completion_status_filter:
             if completion_status_filter == "completed":
                 prefix_params.append(("prefixes[]", "18"))
@@ -505,6 +554,35 @@ class F95ApiClient:
             elif completion_status_filter == "abandoned":
                  prefix_params.append(("prefixes[]", "22"))
                  self.logger.info("Filtering RSS for: Abandoned games")
+        
+        # Engine Filter
+        if engines:
+            for engine_id in engines:
+                prefix_params.append(("prefixes[]", str(engine_id)))
+            self.logger.info(f"Filtering RSS for Engines: {engines}")
+
+        # Tags Filter (Include)
+        if tags:
+            # RSS uses tags=ID,ID,ID format or multiple tags[]?
+            # From research: tags=1507 (single). For multiple? 
+            # Usually URL parameters repeat: tags[]=1&tags[]=2 OR comma separated tags=1,2
+            # The browser documentation example uses 'tags=1507'.
+            # Looking at F95 structure, it often uses lists. Let's try appending tuples.
+            # However, looking at the user provided URL: tags=1507.
+            # Let's assume list format 'tags[]' like prefixes for safety, OR single 'tags' if it's one.
+            # Wait, the screenshot showed 'Select a tag...'. 
+            # If standard XenForo/F95, likely list.
+            # But the user example `tags=1507` suggests simple param. 
+            # Let's use list tuples to be safe with requests: tags[]
+            for tag_id in tags:
+                prefix_params.append(("tags[]", str(tag_id))) 
+            self.logger.info(f"Filtering RSS for Tags: {tags}")
+
+        # Tags Filter (Exclude)
+        if notags:
+            for tag_id in notags:
+                prefix_params.append(("notags[]", str(tag_id)))
+            self.logger.info(f"Filtering RSS to Exclude Tags: {notags}")
         
         # Construct query string manually for list-like parameters if requests encode them differently than expected
         # For "prefixes[]=18", requests typically encodes params={'prefixes[]': '18'} as prefixes%5B%5D=18
@@ -570,6 +648,22 @@ class F95ApiClient:
                 # F95Zone RSS uses 'published' for the date
                 game_data['rss_pub_date'] = item.get("published") # Format: 'Sat, 18 May 2024 10:00:00 GMT'
 
+                # Extract status from tags
+                # feedparser puts categories/tags into 'tags' list of dicts: [{'term': 'TagName', 'scheme': None, 'label': None}]
+                tags = [t.get('term', '') for t in item.get('tags', [])]
+                status = "Ongoing" # Default assumption if no other status tag found
+                # F95Zone tags are case-sensitive usually, but let's be safe
+                tags_lower = [t.lower() for t in tags]
+                
+                if "completed" in tags_lower:
+                    status = "Completed"
+                elif "on hold" in tags_lower or "onhold" in tags_lower: # Fixed: Check for 'onhold' (no space) too
+                    status = "On Hold"
+                elif "abandoned" in tags_lower:
+                    status = "Abandoned"
+                
+                game_data['completed_status'] = status
+                
                 # Extract image URL from description HTML using regex
                 image_url_from_rss = None
                 if item.get("description", ""):
@@ -580,6 +674,7 @@ class F95ApiClient:
                     
                     game_data['image_url'] = image_url_from_rss # Store original URL or None
                 else: # No description or no img_match
+
                     game_data['image_url'] = None
                 
                 # Ensure essential fields are present

@@ -1,0 +1,24 @@
+Bulk Test Results
+==================================================
+
+[SUCCESS] trying to remember a game's name
+URL: https://f95zone.to/threads/being-a-dik-season-3-v1-0-1-dr-pinkcake.18484/
+Total Links: 0
+Breakdown: {"win": 0, "mac": 0, "linux": 0, "android": 0, "extras": 0, "unknown": 0}
+--------------------
+==================================================
+
+[SUCCESS] REQBlushyPixy
+URL: https://f95zone.to/threads/freshwomen-season-1-v1-0-2-oppai-games.106981/
+Total Links: 1
+Breakdown: {"win": 0, "mac": 0, "linux": 0, "android": 0, "extras": 0, "unknown": 1}
+--------------------
+unknown  | https://gumroad.com/blushypixy#
+==================================================
+
+[SUCCESS] Oops! We ran into some problems.
+URL: https://f95zone.to/threads/treasure-of-nadia-v10101-nlt-media.19323/
+Total Links: 0
+Breakdown: {"win": 0, "mac": 0, "linux": 0, "android": 0, "extras": 0, "unknown": 0}
+--------------------
+==================================================

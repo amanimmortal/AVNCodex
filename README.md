@@ -1,10 +1,16 @@
-# YAM - Yet Another Monitor (for F95Zone Game Updates)
+# AVN Codex (for F95Zone Game Updates)
 
-A Python-based web application to track and check for game updates from F95Zone. It is designed to be run as a Docker container or locally for development.
+AVN Codex is a Python/Flask application designed to track and check for game updates from F95Zone.
+
+## Overview
+
+The application is a Python-based web application built with the Flask framework. It features its own F95Zone API client (`f95apiclient`), uses an SQLite database for data persistence, and handles scheduled update checks and notifications.
+
+This README details the Python Flask application components, which can be developed or run independently in a Docker environment.
 
 ## Core Features
 
-*   **User Accounts**: Supports multiple users with individual game lists and notification settings.
+*   **User Accounts**: Supports multiple users with individual game lists and notification settings (managed via its web interface).
 *   **Game List Management**:
     *   Search for games on F95Zone via its RSS feed.
     *   Add games to a personal monitoring list.
@@ -26,13 +32,13 @@ A Python-based web application to track and check for game updates from F95Zone.
 ## Technical Overview
 
 *   **Backend**: Python (Flask framework).
-*   **Database**: SQLite for storing user data, game information, and application settings.
-*   **F95Zone Interaction**: Uses a custom `F95APIClient` to fetch game data primarily via F95Zone's RSS feeds.
+*   **Database**: SQLite (`f95_games.db`) for storing user data, game information, and application settings.
+*   **F95Zone Interaction**: Uses a custom Python client (`f95apiclient/`) to fetch game data primarily via F95Zone's RSS feeds.
     *   The client can search by game name and filter by completion status.
     *   It includes basic proxy support to help with request reliability.
     *   The application is configured to request a larger number of items (90) from RSS feeds where possible, as F95Zone's RSS `rows` parameter defaults to a smaller number (30) if an unsupported value is provided. This aims to improve the comprehensiveness of search results and status checks.
 *   **Scheduling**: APScheduler is used for background task scheduling (checking for game updates).
-*   **Deployment**: Designed for Docker, but can also be run directly for development.
+*   **Deployment**: The Python application is designed for Docker, but can also be run directly for development.
 
 ## Core Logic (`app/main.py`)
 
@@ -42,7 +48,7 @@ The `app/main.py` module is the heart of the application's backend logic. Key fu
     *   `initialize_database()`: Sets up the SQLite database schema, including tables for `users`, `games` (master list of game details), `user_played_games` (user-specific game tracking, notes, ratings, notification states), and `app_settings` (user-specific and global configurations). It also handles schema migrations for adding new columns to existing tables.
     *   Functions for CRUD operations on these tables (e.g., `get_user_by_id`, `add_game_to_my_list`, `get_setting`, `set_setting`).
 *   **Game Information & Update Processing**:
-    *   `process_rss_feed()`: Periodically fetches the latest game data from F95Zone's general RSS feed to update the central `games` table with new game entries or update information for existing ones (like version, author, RSS publication date).
+    *   `process_rss_feed()`: Periodically fetches the latest game data from F95Zone's general RSS feed to update the central `games` table with new game entries or update information for existing ones (like version, author, RSS publication date). (Note: Review of `app.main.py` suggests this global periodic task might be deprecated in favor of on-demand updates).
     *   `update_completion_statuses()`: Checks specific F95Zone RSS feeds (e.g., "completed games") to update the `completed_status` field in the `games` table (e.g., to 'COMPLETED', 'ABANDONED', 'ON_HOLD', or 'ONGOING').
     *   `get_first_significant_word()`: A text processing helper to extract a meaningful search term from a game's name for more accurate RSS feed searching.
 *   **User-Specific Game Monitoring & Notifications**:
@@ -55,7 +61,7 @@ The `app/main.py` module is the heart of the application's backend logic. Key fu
     *   `scheduled_games_update_check()`: Called by the APScheduler, this iterates through all users and their tracked games (that are eligible for checks) and calls `check_single_game_update_and_status()` for each.
     *   `sync_all_my_games_for_user()`: Allows a user to manually trigger `check_single_game_update_and_status()` for all their relevant games.
 
-## Database Schema Overview
+## Database Schema Overview (SQLite)
 
 The application uses an SQLite database (`f95_games.db`) with the following main tables:
 
@@ -72,15 +78,16 @@ The application uses an SQLite database (`f95_games.db`) with the following main
 
 ## Project Structure
 
-*   `app.py`: Main Flask application entry point, handles routing, user sessions, and initializes the scheduler.
-*   `app/main.py`: Contains core application logic, database interactions, game update checking, and notification functions.
+*   `app.py`: Main Flask application entry point.
+*   `app/main.py`: Contains core application logic (database interactions, game update checking, notification functions).
 *   `f95apiclient/`: Python client for interacting with F95Zone RSS feeds.
-*   `app/templates/`: HTML templates for the web interface.
-*   `app/static/`: Static web assets (CSS, JavaScript).
+*   `app/templates/`: HTML templates for the Flask web interface.
+*   `app/static/`: Static web assets (CSS, JavaScript) for the Flask web interface.
 *   `requirements.txt`: Python dependencies.
-*   `Dockerfile`: For building the Docker image.
+*   `Dockerfile`: For building a Docker image of the application.
 *   `docker-compose.yml` / `docker-compose.windows.yml`: For easier Docker deployment.
 *   `/data/`: (Inside Docker container, or locally) Default path for `f95_games.db` (database) and `logs/`.
+*   `resources/`: Assets like fonts, images, language files, potentially used by the Flask application.
 
 ## Configuration
 
@@ -89,7 +96,7 @@ The application uses an SQLite database (`f95_games.db`) with the following main
 
 ## Running the Application
 
-### Using Docker (Recommended)
+### Python Application via Docker
 
 1.  **Prerequisites**: Docker and Docker Compose installed.
 2.  **Build and Run**:
@@ -101,7 +108,7 @@ The application uses an SQLite database (`f95_games.db`) with the following main
         ```bash
         docker-compose -f docker-compose.windows.yml up --build -d
         ```
-3.  The application will typically be accessible at `http://localhost:5000`.
+3.  The application will be accessible at `http://localhost:5000`. The first user to register becomes an admin.
 4.  **Logs**: View container logs using `docker-compose logs -f`.
 5.  **Stopping**:
     ```bash
@@ -110,32 +117,13 @@ The application uses an SQLite database (`f95_games.db`) with the following main
 
 ### Local Development
 
-1.  **Prerequisites**: Python 3.x.
-2.  **Create a virtual environment** (recommended):
-    ```bash
-    python -m venv .venv
-    # On Linux/macOS:
-    source .venv/bin/activate
-    # On Windows (PowerShell):
-    .venv\Scripts\Activate.ps1
-    # On Windows (CMD):
-    .venv\Scripts\activate.bat
-    ```
-3.  **Install dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-4.  **Create a `data` directory** in the project root if it doesn't exist (for the SQLite database and logs):
-    ```bash
-    mkdir data
-    mkdir data/logs 
-    ```
-    *Note: The application (`app/main.py`) is configured to place the database and logs in `/data/` by default. For local development without Docker, ensure this path is writable or adjust `DB_PATH` and `LOG_FILE_PATH` in `app/main.py` if necessary.*
-5.  **Run the Flask application**:
-    ```bash
-    python app.py
-    ```
-6.  The application will be accessible at `http://localhost:5000` (or as configured). The first user to register becomes an admin.
+For a detailed step-by-step guide for Windows, please see [LOCAL_SETUP.md](LOCAL_SETUP.md).
+
+**Quick Summary**:
+1.  Install dependencies: `pip install -r requirements.txt`
+2.  Install Playwright: `playwright install chromium`
+3.  Run the application: `python run_app.py`
+
 
 ## Troubleshooting
 
@@ -149,13 +137,19 @@ The application uses an SQLite database (`f95_games.db`) with the following main
     *   If you encounter schema-related errors after an update, the `initialize_database()` function attempts to perform basic migrations (like adding columns). For major schema changes, manual intervention might be rarely needed.
 *   **"Too Many Requests" or similar errors from F95Zone**:
     *   The `F95APIClient` attempts to use proxies to mitigate this. However, F95Zone may still temporarily block access if requests are too frequent or aggressive. The scheduler interval should be set to a reasonable value (e.g., several hours).
+*   **Database Errors (Python Application)**:
+    *   Ensure the `/data/` directory (or its equivalent if customized) is writable by the application.
+    *   If you encounter schema-related errors after an update, the `initialize_database()` function attempts to perform basic migrations (like adding columns). For major schema changes, manual intervention might be rarely needed.
 
 ## Notes on F95Zone Interaction
 
-*   This application relies on F95Zone's RSS feeds. Changes to their site structure or RSS feed availability can break functionality.
-*   The F95Zone RSS feeds have a parameter (often referred to as `rows` or similar, corresponding to `limit` in the `F95APIClient`) that controls the number of results. While the API might accept various values, it typically defaults to 30 items if an unsupported number is requested. The application now attempts to use a limit of 90 items for its RSS queries to maximize the data retrieved in a single request.
-*   The `F95APIClient` includes mechanisms to cycle through public proxies to improve request success rates, as direct requests can be rate-limited or blocked. The reliability of these public proxies can vary.
-*   No direct web scraping of HTML pages for game data is performed by default for update checks; it primarily uses structured RSS data. 
+This application relies on F95Zone's RSS feeds and site structure. Changes to F95Zone can break functionality.
+
+*   **Python Client (`f95apiclient/`)**:
+    *   Uses F95Zone's RSS feeds.
+    *   The F95Zone RSS feeds have a parameter (often referred to as `rows` or similar, corresponding to `limit` in the `F95APIClient`) that controls the number of results. While the API might accept various values, it typically defaults to 30 items if an unsupported number is requested. The application now attempts to use a limit of 90 items for its RSS queries to maximize the data retrieved in a single request.
+    *   The `F95APIClient` includes mechanisms to cycle through public proxies to improve request success rates, as direct requests can be rate-limited or blocked. The reliability of these public proxies can vary.
+    *   No direct web scraping of HTML pages for game data is performed by default for update checks; it primarily uses structured RSS data.
 
 ## License
 

@@ -4,7 +4,16 @@
 const Datastore = require("nedb-promises");
 const Ajv = require("ajv").default;
 const threadDataSchema = require("../schemas/thread-data");
-const logger = require("electron-log");
+const path = require("path");
+
+// Assuming userData path needs to be handled differently now, or is not needed.
+// For example, storing DB in the application's data directory or a user-configurable path.
+// const dbPath = path.join(app.getPath("userData"), "thread-data.db"); 
+// This line ^^^ depends on the 'electron' module's 'app.getPath("userData")'
+// We need a new strategy for dbPath if Electron is removed.
+// For now, let's assume a placeholder or a path relative to the script/project.
+const dbPath = "./thread-data.db"; // Placeholder path
+const db = Datastore.create(dbPath);
 
 /**
  * It allows you to store and get thread data from a disk database.
@@ -45,7 +54,7 @@ class ThreadDataStore {
 
         this._db.on("__error__", (datastore, event, error, ...args) => {
             // datastore, 'find', error, [{ foo: 'bar' }, {}]
-            logger.error(`Error in database when executing ${event} with query ${args}: ${error}`);
+            console.error(`Error in database when executing ${event} with query ${args}: ${error}`);
         });
     }
 
@@ -67,8 +76,8 @@ class ThreadDataStore {
      * @param {Error} err Error thrown if the database has problems loading
      */
     _databaseOnLoadCallback(err) {
-        if(err) logger.error(`Error when loading database: ${err}`);
-        else logger.info(`Database loaded succesfully from ${this.DB_PATH}`);
+        if(err) console.error(`Error when loading database: ${err}`);
+        else console.info(`Database loaded succesfully from ${this.DB_PATH}`);
     }
     //#endregion Private methods
 

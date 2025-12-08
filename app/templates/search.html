@@ -3,113 +3,111 @@
 {% block title %}Search Games - AVN Codex{% endblock %}
 
 {% block main_content %}
-    <h1>Search F95Zone Games - AVN Codex</h1>
+<h1>Search F95Zone Games - AVN Codex</h1>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <ul class="flash-messages">
-                {% for category, message in messages %}
-                    <li class="{{ category }}">{{ message }}</li>
-                {% endfor %}
-            </ul>
-        {% endif %}
-    {% endwith %}
 
-    <div class="search-form">
-        <form method="POST" action="{{ url_for('search') }}" id="searchGameForm">
-            <input type="text" name="search_term" placeholder="Enter game name..." value="{{ search_term if search_term else '' }}">
-            <p class="form-text search-help-text">Tip: For best results, try 1-2 main keywords. Short common words (e.g., 'a', 'in', 'the') may be ignored by the search.</p>
-            <button type="submit" class="btn btn-primary" id="searchButton">Search</button>
-        </form>
-    </div>
 
-    {% if search_attempted %}
-        {% if results is none %}
-            {# Flash message already shown by app.py for this case. No need for h2 or p here #}
-            {# Optionally, you could add a static message here if desired, but flash is usually enough #}
-            {# e.g., <p class="error-message">The search could not be completed at this time.</p> #}
-        {% elif results %}
-            <h2>Search Results {% if search_term %}for "{{ search_term }}"{% endif %} ({{ results|length }})</h2>
-            <div> {# Changed ul to div #}
-                {% for game in results %}
-                    <article class="card">
-                        <div class="card-banner-area">
-                            {% if game.image_url %}
-                                <img src="{{ game.image_url }}" alt="{{ game.name }}" class="card-image-banner">
-                            {% else %}
-                                <div class="card-image-banner-placeholder">{{ game.name }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="card-body-content">
-                            <div class="card-details">
-                                <h3><a href="{{ game.url }}" target="_blank">{{ game.name }}</a></h3>
-                                <p><strong>Version:</strong> {{ game.version if game.version else 'N/A' }}</p>
-                                <p><strong>Author:</strong> {{ game.author if game.author else 'N/A' }}</p>
-                                <p class="text-muted">Published: {{ game.rss_pub_date.split(' ')[1:4]|join(' ') if game.rss_pub_date else 'N/A' }}</p>
-                            </div>
-                            <div class="card-actions">
-                                {% if game.is_already_in_list %}
-                                    <button type="button" class="btn btn-secondary" disabled>Already in Your List</button>
-                                    {# Optionally, add a link to view/edit it in their list #}
-                                    {# <a href="{{ url_for('edit_details_route', played_game_id=THE_ID_IF_WE_HAD_IT) }}" class="btn btn-info btn-sm">View/Edit</a> #}
-                                {% else %}
-                                    <form method="POST" action="{{ url_for('add_game_to_user_list') }}" style="width:100%;" onsubmit="handleAddToList(this)">
-                                        <input type="hidden" name="game_name" value="{{ game.name }}">
-                                        <input type="hidden" name="f95_url" value="{{ game.url }}">
-                                        <input type="hidden" name="version" value="{{ game.version if game.version else '' }}">
-                                        <input type="hidden" name="author" value="{{ game.author if game.author else '' }}">
-                                        <input type="hidden" name="image_url" value="{{ game.image_url if game.image_url else '' }}">
-                                        <input type="hidden" name="rss_pub_date" value="{{ game.rss_pub_date if game.rss_pub_date else '' }}">
-                                        
-                                        <div class="form-group">
-                                            <label for="user_notes_{{ loop.index }}">Notes:</label>
-                                            <textarea name="user_notes" id="user_notes_{{ loop.index }}" rows="2"></textarea>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="user_rating_{{ loop.index }}">Rating:</label>
-                                            <select class="form-select form-select-sm" id="user_rating_{{ loop.index }}" name="user_rating">
-                                                <option value="" selected>Not Rated</option>
-                                                <option value="0">0 Stars (Worst)</option>
-                                                <option value="1">1 Star</option>
-                                                <option value="2">2 Stars</option>
-                                                <option value="3">3 Stars</option>
-                                                <option value="4">4 Stars</option>
-                                                <option value="5">5 Stars (Best)</option>
-                                            </select>
-                                        </div>
-                                        <button type="submit" class="btn btn-success">Add to My List</button>
-                                    </form>
-                                {% endif %}
-                            </div>
-                        </div> {# End card-body-content #}
-                    </article>
-                {% endfor %}
-            </div>
-        {% else %} {# results is defined but empty #}
-            {# Flash message already shown by app.py for "No games found" if search_term was provided #}
-            {# Only show the "Search Results" header if a search_term was present #}
-            {% if search_term %}
-                <h2>Search Results for "{{ search_term }}" (0)</h2> 
+<div class="search-form">
+    <form method="POST" action="{{ url_for('search') }}" id="searchGameForm">
+        <input type="text" name="search_term" placeholder="Enter game name..."
+            value="{{ search_term if search_term else '' }}">
+        <p class="form-text search-help-text">Tip: For best results, try 1-2 main keywords. Short common words (e.g.,
+            'a', 'in', 'the') may be ignored by the search.</p>
+        <button type="submit" class="btn btn-primary" id="searchButton">Search</button>
+    </form>
+</div>
+
+{% if search_attempted %}
+{% if results is none %}
+{# Flash message already shown by app.py for this case. No need for h2 or p here #}
+{# Optionally, you could add a static message here if desired, but flash is usually enough #}
+{# e.g., <p class="error-message">The search could not be completed at this time.</p> #}
+{% elif results %}
+<h2>Search Results {% if search_term %}for "{{ search_term }}"{% endif %} ({{ results|length }})</h2>
+<div> {# Changed ul to div #}
+    {% for game in results %}
+    <article class="card">
+        <div class="card-banner-area">
+            {% if game.image_url %}
+            <img src="{{ game.image_url }}" alt="{{ game.name }}" class="card-image-banner">
+            {% else %}
+            <div class="card-image-banner-placeholder">{{ game.name }}</div>
             {% endif %}
-            {# The flash message handles the "No games found..." text. Or add a static one if preferred #}
-            {# <p class="no-results">No games found matching your criteria.</p> #}
-        {% endif %}
-    {% endif %}
+        </div>
+        <div class="card-body-content">
+            <div class="card-details">
+                <h3><a href="{{ game.url }}" target="_blank">{{ game.name }}</a></h3>
+                <p><strong>Version:</strong> {{ game.version if game.version else 'N/A' }}</p>
+                <p><strong>Author:</strong> {{ game.author if game.author else 'N/A' }}</p>
+                <p class="text-muted">Published: {{ game.rss_pub_date.split(' ')[1:4]|join(' ') if game.rss_pub_date
+                    else 'N/A' }}</p>
+            </div>
+            <div class="card-actions">
+                {% if game.is_already_in_list %}
+                <button type="button" class="btn btn-secondary" disabled>Already in Your List</button>
+                {# Optionally, add a link to view/edit it in their list #}
+                {# <a href="{{ url_for('edit_details_route', played_game_id=THE_ID_IF_WE_HAD_IT) }}"
+                    class="btn btn-info btn-sm">View/Edit</a> #}
+                {% else %}
+                <form method="POST" action="{{ url_for('add_game') }}" style="width:100%;"
+                    onsubmit="handleAddToList(this)">
+                    <input type="hidden" name="game_name" value="{{ game.name }}">
+                    <input type="hidden" name="f95_url" value="{{ game.url }}">
+                    <input type="hidden" name="version" value="{{ game.version if game.version else '' }}">
+                    <input type="hidden" name="author" value="{{ game.author if game.author else '' }}">
+                    <input type="hidden" name="image_url" value="{{ game.image_url if game.image_url else '' }}">
+                    <input type="hidden" name="rss_pub_date"
+                        value="{{ game.rss_pub_date if game.rss_pub_date else '' }}">
+
+                    <div class="form-group">
+                        <label for="user_notes_{{ loop.index }}">Notes:</label>
+                        <textarea name="user_notes" id="user_notes_{{ loop.index }}" rows="2"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="user_rating_{{ loop.index }}">Rating:</label>
+                        <select class="form-select form-select-sm" id="user_rating_{{ loop.index }}" name="user_rating">
+                            <option value="" selected>Not Rated</option>
+                            <option value="0">0 Stars (Worst)</option>
+                            <option value="1">1 Star</option>
+                            <option value="2">2 Stars</option>
+                            <option value="3">3 Stars</option>
+                            <option value="4">4 Stars</option>
+                            <option value="5">5 Stars (Best)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success">Add to My List</button>
+                </form>
+                {% endif %}
+            </div>
+        </div> {# End card-body-content #}
+    </article>
+    {% endfor %}
+</div>
+{% else %} {# results is defined but empty #}
+{# Flash message already shown by app.py for "No games found" if search_term was provided #}
+{# Only show the "Search Results" header if a search_term was present #}
+{% if search_term %}
+<h2>Search Results for "{{ search_term }}" (0)</h2>
+{% endif %}
+{# The flash message handles the "No games found..." text. Or add a static one if preferred #}
+{# <p class="no-results">No games found matching your criteria.</p> #}
+{% endif %}
+{% endif %}
 {% endblock %}
 
 {% block sidebar %}
-    {{ super() }} {# Includes the default menu from base.html #}
-    {# Add search-specific sidebar content here if needed #}
+{{ super() }} {# Includes the default menu from base.html #}
+{# Add search-specific sidebar content here if needed #}
 {% endblock %}
 
 {% block page_scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         const searchForm = document.getElementById('searchGameForm');
         const searchButton = document.getElementById('searchButton');
 
         if (searchForm && searchButton) {
-            searchForm.addEventListener('submit', function() {
+            searchForm.addEventListener('submit', function () {
                 searchButton.disabled = true;
                 searchButton.textContent = 'Searching...';
             });
@@ -123,7 +121,7 @@
             addButton.textContent = 'Adding...';
         }
         // Allow form submission to proceed
-        return true; 
+        return true;
     }
 </script>
-{% endblock %} 
+{% endblock %}
