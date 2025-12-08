@@ -1051,3 +1051,21 @@ UnboundLocalError: local variable 'current_section_os' referenced before assignm
 2025-12-08 14:48:58,424 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
 2025-12-08 14:48:58,427 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
 2025-12-08 14:48:58,428 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-08 15:00:17,135 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-08 15:00:17,149 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-08 15:00:17,971 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-08 15:00:17,979 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-08 15:00:17,982 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-08 15:00:17,982 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-08 15:09:19,510 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-08 15:09:19,511 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-08 15:09:19,565 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-08 15:09:19,565 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-08 15:09:21,594 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-08 15:09:21,601 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-08 15:09:21,603 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-08 15:09:21,603 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
+2025-12-08 15:09:23,498 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-08 15:09:23,504 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-08 15:09:23,506 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-08 15:09:23,506 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.

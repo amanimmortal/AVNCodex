@@ -10,9 +10,10 @@ import random # Added for random sampling and proxy selection
 import urllib.parse # Added for URL encoding
 import time # Added for retry delay
 from typing import Optional
-import os # Added for OS path operations
 import hashlib # Added for generating unique filenames
 from urllib.parse import urlparse # To get path and extension from URL
+import json
+import os # Added for OS path operations
 
 # Setup basic logging
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -98,12 +99,9 @@ class F95ApiClient:
         self.current_proxy = None # Initialize current_proxy
 
         if self.use_proxies:
-            self._load_proxies()
-            if self.available_proxies:
-                self._set_random_proxy()
-            else:
-                self.logger.warning("Proxy usage is enabled, but no proxies were loaded. Proceeding without proxies.")
-                self.session.proxies = {}
+            # Lazy load: Do not load proxies here. They will be loaded on first use (failure of direct connection).
+            self.logger.info("Proxy usage is enabled. Proxies will be loaded lazily if direct connection fails.")
+            self.session.proxies = {} # Default to no proxy initially
         else:
             self.logger.info("Proxy usage is disabled by configuration.")
             self.session.proxies = {}
@@ -188,26 +186,70 @@ class F95ApiClient:
     def _load_proxies(self):
         """
         Attempts to load lists of HTTP/HTTPS and SOCKS5 proxies.
+        Implements Caching: Checks 'resources/proxy_cache.json' first.
         """
         self.available_proxies = [] # Clear any existing proxies
         
-        # Fetch HTTPS proxies (which can be used for HTTP/HTTPS traffic)
-        # Requests library uses 'http' as scheme for these proxies for both http and https URLs
-        self._fetch_proxy_list(HTTP_PROXY_LIST_URL, "http") 
-                                                       
-        # Fetch SOCKS5 proxies
-        self._fetch_proxy_list(SOCKS5_PROXY_LIST_URL, "socks5h") # Using socks5h for remote DNS resolution
+        cache_file = os.path.join(os.getcwd(), 'resources', 'proxy_cache.json')
+        cache_valid = False
+        
+        # 1. Try Cache
+        if os.path.exists(cache_file):
+            try:
+                msg = ""
+                with open(cache_file, 'r') as f:
+                    cache_data = json.load(f)
+                    
+                timestamp = cache_data.get('timestamp', 0)
+                cached_proxies = cache_data.get('proxies', [])
+                
+                # Check age (e.g., 1 hour = 3600 seconds)
+                if time.time() - timestamp < 3600 and cached_proxies:
+                    # Convert list of lists/tuples back to tuples if needed (json loads as lists)
+                    self.available_proxies = [tuple(p) for p in cached_proxies]
+                    self.logger.info(f"Loaded {len(self.available_proxies)} proxies from cache ({cache_file}).")
+                    cache_valid = True
+                else:
+                     msg = "Cache expired."
+            except Exception as e:
+                self.logger.warning(f"Failed to load proxy cache: {e}")
+        
+        # 2. Fetch from Web if Cache Invalid
+        if not cache_valid:
+            self.logger.info(f"Fetching fresh proxies (Cache invalid/missing).")
+            
+            # Fetch HTTPS proxies (which can be used for HTTP/HTTPS traffic)
+            self._fetch_proxy_list(HTTP_PROXY_LIST_URL, "http") 
+                                                           
+            # Fetch SOCKS5 proxies
+            self._fetch_proxy_list(SOCKS5_PROXY_LIST_URL, "socks5h") 
 
-        if self.available_proxies:
-            random.shuffle(self.available_proxies) # Shuffle the combined list
-            self.logger.info(f"Total {len(self.available_proxies)} proxies loaded and shuffled (HTTPS/SOCKS5).")
-        else:
-            self.logger.warning("No proxies were loaded from any source.")
+            if self.available_proxies:
+                random.shuffle(self.available_proxies) # Shuffle the combined list
+                self.logger.info(f"Total {len(self.available_proxies)} proxies loaded and shuffled (HTTPS/SOCKS5).")
+                
+                # Save to Cache
+                try:
+                    os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                    with open(cache_file, 'w') as f:
+                        json.dump({
+                            'timestamp': time.time(),
+                            'proxies': self.available_proxies
+                        }, f)
+                    self.logger.info(f"Saved proxies to cache: {cache_file}")
+                except Exception as e:
+                     self.logger.warning(f"Failed to save proxy cache: {e}")
+            else:
+                self.logger.warning("No proxies were loaded from any source.")
             
     def _set_random_proxy(self):
         """
         Configures the session to use one randomly selected proxy from self.available_proxies.
         """
+        if not self.available_proxies:
+            # Lazy Load Trigger
+            self._load_proxies()
+            
         if not self.available_proxies:
             self.logger.debug("No available proxies to set.")
             self.session.proxies = {} # Ensure no proxy is set
