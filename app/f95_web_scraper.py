@@ -46,7 +46,8 @@ def parse_game_page_content(html_content, game_thread_url):
         "release_date": "Not found",
         "thread_updated_date": "Not found",
         "os_general_list": "Not found", 
-        "other_header_info": {} 
+        "other_header_info": {},
+        "image_url": None
     }
 
     # --- I. Header Information Extraction ---
@@ -142,6 +143,25 @@ def parse_game_page_content(html_content, game_thread_url):
                 if version_candidate_text:
                      data['version_from_post'] = version_candidate_text
                      break 
+
+ 
+
+        # Image URL (Cover Image)
+        # Usually the first image in the post
+        img_tag = bb_wrapper.find('img', class_='bbImage')
+        if img_tag and img_tag.get('src'):
+             data['image_url'] = img_tag.get('src')
+        elif img_tag and img_tag.get('data-url'):
+             data['image_url'] = img_tag.get('data-url')
+        else:
+             # Fallback for lazy loaded or other images
+             potential_imgs = bb_wrapper.find_all('img')
+             for img in potential_imgs:
+                 src = img.get('src') or img.get('data-src') or img.get('data-url')
+                 # Filter out smilies/attachments if possible, though bbImage class usually handles it
+                 if src and 'attachments' not in src and 'smilies' not in src:
+                     data['image_url'] = src
+                     break
 
         # Overview/Full Description
         desc_elements = []
@@ -531,6 +551,7 @@ def parse_game_page_content(html_content, game_thread_url):
         "release_date": data['release_date'],
         "thread_updated_date": data['thread_updated_date'],
         "os_general_list": data['os_general_list'],
+        "image_url": data['image_url'],
     }
     for key, value in result_data.items():
         if value is None: result_data[key] = "Not found"

@@ -711,6 +711,29 @@ def check_single_game_update_and_status(db_path, f95_client, played_game_row_id,
 
             if updated: conn.commit()
             
+            # --- Image Existence/Recovery Check ---
+            is_image_missing = False
+            if not game['image_url']:
+                is_image_missing = True
+                logger.info(f"Game {game['name']} has no image_url in DB.")
+            elif game['image_url'].startswith("/cached_images/"):
+                # verify file existence
+                img_filename = os.path.basename(game['image_url'])
+                img_fs_path = os.path.join(IMAGE_CACHE_DIR_FS, img_filename)
+                if not os.path.exists(img_fs_path):
+                    is_image_missing = True
+                    logger.info(f"Game {game['name']} has missing image file at {img_fs_path}.")
+            
+            if is_image_missing and match and match.get('image_url'):
+                # Try to recover from RSS first
+                logger.info(f"Attempting to recover image for {game['name']} from RSS URL: {match['image_url']}")
+                new_cache_path = f95_client.cache_image_from_url(match['image_url'])
+                if new_cache_path:
+                    cursor.execute("UPDATE games SET image_url = ? WHERE id = ?", (new_cache_path, game['id']))
+                    conn.commit()
+                    is_image_missing = False
+                    logger.info(f"Image recovered from RSS for {game['name']}")
+
             # 2. Scrape (Force OR Missing Data)
             # Retrieve Admin Credentials for Scraping
             primary_admin_id = get_primary_admin_user_id(db_path)
@@ -719,7 +742,7 @@ def check_single_game_update_and_status(db_path, f95_client, played_game_row_id,
                 f95_username = get_setting(db_path, 'f95_username', user_id=primary_admin_id)
                 f95_password = get_setting(db_path, 'f95_password', user_id=primary_admin_id)
 
-            should_force_scrape = force_scrape or (not game['description']) or (not game['tags_json']) or ('Not found' in game['tags_json']) or (not game['download_links_json']) or (game['download_links_json'] == '[]') 
+            should_force_scrape = force_scrape or is_image_missing or (not game['description']) or (not game['tags_json']) or ('Not found' in game['tags_json']) or (not game['download_links_json']) or (game['download_links_json'] == '[]') 
             
             # Enhanced check for bad download links (Login required or no valid OS)
             if not should_force_scrape and game['download_links_json']:
@@ -740,27 +763,40 @@ def check_single_game_update_and_status(db_path, f95_client, played_game_row_id,
                     should_force_scrape = True 
             
             if should_force_scrape and f95_username and f95_password:
-                logger.info(f"Sync-driven scraping for: {game['name']}")
+                logger.info(f"Sync-driven scraping for: {game['name']} (Force={force_scrape}, MissingImg={is_image_missing})")
                 scraped = extract_game_data(game['f95_url'], username=f95_username, password=f95_password, requests_session=f95_client.session)
                 if scraped:
+                    # If image was missing, try to cache from scraped data
+                    new_scraped_image_path = None
+                    if is_image_missing and scraped.get('image_url'):
+                         logger.info(f"Attempting to recover image for {game['name']} from Scraped URL: {scraped['image_url']}")
+                         new_scraped_image_path = f95_client.cache_image_from_url(scraped['image_url'])
+                    
                     scrape_sql = """
                         UPDATE games SET 
                             description=?, engine=?, language=?, censorship=?, 
                             tags_json=?, download_links_json=?, 
                             completed_status=?, os_list=?, release_date=?, thread_updated_date=?,
                             scraper_last_run_at=?, last_updated_in_db=?
-                        WHERE id=?
                     """
-                    scrape_params = (
+                    scrape_params = [
                         scraped.get('full_description'), scraped.get('engine'),
                         scraped.get('language'), scraped.get('censorship'),
                         json.dumps(scraped.get('tags')), json.dumps(scraped.get('download_links')),
                         scraped.get('status'), scraped.get('os_general_list'), scraped.get('release_date'), scraped.get('thread_updated_date'),
-                        datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), 
-                        game['id']
-                    )
-                    cursor.execute(scrape_sql, scrape_params)
+                        datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat()
+                    ]
+                    
+                    if new_scraped_image_path:
+                        scrape_sql += ", image_url=? "
+                        scrape_params.append(new_scraped_image_path)
+                    
+                    scrape_sql += " WHERE id=?"
+                    scrape_params.append(game['id'])
+                    
+                    cursor.execute(scrape_sql, tuple(scrape_params))
                     conn.commit()
+
 
         except Exception as e:
             logger.error(f"Error checking game {game['name']}: {e}")
