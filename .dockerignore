@@ -1,0 +1,35 @@
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environments (Do not copy host venv)
+venv/
+env/
+.env/
+
+# Data and Logs
+data/
+logs/
+debug.log
+bulk_result.txt
+
+# Environment config (optional - typically handled by env_file, but copying config.env might be desired if strict)
+# Keeping config.env copied for default values if code expects it, but usually passed via compose.
+# config.env 
+
+# System
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+.cursor

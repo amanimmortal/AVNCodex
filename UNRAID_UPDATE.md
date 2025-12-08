@@ -50,6 +50,15 @@ Download the changes you just pushed to `main`.
 git pull origin main
 ```
 
+#### Troubleshooting: "Local changes would be overwritten"
+If `git pull` fails because you have modified files locally on Unraid and you want to **discard them** and use the GitHub version, run this:
+
+```bash
+git fetch --all
+git reset --hard origin/main
+```
+*Warning: This deletes any changes you made directly on the Unraid server.*
+
 ### 4. Rebuild and Restart
 **Critical Step:** Because the code is copied *inside* the Docker image during build, you must **rebuild** it.
 
