@@ -3,51 +3,43 @@
 {% block title %}User Management - AVN Codex{% endblock %}
 
 {% block main_content %}
-    <h2>User Management</h2>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <ul class="flash-messages">
-                {% for category, message in messages %}
-                    <li class="{{ category }}">{{ message }}</li>
-                {% endfor %}
-            </ul>
-        {% endif %}
-    {% endwith %}
+<h2>User Management</h2>
 
-    <table class="table table-striped table-hover">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Username</th>
-                <th>Admin Status</th>
-                <th>Created At</th>
-                <th>Actions</th> {# Placeholder for future actions #}
-            </tr>
-        </thead>
-        <tbody>
-            {% for user_item in users %}
-            <tr>
-                <td>{{ user_item.id }}</td>
-                <td>{{ user_item.username }}</td>
-                <td>{% if user_item.is_admin %}Admin{% else %}User{% endif %}</td>
-                <td>
-                    {% if user_item.created_at %}
-                        {{ user_item.created_at.split('T')[0] }} {# Display only date part for brevity #}
-                    {% else %}
-                        N/A
-                    {% endif %}
-                </td>
-                <td>
-                    {# Add links/buttons for actions like Edit, Delete, Promote/Demote later #}
-                    View Details (Soon)
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="5">No users found.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
 
-{% endblock %} 
+<table class="table table-striped table-hover">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Admin Status</th>
+            <th>Created At</th>
+            <th>Actions</th> {# Placeholder for future actions #}
+        </tr>
+    </thead>
+    <tbody>
+        {% for user_item in users %}
+        <tr>
+            <td>{{ user_item.id }}</td>
+            <td>{{ user_item.username }}</td>
+            <td>{% if user_item.is_admin %}Admin{% else %}User{% endif %}</td>
+            <td>
+                {% if user_item.created_at %}
+                {{ user_item.created_at.split('T')[0] }} {# Display only date part for brevity #}
+                {% else %}
+                N/A
+                {% endif %}
+            </td>
+            <td>
+                {# Add links/buttons for actions like Edit, Delete, Promote/Demote later #}
+                View Details (Soon)
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="5">No users found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

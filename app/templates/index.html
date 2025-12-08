@@ -7,15 +7,7 @@
 <div id="app-config" data-pushover-config-missing="{{ pushover_config_missing|tojson }}"
     data-settings-url="{{ url_for('settings') }}" style="display: none;"></div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-{% if messages %}
-<ul class="flash-messages">
-    {% for category, message in messages %}
-    <li class="{{ category }}">{{ message }}</li>
-    {% endfor %}
-</ul>
-{% endif %}
-{% endwith %}
+
 
 {% if notifications %}
 <section class="notifications-section">

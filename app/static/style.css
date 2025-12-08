@@ -1,20 +1,503 @@
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0;
-    background-color: #1e1e1e; /* Dark background */
-    color: #d4d4d4; /* Light text */
+:root {
+    /* Color Palette - f95zone inspired */
+    --bg-dark-primary: #212121;
+    --bg-dark-secondary: #303030;
+    --bg-dark-tertiary: #424242;
+    --text-primary: #ececec;
+    --text-secondary: #b0b0b0;
+    --text-muted: #888888;
+
+    --accent-primary: #c51a4a;
+    /* f95 pink/red */
+    --accent-hover: #e0245a;
+
+    --link-blue: #03a9f4;
+    --link-blue-hover: #29b6f6;
+
+    --border-color: #444444;
+    --input-bg: #212121;
+
+    /* Spacing & Layout */
+    --container-max-width: 1600px;
+    --border-radius-sm: 4px;
+    --border-radius-md: 6px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.5);
 }
 
-.top-bar {
-    background-color: #c51a4a; /* F95Zone red-pink */
-    padding: 10px 20px;
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Roboto', 'Segoe UI', Tahoma, sans-serif;
+    margin: 0;
+    background-color: var(--bg-dark-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: #fff;
+    margin-top: 0;
+}
+
+a {
+    color: var(--link-blue);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+a:hover {
+    color: var(--link-blue-hover);
+    text-decoration: underline;
+}
+
+/* --- Components --- */
+
+/* Buttons */
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-align: center;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
+    box-shadow: var(--shadow-sm);
+    letter-spacing: 0.5px;
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+.btn-primary {
+    background-color: var(--accent-primary);
     color: white;
-    font-size: 1.2em;
+}
+
+.btn-primary:hover {
+    background-color: var(--accent-hover);
+    color: white;
+    text-decoration: none;
+}
+
+.btn-secondary {
+    background-color: var(--bg-dark-tertiary);
+    color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+    background-color: #555;
+    color: white;
+    text-decoration: none;
+}
+
+.btn-outline-primary {
+    background-color: transparent;
+    border: 1px solid var(--link-blue);
+    color: var(--link-blue);
+}
+
+.btn-outline-primary:hover {
+    background-color: rgba(3, 169, 244, 0.1);
+    color: var(--link-blue-hover);
+    text-decoration: none;
+}
+
+.btn-success {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #43A047;
+    color: white;
+    text-decoration: none;
+}
+
+.btn-danger {
+    background-color: #f44336;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #d32f2f;
+    color: white;
+    text-decoration: none;
+}
+
+/* Modern Forms */
+.form-control,
+.form-select {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--accent-primary);
+    outline: 0;
+    box-shadow: 0 0 0 2px rgba(197, 26, 74, 0.25);
+}
+
+/* Cards */
+.card {
+    background-color: var(--bg-dark-secondary);
+    border: none;
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 20px;
+}
+
+.card-header {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid var(--border-color);
+    padding: 12px 20px;
     font-weight: bold;
+    font-size: 1rem;
+    color: #fff;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
+
+.card-body {
+    padding: 20px;
+}
+
+.card-footer {
+    padding: 12px 20px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-top: 1px solid var(--border-color);
+}
+
+/* --- Layout --- */
+
+.top-bar {
+    background-color: var(--accent-primary);
+    padding: 0 20px;
+    height: 60px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: var(--shadow-md);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.top-bar .brand {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.top-bar-nav a {
+    color: rgba(255, 255, 255, 0.85);
+    margin-right: 20px;
+    font-weight: 500;
+}
+
+.top-bar-nav a:hover {
+    color: white;
+    text-decoration: none;
+}
+
+.top-bar-nav a.active {
+    color: white;
+    border-bottom: 2px solid white;
+}
+
+.container {
+    max-width: var(--container-max-width);
+    margin: 30px auto;
+    padding: 0 15px;
+}
+
+.container-fluid {
+    /* Retaining for broader layouts if needed */
+    max-width: 100%;
+    padding: 0 20px;
+}
+
+
+/* --- Game Details / Edit Page Specifics --- */
+
+.game-header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 20px;
+    margin-bottom: 25px;
+}
+
+.game-title {
+    font-size: 2.2rem;
+    font-weight: 300;
+    color: var(--accent-primary);
+    /* Use accent for title */
+}
+
+.game-meta-tags {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    /* Main content vs Sidebar */
+    gap: 25px;
+}
+
+@media (max-width: 900px) {
+    .details-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.info-block {
+    background: var(--bg-dark-secondary);
+    padding: 20px;
+    border-radius: var(--border-radius-md);
+    margin-bottom: 20px;
+}
+
+.description-box {
+    background-color: #1a1a1a;
+    padding: 15px;
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--border-color);
+    color: #ddd;
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Download Section */
+.download-section {
+    margin-top: 30px;
+}
+
+.download-group {
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    overflow: hidden;
+}
+
+.download-group-header {
+    background-color: var(--bg-dark-tertiary);
+    padding: 10px 15px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.download-links-container {
+    padding: 15px;
+    background-color: rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.download-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: rgba(3, 169, 244, 0.1);
+    border: 1px solid var(--link-blue);
+    color: var(--link-blue);
+    padding: 8px 16px;
+    font-weight: bold;
+    font-size: 0.85rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+}
+
+.download-link-btn:hover {
+    background-color: var(--link-blue);
+    color: white;
+    text-decoration: none;
+    box-shadow: 0 0 10px rgba(3, 169, 244, 0.4);
+}
+
+
+/* --- Notifications (Toasts) --- */
+.temp-notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.custom-toast {
+    min-width: 300px;
+    background: var(--bg-dark-secondary);
+    border-left: 4px solid var(--accent-primary);
+    color: white;
+    padding: 15px;
+    box-shadow: var(--shadow-md);
+    border-radius: var(--border-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    animation: slideIn 0.3s ease-out;
+}
+
+.custom-toast.success {
+    border-left-color: #4CAF50;
+}
+
+.custom-toast.error {
+    border-left-color: #f44336;
+}
+
+.custom-toast.warning {
+    border-left-color: #ff9800;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Badges */
+.badge {
+    display: inline-block;
+    padding: 0.35em 0.65em;
+    font-size: 0.75em;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 0.25rem;
+    background-color: var(--bg-dark-tertiary);
+    /* Default */
+}
+
+.badge-secondary {
+    background-color: var(--bg-dark-tertiary);
+    color: #ccc;
+    border: 1px solid #555;
+}
+
+/* Status Colors used in edits */
+.status-completed {
+    background-color: #43A047;
+}
+
+.status-ongoing {
+    background-color: #1E88E5;
+}
+
+.status-on_hold {
+    background-color: #FB8C00;
+}
+
+.status-abandoned {
+    background-color: #E53935;
+}
+
+/* Utilities */
+.text-muted {
+    color: var(--text-muted) !important;
+}
+
+.text-accent {
+    color: var(--accent-primary) !important;
+}
+
+.mb-1 {
+    margin-bottom: 0.25rem;
+}
+
+.mb-2 {
+    margin-bottom: 0.5rem;
+}
+
+.mb-3 {
+    margin-bottom: 1rem;
+}
+
+.mb-4 {
+    margin-bottom: 1.5rem;
+}
+
+.mt-2 {
+    margin-top: 0.5rem;
+}
+
+.mt-3 {
+    margin-top: 1rem;
+}
+
+.mt-4 {
+    margin-top: 1.5rem;
+}
+
+.me-2 {
+    margin-right: 0.5rem;
+}
+
+.gap-2 {
+    gap: 0.5rem;
+}
+
+.d-flex {
+    display: flex;
+}
+
+.flex-wrap {
+    flex-wrap: wrap;
+}
+
+.w-100 {
+    width: 100%;
+}
+
+
 
 .top-bar a {
     color: white;
@@ -24,39 +507,50 @@ body {
 
 /* Ensure direct child divs of top-bar don't add extra margins if not needed */
 /* .top-bar > div { */
-    /* No specific styles needed here unless there's a margin conflict */
+/* No specific styles needed here unless there's a margin conflict */
 /* } */
 
 .top-bar .user-actions a:last-child {
-    margin-right: 0; /* Remove margin from the last link in user-actions */
+    margin-right: 0;
+    /* Remove margin from the last link in user-actions */
 }
 
-.top-bar span { /* For 'Logged in as: username' text */
+.top-bar span {
+    /* For 'Logged in as: username' text */
     margin-right: 10px;
 }
 
 .container-fluid {
     display: flex;
     padding: 15px;
-    max-width: 1600px; /* Increased from 1400px */
-    margin: 0 auto; /* Centers the container */
+    max-width: 1600px;
+    /* Increased from 1400px */
+    margin: 0 auto;
+    /* Centers the container */
 }
 
 .main-content {
-    flex: 4; /* Takes up more space (4/5 of total if sidebar is flex: 1) */
+    flex: 4;
+    /* Takes up more space (4/5 of total if sidebar is flex: 1) */
     padding-right: 15px;
 }
 
 .sidebar {
-    flex: 1; /* Takes up less space */
-    background-color: #252526; /* Slightly lighter dark for sidebar */
+    flex: 1;
+    /* Takes up less space */
+    background-color: #252526;
+    /* Slightly lighter dark for sidebar */
     padding: 15px;
     border-radius: 4px;
-    height: fit-content; /* So it doesn't stretch full page if content is short */
-    margin-top: 50px; /* Approximate push down - adjust as needed. Corresponds to h2 + some margin */
+    height: fit-content;
+    /* So it doesn't stretch full page if content is short */
+    margin-top: 50px;
+    /* Approximate push down - adjust as needed. Corresponds to h2 + some margin */
 }
 
-.sidebar h3, .sidebar h4 { /* Apply to h4 as well for Filters & Sort */
+.sidebar h3,
+.sidebar h4 {
+    /* Apply to h4 as well for Filters & Sort */
     color: #d4d4d4;
     border-bottom: 1px solid #444;
     padding-bottom: 8px;
@@ -82,50 +576,67 @@ body {
 /* Filter form alignment */
 #filter-sort-form .mb-3 {
     display: flex;
-    align-items: center; /* Vertically align label and input */
-    margin-bottom: 0.75rem; /* Keep some bottom margin */
+    align-items: center;
+    /* Vertically align label and input */
+    margin-bottom: 0.75rem;
+    /* Keep some bottom margin */
 }
 
 #filter-sort-form .form-label {
-    flex-basis: 100px; /* Give labels a fixed basis width */
-    flex-shrink: 0; /* Prevent labels from shrinking */
-    margin-bottom: 0; /* Remove default bootstrap margin if any */
-    margin-right: 10px; /* Space between label and input */
-    text-align: left; /* Ensure labels are left-aligned if they weren't */
+    flex-basis: 100px;
+    /* Give labels a fixed basis width */
+    flex-shrink: 0;
+    /* Prevent labels from shrinking */
+    margin-bottom: 0;
+    /* Remove default bootstrap margin if any */
+    margin-right: 10px;
+    /* Space between label and input */
+    text-align: left;
+    /* Ensure labels are left-aligned if they weren't */
 }
 
 #filter-sort-form .form-control,
 #filter-sort-form .form-select {
-    flex-grow: 1; /* Allow input/select to take remaining space */
+    flex-grow: 1;
+    /* Allow input/select to take remaining space */
 }
 
 .card {
-    background-color: #2a2a2e; /* Darker card background */
+    background-color: #2a2a2e;
+    /* Darker card background */
     border: 1px solid #333333;
     border-radius: 4px;
     margin-bottom: 15px;
     /* padding: 15px; -- Padding will be handled by inner elements or card-body-content */
-    display: flex; /* Still flex, but for banner + body */
+    display: flex;
+    /* Still flex, but for banner + body */
     flex-direction: column;
 }
 
 .card-banner-area {
     width: 100%;
-    margin-bottom: 10px; /* Space between banner and details */
+    margin-bottom: 10px;
+    /* Space between banner and details */
 }
 
 .card-image-banner {
     width: 100%;
-    height: auto; /* Maintain aspect ratio */
-    max-height: 120px; /* Adjusted max-height, can be tuned. 113px is specific but this gives some flexibility */
-    object-fit: cover; /* Cover the area, might crop if aspect ratio of image is very different */
-    border-radius: 3px 3px 0 0; /* Round top corners if card has rounded corners */
-    display: block; /* Remove extra space below image */
+    height: auto;
+    /* Maintain aspect ratio */
+    max-height: 120px;
+    /* Adjusted max-height, can be tuned. 113px is specific but this gives some flexibility */
+    object-fit: cover;
+    /* Cover the area, might crop if aspect ratio of image is very different */
+    border-radius: 3px 3px 0 0;
+    /* Round top corners if card has rounded corners */
+    display: block;
+    /* Remove extra space below image */
 }
 
 .card-image-banner-placeholder {
     width: 100%;
-    height: 113px; /* Fixed height for placeholder, matching target */
+    height: 113px;
+    /* Fixed height for placeholder, matching target */
     background-color: #3a3a3e;
     color: #777;
     display: flex;
@@ -139,12 +650,14 @@ body {
 }
 
 .card-body-content {
-    padding: 0 15px 15px 15px; /* Add padding here that was removed from .card */
+    padding: 0 15px 15px 15px;
+    /* Add padding here that was removed from .card */
 }
 
 .card-details {
     /* flex-grow: 1; -- No longer in a flex row with an image */
-    margin-bottom: 10px; /* Space before user content/actions */
+    margin-bottom: 10px;
+    /* Space before user content/actions */
 }
 
 .card-details h3 {
@@ -153,7 +666,8 @@ body {
 }
 
 .card-details h3 a {
-    color: #5294e2; /* Link color similar to image */
+    color: #5294e2;
+    /* Link color similar to image */
     text-decoration: none;
 }
 
@@ -164,14 +678,17 @@ body {
 .card-details p {
     margin: 4px 0;
     font-size: 0.9em;
-    color: #b0b0b0; /* Lighter gray for details */
+    color: #b0b0b0;
+    /* Lighter gray for details */
 }
 
 .card-actions {
     margin-top: 10px;
     display: flex;
-    flex-direction: row; /* Arrange items in a row */
-    align-items: center;  /* Vertically align items in the middle */
+    flex-direction: row;
+    /* Arrange items in a row */
+    align-items: center;
+    /* Vertically align items in the middle */
     /* justify-content: flex-start; Default, items will be side-by-side from left */
 }
 
@@ -179,16 +696,19 @@ body {
 .card-actions form {
     margin: 0;
     padding: 0;
-    margin-left: 5px; /* Add a small gap between buttons */
+    margin-left: 5px;
+    /* Add a small gap between buttons */
 }
 
 .card-actions a.btn,
 .card-actions form button.btn {
-    white-space: nowrap; /* Prevent button text from wrapping */
+    white-space: nowrap;
+    /* Prevent button text from wrapping */
 }
 
 .card-actions .delete-form {
-    margin-left: auto; /* Pushes this form to the far right */
+    margin-left: auto;
+    /* Pushes this form to the far right */
 }
 
 .card-actions .form-group {
@@ -214,7 +734,8 @@ body {
 }
 
 .card-actions input[type="number"] {
-    width: 70px; /* Smaller width for rating */
+    width: 70px;
+    /* Smaller width for rating */
 }
 
 .btn {
@@ -232,30 +753,42 @@ body {
     background-color: #007bff;
     color: white;
 }
-.btn-primary:hover { background-color: #0056b3; }
+
+.btn-primary:hover {
+    background-color: #0056b3;
+}
 
 .btn-success {
     background-color: #28a745;
     color: white;
 }
-.btn-success:hover { background-color: #1e7e34; }
+
+.btn-success:hover {
+    background-color: #1e7e34;
+}
 
 .btn-danger {
-    background-color: #dc3545; /* Standard Bootstrap danger red */
+    background-color: #dc3545;
+    /* Standard Bootstrap danger red */
     color: white;
 }
-.btn-danger:hover { background-color: #c82333; /* Darker red on hover */ }
+
+.btn-danger:hover {
+    background-color: #c82333;
+    /* Darker red on hover */
+}
 
 .add-button {
     /* This class might be redundant if .btn and .btn-success are used */
     /* For now, keep it if search.html specifically uses it */
-    padding: 8px 12px; 
-    background-color: #28a745; 
-    color: white; 
-    text-decoration: none; 
+    padding: 8px 12px;
+    background-color: #28a745;
+    color: white;
+    text-decoration: none;
     border-radius: 4px;
     font-size: 0.9em;
-    align-self: center; /* From previous styles, adjust if needed for flex */
+    align-self: center;
+    /* From previous styles, adjust if needed for flex */
     border: none;
     cursor: pointer;
 }
@@ -279,7 +812,8 @@ body {
 
 .search-form button {
     padding: 10px 15px;
-    background-color: #c51a4a; /* Theme color */
+    background-color: #c51a4a;
+    /* Theme color */
     color: white;
     border: none;
     border-radius: 4px;
@@ -291,15 +825,26 @@ body {
     padding: 0;
     margin-bottom: 15px;
 }
+
 .flash-messages li {
     padding: 10px 15px;
     margin-bottom: 10px;
     border-radius: 4px;
     color: #fff;
 }
-.flash-messages .success { background-color: #28a745; }
-.flash-messages .error { background-color: #dc3545; }
-.flash-messages .warning { background-color: #ffc107; color: #333 }
+
+.flash-messages .success {
+    background-color: #28a745;
+}
+
+.flash-messages .error {
+    background-color: #dc3545;
+}
+
+.flash-messages .warning {
+    background-color: #ffc107;
+    color: #333
+}
 
 .notifications-section {
     background-color: #2a2a2e;
@@ -308,14 +853,17 @@ body {
     margin-bottom: 20px;
     border: 1px solid #333;
 }
+
 .notifications-section h2 {
     margin-top: 0;
     color: #c51a4a;
 }
+
 .notification-item {
     border-bottom: 1px solid #444;
     padding: 10px 0;
 }
+
 .notification-item:last-child {
     border-bottom: none;
 }
@@ -340,12 +888,14 @@ body {
 }
 
 .status-completed {
-    background-color: #4CAF50; /* Green */
+    background-color: #4CAF50;
+    /* Green */
     color: white;
 }
 
 .status-ongoing {
-    background-color: #2196F3; /* Blue */
+    background-color: #2196F3;
+    /* Blue */
     color: white;
 }
 
@@ -355,62 +905,80 @@ body {
 }
 
 .status-on_hold {
-    background-color: #ff9800; /* Orange */
+    background-color: #ff9800;
+    /* Orange */
     color: white;
 }
 
 .status-abandoned {
-    background-color: #f44336; /* Red */
+    background-color: #f44336;
+    /* Red */
     color: white;
 }
 
 .edit-form-container {
-    background-color: #2a2a2e; /* Same as card background */
-    padding: 20px; /* A bit more padding */
+    background-color: #2a2a2e;
+    /* Same as card background */
+    padding: 20px;
+    /* A bit more padding */
     border-radius: 4px;
-    border: 1px solid #333; /* Consistent border */
-    margin-bottom: 20px; /* Space below */
+    border: 1px solid #333;
+    /* Consistent border */
+    margin-bottom: 20px;
+    /* Space below */
 }
 
 /* Styled Forms for Login, Register, Change Password */
 .styled-form {
-    max-width: 500px; /* Or your preferred max width for these forms */
-    margin: 20px auto; /* Center the form on the page */
+    max-width: 500px;
+    /* Or your preferred max width for these forms */
+    margin: 20px auto;
+    /* Center the form on the page */
     padding: 20px;
-    background-color: #252526; /* Consistent with sidebar */
+    background-color: #252526;
+    /* Consistent with sidebar */
     border-radius: 4px;
 }
 
 .styled-form .form-group {
     display: flex;
-    align-items: center; /* Align label and input vertically */
-    margin-bottom: 15px; /* Space between form groups */
+    align-items: center;
+    /* Align label and input vertically */
+    margin-bottom: 15px;
+    /* Space between form groups */
 }
 
 .styled-form .form-group label {
-    flex-basis: 150px; /* Fixed width for labels */
+    flex-basis: 150px;
+    /* Fixed width for labels */
     flex-shrink: 0;
-    margin-right: 15px; /* Space between label and input */
+    margin-right: 15px;
+    /* Space between label and input */
     text-align: right;
     color: #d4d4d4;
 }
 
 .styled-form .form-group input[type="text"],
 .styled-form .form-group input[type="password"],
-.styled-form .form-group input[type="email"] { /* Add other input types if needed */
-    flex-grow: 1; /* Input takes remaining space */
+.styled-form .form-group input[type="email"] {
+    /* Add other input types if needed */
+    flex-grow: 1;
+    /* Input takes remaining space */
     padding: 10px;
     border-radius: 4px;
     border: 1px solid #444;
     background-color: #1e1e1e;
     color: #d4d4d4;
-    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    box-sizing: border-box;
+    /* Include padding and border in the element's total width and height */
 }
 
 .styled-form button.btn {
-    display: block; 
-    margin-top: 10px; /* Add some space above the button */
-    margin-left: 165px; /* Align with inputs (150px label + 15px margin) */
+    display: block;
+    margin-top: 10px;
+    /* Add some space above the button */
+    margin-left: 165px;
+    /* Align with inputs (150px label + 15px margin) */
 }
 
 /* Game List and Card Styles */
@@ -420,30 +988,37 @@ body {
 
 #played-games-list.list-view .game-card {
     display: flex;
-    flex-direction: column; /* Stack banner and content vertically */
-    align-items: stretch; /* Stretch items to fill width */
+    flex-direction: column;
+    /* Stack banner and content vertically */
+    align-items: stretch;
+    /* Stretch items to fill width */
     margin-bottom: 1rem;
-    width: 100%; 
+    width: 100%;
 }
 
 #played-games-list.list-view .card-banner-area {
     /* flex: 0 0 250px; -- Removed, no longer a fixed-width flex item in a row */
     /* margin-right: 1rem; -- Removed */
     /* position: relative; -- Not strictly needed if aspect-ratio on img works directly */
-    width: 100%; /* Banner area takes full width of the card */
-    margin-bottom: 0.75rem; /* Space between banner and card body */
+    width: 100%;
+    /* Banner area takes full width of the card */
+    margin-bottom: 0.75rem;
+    /* Space between banner and card body */
     /* max-height: 125px; -- Removing fixed max-height, relying on aspect ratio and card width */
-    aspect-ratio: 4 / 1; /* Ensure aspect ratio is defined on the container */
+    aspect-ratio: 4 / 1;
+    /* Ensure aspect ratio is defined on the container */
 }
 
 #played-games-list.list-view .card-image-banner {
-    display: block; 
+    display: block;
     width: 100%;
-    height: 100%; /* Image should fill the container height */
-    max-height: 100%; /* Explicitly set max-height to fill parent, overriding general rule */
+    height: 100%;
+    /* Image should fill the container height */
+    max-height: 100%;
+    /* Explicitly set max-height to fill parent, overriding general rule */
     /* aspect-ratio: 4 / 1; -- Removed, as parent .card-banner-area handles aspect ratio */
-    object-fit: cover; 
-    background-color: #444; 
+    object-fit: cover;
+    background-color: #444;
 }
 
 #played-games-list.list-view .card-image-banner-placeholder {
@@ -461,7 +1036,7 @@ body {
 
 #played-games-list.list-view .card-body-content {
     /* flex: 1 1 auto; -- Not essential as it's the main content block in a column */
-    width: 100%; 
+    width: 100%;
     display: flex;
     flex-direction: column;
     /* padding: 0.75rem; -- This padding should be on .card-body-content globally or .game-card */
@@ -469,33 +1044,40 @@ body {
 
 /* General .card-body-content should have padding */
 .card-body-content {
-    padding: 0.75rem; 
-    width: 100%; /* Ensure it takes full width if its parent is flex column */
-    box-sizing: border-box; /* Include padding in width calculation */
+    padding: 0.75rem;
+    width: 100%;
+    /* Ensure it takes full width if its parent is flex column */
+    box-sizing: border-box;
+    /* Include padding in width calculation */
 }
 
 /* Ensure card-actions are at the bottom if .card-body-content is flex-column */
 #played-games-list.list-view .card-actions {
-    margin-top: auto; /* Pushes actions to the bottom of the card-body-content */
+    margin-top: auto;
+    /* Pushes actions to the bottom of the card-body-content */
 }
 
 #played-games-list.grid-view {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); /* Adjusted for 4 columns in wider main-content */
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    /* Adjusted for 4 columns in wider main-content */
     gap: 1rem;
 }
 
 #played-games-list.grid-view .game-card {
     display: flex;
     flex-direction: column;
-    width: 100%; /* Make card take full width of its grid cell */
-    /* max-width: none; */ /* Ensure no prior max-width on game-card itself is limiting it in grid */
+    width: 100%;
+    /* Make card take full width of its grid cell */
+    /* max-width: none; */
+    /* Ensure no prior max-width on game-card itself is limiting it in grid */
 }
 
 #played-games-list.grid-view .card-banner-area {
     width: 100%;
     height: auto;
-    max-height: 100px; /* Consistent max height for banners in grid */
+    max-height: 100px;
+    /* Consistent max height for banners in grid */
 }
 
 #played-games-list.grid-view .card-image-banner,
@@ -503,14 +1085,17 @@ body {
     width: 100%;
     aspect-ratio: 4 / 1;
     object-fit: cover;
-    height: auto; /* Max height controlled by parent */
+    height: auto;
+    /* Max height controlled by parent */
 }
 
 .game-card {
-    background-color: #333; /* Darker card background */
+    background-color: #333;
+    /* Darker card background */
     border: 1px solid #444;
     border-radius: 0.25rem;
-    overflow: hidden; /* Ensure banner image corners are rounded if card is */
+    overflow: hidden;
+    /* Ensure banner image corners are rounded if card is */
 }
 
 .card-details h3 {
@@ -518,10 +1103,12 @@ body {
     margin-top: 0;
     margin-bottom: 0.5rem;
 }
+
 .card-details h3 a {
     color: #e0e0e0;
     text-decoration: none;
 }
+
 .card-details h3 a:hover {
     color: #fff;
 }
@@ -534,40 +1121,49 @@ body {
 .card-actions {
     margin-top: 0.75rem;
     display: flex;
-    flex-wrap: wrap; 
+    flex-wrap: wrap;
     gap: 0.5rem;
-    align-items: center; 
+    align-items: center;
 }
 
 .card-actions .btn,
 .card-actions form button.btn {
-    flex-grow: 0; /* Prevent buttons from growing unnecessarily */
-    flex-shrink: 0; /* Prevent buttons from shrinking too much */
+    flex-grow: 0;
+    /* Prevent buttons from growing unnecessarily */
+    flex-shrink: 0;
+    /* Prevent buttons from shrinking too much */
     /* min-width: 80px; -- Can be removed or adjusted if fixed widths are better */
-    padding: 0.375rem 0.75rem; /* Standard small button padding */
+    padding: 0.375rem 0.75rem;
+    /* Standard small button padding */
 }
 
-/* .card-actions a.btn:first-child { */ /* Target the first button, typically 'Edit Details' */
-    /* No specific flex-grow needed if the default is fine now */
+/* .card-actions a.btn:first-child { */
+/* Target the first button, typically 'Edit Details' */
+/* No specific flex-grow needed if the default is fine now */
 /* } */
 
 #played-games-list.list-view .card-actions {
-    flex-direction: row; /* Ensure buttons are in a row in list view body */
-    align-items: flex-start; /* Align to top of action area */
+    flex-direction: row;
+    /* Ensure buttons are in a row in list view body */
+    align-items: flex-start;
+    /* Align to top of action area */
 }
 
 #played-games-list.list-view .card-details,
 #played-games-list.list-view .card-content {
-    margin-bottom: 0.5rem; /* Add some space between sections */
+    margin-bottom: 0.5rem;
+    /* Add some space between sections */
 }
 
 #played-games-list.list-view .card-actions {
-    margin-top: auto; /* Push actions to the bottom of the card body in list view */
+    margin-top: auto;
+    /* Push actions to the bottom of the card body in list view */
 }
 
 /* Container for the main game list section */
 .played-games-section {
-    max-width: 1600px; /* Max width for ultrawide screens */
+    max-width: 1600px;
+    /* Max width for ultrawide screens */
     margin-left: auto;
     margin-right: auto;
 }
@@ -577,122 +1173,169 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem; /* Matches Bootstrap mb-3 */
+    margin-bottom: 1rem;
+    /* Matches Bootstrap mb-3 */
 }
 
 .played-games-header h2 {
-    margin-bottom: 0; /* Remove default h2 margin if a flex child */
+    margin-bottom: 0;
+    /* Remove default h2 margin if a flex child */
 }
 
 /* Responsive Adjustments */
-@media (max-width: 992px) { /* Medium devices (tablets, less than 992px) */
+@media (max-width: 992px) {
+
+    /* Medium devices (tablets, less than 992px) */
     #played-games-list.grid-view {
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); /* Adjusted */
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        /* Adjusted */
     }
+
     #played-games-list.list-view .card-banner-area {
         /* flex: 0 0 150px; -- Removed to maintain 4:1 aspect ratio */
         /* max-height: 100px; -- Removed to maintain 4:1 aspect ratio */
-        width: 100%; /* Ensuring it takes full width to calculate aspect ratio correctly */
-        aspect-ratio: 4 / 1; /* Explicitly ensure aspect ratio here if not inherited reliably */
+        width: 100%;
+        /* Ensuring it takes full width to calculate aspect ratio correctly */
+        aspect-ratio: 4 / 1;
+        /* Explicitly ensure aspect ratio here if not inherited reliably */
     }
 }
 
-@media (max-width: 768px) { /* Small devices (landscape phones, less than 768px) */
+@media (max-width: 768px) {
+
+    /* Small devices (landscape phones, less than 768px) */
     .container-fluid {
         flex-direction: column;
     }
+
     .main-content {
         width: 100%;
-        order: 2; /* Content below sidebar on mobile */
-        padding-right: 0; /* Remove right padding if sidebar is full width */
+        order: 2;
+        /* Content below sidebar on mobile */
+        padding-right: 0;
+        /* Remove right padding if sidebar is full width */
     }
+
     .sidebar {
         width: 100%;
-        order: 1; /* Sidebar above content on mobile */
+        order: 1;
+        /* Sidebar above content on mobile */
         margin-bottom: 1rem;
-        height: auto; /* Adjust height */
-        position: static; /* Remove fixed/sticky positioning */
+        height: auto;
+        /* Adjust height */
+        position: static;
+        /* Remove fixed/sticky positioning */
     }
-    #played-games-list.grid-view, 
-    #played-games-list.list-view { /* Force list view on mobile */
+
+    #played-games-list.grid-view,
+    #played-games-list.list-view {
+        /* Force list view on mobile */
         display: flex;
         flex-direction: column;
         gap: 1rem;
-        grid-template-columns: 1fr !important; /* Override grid */
+        grid-template-columns: 1fr !important;
+        /* Override grid */
     }
-    #played-games-list.list-view .game-card, 
+
+    #played-games-list.list-view .game-card,
     #played-games-list.grid-view .game-card {
-        flex-direction: column; /* Stack banner and body */
+        flex-direction: column;
+        /* Stack banner and body */
     }
+
     #played-games-list.list-view .card-banner-area,
     #played-games-list.grid-view .card-banner-area {
-        flex-basis: auto; 
+        flex-basis: auto;
         width: 100%;
         margin-right: 0;
-        margin-bottom: 0.5rem; 
-        max-height: none; /* This is good, it ensures any previous max-height is cleared */
-        aspect-ratio: 4 / 1; /* Explicitly ensure aspect ratio */
+        margin-bottom: 0.5rem;
+        max-height: none;
+        /* This is good, it ensures any previous max-height is cleared */
+        aspect-ratio: 4 / 1;
+        /* Explicitly ensure aspect ratio */
     }
+
     /* #played-games-list.list-view .card-image-banner, */
     /* #played-games-list.grid-view .card-image-banner { */
-        /* aspect-ratio: 4 / 1; Ensure this is still set, should be inherited */
-         /* max-height: 150px; -- Removed to maintain 4:1 aspect ratio */
+    /* aspect-ratio: 4 / 1; Ensure this is still set, should be inherited */
+    /* max-height: 150px; -- Removed to maintain 4:1 aspect ratio */
     /* } */
     .card-actions .btn,
     .card-actions form button.btn {
-        flex-basis: calc(50% - 0.25rem); /* Example: 2 buttons per row on mobile */
-        flex-grow: 1; /* Allow them to grow to fill the 50% */
+        flex-basis: calc(50% - 0.25rem);
+        /* Example: 2 buttons per row on mobile */
+        flex-grow: 1;
+        /* Allow them to grow to fill the 50% */
     }
+
     .card-actions .delete-form {
-        margin-left: 0; 
-        flex-basis: 100%; /* Full width for delete form on mobile */
+        margin-left: 0;
+        flex-basis: 100%;
+        /* Full width for delete form on mobile */
     }
+
     .card-actions .delete-form .btn {
         width: 100%;
     }
+
     .played-games-section .d-flex {
         flex-direction: column;
-        align-items: stretch !important; /* Override inline style if any */
+        align-items: stretch !important;
+        /* Override inline style if any */
     }
+
     .played-games-section .d-flex h2 {
         margin-bottom: 0.5rem;
         text-align: center;
     }
+
     #toggle-view-btn {
         width: 100%;
     }
+
     body {
-        overflow-x: hidden; /* Prevent horizontal scroll on mobile */
+        overflow-x: hidden;
+        /* Prevent horizontal scroll on mobile */
     }
 
     .played-games-header {
         flex-direction: column;
-        align-items: stretch; /* Make h2 and button full width when stacked */
+        align-items: stretch;
+        /* Make h2 and button full width when stacked */
     }
 
     .played-games-header h2 {
-        margin-bottom: 0.5rem; /* Space between stacked h2 and button */
+        margin-bottom: 0.5rem;
+        /* Space between stacked h2 and button */
         text-align: center;
     }
 
     #toggle-view-btn {
-        width: 100%; /* Make button full width when stacked */
-        margin-bottom: 1rem; /* Space below button before list */
+        width: 100%;
+        /* Make button full width when stacked */
+        margin-bottom: 1rem;
+        /* Space below button before list */
     }
 }
 
-@media (max-width: 576px) { /* Extra small devices (portrait phones, less than 576px) */
+@media (max-width: 576px) {
+
+    /* Extra small devices (portrait phones, less than 576px) */
     #played-games-list.list-view .card-banner-area,
     #played-games-list.grid-view .card-banner-area {
         /* max-height: 120px; -- Removed to maintain 4:1 aspect ratio */
-        aspect-ratio: 4 / 1; /* Ensure aspect ratio is maintained */
+        aspect-ratio: 4 / 1;
+        /* Ensure aspect ratio is maintained */
     }
+
     .card-details h3 {
         font-size: 1.1rem;
     }
+
     .card-content p {
         font-size: 0.8rem;
     }
+
     .card-actions .btn {
         font-size: 0.8rem;
         padding: 0.25rem 0.5rem;
@@ -700,37 +1343,51 @@ body {
 }
 
 #played-games-list.grid-view .card-details h3 {
-    font-size: 1.2rem; /* Consistent font size */
-    line-height: 1.4;  /* Set for consistent calculation */
-    height: calc(1.2rem * 1.4 * 2); /* Height for 2 lines of title */
+    font-size: 1.2rem;
+    /* Consistent font size */
+    line-height: 1.4;
+    /* Set for consistent calculation */
+    height: calc(1.2rem * 1.4 * 2);
+    /* Height for 2 lines of title */
     overflow: hidden;
     display: -webkit-box;
-    -webkit-line-clamp: 2; /* Number of lines to show */
+    -webkit-line-clamp: 2;
+    /* Number of lines to show */
     line-clamp: 2;
     -webkit-box-orient: vertical;
-    margin-top: 0; /* Match general .card-details h3 */
-    margin-bottom: 0.5rem; /* Match general .card-details h3 */
+    margin-top: 0;
+    /* Match general .card-details h3 */
+    margin-bottom: 0.5rem;
+    /* Match general .card-details h3 */
 }
 
 #played-games-list.grid-view .card-details h3 a {
-    color: #e0e0e0; /* Match general style */
-    text-decoration: none; /* Match general style */
+    color: #e0e0e0;
+    /* Match general style */
+    text-decoration: none;
+    /* Match general style */
     /* display: block; Might be needed if 'a' is the direct element for ellipsis and h3 has padding */
 }
 
 #played-games-list.grid-view .card-actions {
     /* display: flex; align-items: center; gap: 0.5rem are inherited or set by general .card-actions */
-    flex-wrap: nowrap; /* Prevent wrapping of buttons */
-    justify-content: flex-start; /* Align items to the start, delete-form will push itself right */
+    flex-wrap: nowrap;
+    /* Prevent wrapping of buttons */
+    justify-content: flex-start;
+    /* Align items to the start, delete-form will push itself right */
 }
 
 /* The general .card-actions .delete-form { margin-left: auto; } should still apply */
 
 #played-games-list.grid-view .card-actions .btn,
 #played-games-list.grid-view .card-actions form button.btn {
-    padding: 0.3rem 0.6rem; /* Slightly reduce padding */
-    font-size: 0.85em; /* Slightly reduce font size */
-    white-space: nowrap; /* Ensure button text doesn't wrap */
-    flex-shrink: 1; /* Allow buttons to shrink if space is very tight */
+    padding: 0.3rem 0.6rem;
+    /* Slightly reduce padding */
+    font-size: 0.85em;
+    /* Slightly reduce font size */
+    white-space: nowrap;
+    /* Ensure button text doesn't wrap */
+    flex-shrink: 1;
+    /* Allow buttons to shrink if space is very tight */
     /* flex-grow: 0; is inherited from general .card-actions .btn */
-} 
+}

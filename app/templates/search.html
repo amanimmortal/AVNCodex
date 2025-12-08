@@ -5,15 +5,7 @@
 {% block main_content %}
 <h1>Search F95Zone Games - AVN Codex</h1>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-{% if messages %}
-<ul class="flash-messages">
-    {% for category, message in messages %}
-    <li class="{{ category }}">{{ message }}</li>
-    {% endfor %}
-</ul>
-{% endif %}
-{% endwith %}
+
 
 <div class="search-form">
     <form method="POST" action="{{ url_for('search') }}" id="searchGameForm">
