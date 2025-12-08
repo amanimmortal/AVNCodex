@@ -1070,3 +1070,9 @@ UnboundLocalError: local variable 'current_section_os' referenced before assignm
 2025-12-08 15:09:23,506 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
 2025-12-08 15:09:23,506 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.
 2025-12-08 15:12:07,944 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Added: Artemis
+2025-12-08 15:14:45,334 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-08 15:14:45,334 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-08 15:14:46,090 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-08 15:14:46,096 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 24
+2025-12-08 15:14:46,098 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-08 15:14:46,098 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 24 Hours.

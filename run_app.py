@@ -297,6 +297,37 @@ def add_game():
                                        user_rating=user_rating)
     if success:
         flash(msg, 'success')
+        
+        # --- Auto-Trigger Background Sync for New Game ---
+        # Fetch game_id (which is needed for sync) from the list we just added to?
+        # add_game_to_my_list returns success/msg, but not the ID.
+        # We need to look it up or modify add_game_to_my_list to return it.
+        # Looking up by URL is safe enough for this context.
+        try:
+            conn = get_db_connection(DB_PATH)
+            # Find the game_id from valid games table first
+            g_row = conn.execute("SELECT id FROM games WHERE f95_url = ?", (f95_url.strip(),)).fetchone()
+            if g_row:
+                game_id = g_row['id']
+                # Now trigger the sync thread (reuse manual_sync_game logic if possible or inline it)
+                def single_sync_task(app_instance, user_id, g_id):
+                    with app_instance.app_context():
+                        client = F95ApiClient()
+                        try:
+                            # Force scrape to get full details immediately
+                            check_single_game_update_and_status(DB_PATH, client, g_id, user_id, force_scrape=True) 
+                        except Exception as e:
+                            app_instance.logger.error(f"Auto-sync error for game {g_id}: {e}")
+                        finally:
+                            client.close_session()
+
+                thread = threading.Thread(target=single_sync_task, args=(flask_app, session['user_id'], game_id))
+                thread.start()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to trigger auto-sync for new game: {e}")
+        # -------------------------------------------------
+
     else:
          # If already in list, show as info/success context or warning
          category = 'success' if "already in your list" in msg else 'danger'
