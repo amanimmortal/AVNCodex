@@ -20,6 +20,11 @@ def parse_game_page_content(html_content, game_thread_url):
         return None
 
     soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # DEBUG: Log title to diagnose page load issues
+    page_title = soup.title.string if soup.title else "No Title"
+    logger_scraper.info(f"DEBUG: Parsed HTML Title: {page_title}")
+    logger_scraper.info(f"DEBUG: HTML Start: {html_content[:200]}")
 
     # --- Initialize Data Dictionary ---
     data = {
@@ -47,10 +52,27 @@ def parse_game_page_content(html_content, game_thread_url):
         "thread_updated_date": "Not found",
         "os_general_list": "Not found", 
         "other_header_info": {},
+        "download_links_raw_html": None,
         "image_url": None
     }
-
-    # --- I. Header Information Extraction ---
+    
+    # Debug dump for U4IA
+    if "158858" in game_thread_url or "u4ia" in game_thread_url.lower():
+        try:
+            mode = 'wb'
+            content_to_write = html_content
+            if isinstance(html_content, str):
+                mode = 'w'
+                # Ensure utf-8 encoding if writing as text
+                with open('u4ia_dump.html', 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+            else:
+                with open('u4ia_dump.html', 'wb') as f:
+                    f.write(html_content)
+                    
+            logger_scraper.info("DEBUG: Dumped u4ia_dump.html")
+        except Exception as e:
+            logger_scraper.error(f"DEBUG: Failed to dump html: {e}")
     raw_title_h1 = soup.find('h1', class_='p-title-value')
     if raw_title_h1:
         data['title_full_raw'] = raw_title_h1.get_text(strip=True)
@@ -257,9 +279,30 @@ def parse_game_page_content(html_content, game_thread_url):
                     cleaned_lang_str = re.sub(r"^\\s*[:\\-\\s]\\s*", "", lang_str_raw).strip().split('\\n')[0].strip()
                     if cleaned_lang_str and len(cleaned_lang_str) < 150:
                         data['language'] = cleaned_lang_str
-                        break
+        if data['status'] == "Not found" and data['title_full_raw']:
+             # Fallback: Check Title for Status Prefixes (e.g. "Abandoned Game Name")
+             lower_title = data['title_full_raw'].lower()
+             if "abandoned" in lower_title: data['status'] = "Abandoned"
+             elif "on hold" in lower_title: data['status'] = "On Hold"
+             elif "completed" in lower_title: data['status'] = "Completed"
+             elif "ongoing" in lower_title: data['status'] = "Ongoing"
         
         # Status
+        # Priority 1: Check .js-threadStatusField (Dynamic/Structured)
+        if data['status'] == "Not found":
+            status_div = soup.select_one(".js-threadStatusField")
+            if status_div:
+                raw_val = status_div.get_text(strip=True)
+                logger_scraper.warning(f"DEBUG: Found .js-threadStatusField. Raw content: '{raw_val}'")
+                val = status_div.get_text(strip=True)
+                # Cleanup "Status: Abandoned" -> "Abandoned"
+                val = re.sub(r"^(?:Status)?\s*[:\-]?\s*", "", val, flags=re.IGNORECASE).strip()
+                if val and len(val) < 50:
+                     data['status'] = val
+                     logger_scraper.warning(f"DEBUG: Extracted status '{val}' from js-threadStatusField")
+            else:
+                logger_scraper.warning("DEBUG: .js-threadStatusField NOT found in parsed HTML.")
+
         status_patterns = [r"(?:Status)\s*[:\-]?\s*([^\n]+)", r"<strong>(?:Status)\s*[:\-]?\s*</strong>\s*([^\n]+)"]
         if data['status'] == "Not found":
             for pattern in status_patterns:
@@ -270,6 +313,17 @@ def parse_game_page_content(html_content, game_thread_url):
                     if cleaned_status_str and len(cleaned_status_str) < 100:
                         data['status'] = cleaned_status_str
                         break
+        
+        if data['status'] == "Not found":
+             for b_tag in bb_wrapper.find_all(['b', 'strong']):
+                 if "status" in b_tag.get_text(strip=True).lower():
+                     next_sib = b_tag.next_sibling
+                     if next_sib:
+                         val = next_sib.get_text(strip=True) if not isinstance(next_sib, str) else next_sib
+                         val = val.strip().lstrip(':-').strip()
+                         if val:
+                             data['status'] = val
+                             break
 
         # Censorship
         censorship_patterns = [r"(?:Censorship|Censored)\s*[:\-]?\s*([^\n]+)", r"<strong>(?:Censorship|Censored)\s*[:\-]?\s*</strong>\s*([^\n]+)"]
@@ -285,7 +339,7 @@ def parse_game_page_content(html_content, game_thread_url):
         
         # Download Links
         raw_download_links = []
-        support_link_domains = ['patreon.com', 'subscribestar.adult', 'discord.gg', 'discord.com', 'itch.io', 'buymeacoffee.com', 'ko-fi.com', 'store.steampowered.com', 'paypal.com', 'subscribestar.com', 'gumroad.com', 'fanbox.cc', 'fantia.jp', 'boosty.to']
+        support_link_domains = ['patreon.com', 'subscribestar.adult', 'discord.gg', 'discord.com', 'itch.io', 'buymeacoffee.com', 'ko-fi.com', 'store.steampowered.com', 'paypal.com', 'subscribestar.com', 'gumroad.com', 'fanbox.cc', 'fantia.jp', 'boosty.to', 'youtube.com', 'twitter.com', 'x.com', 'facebook.com', 'instagram.com', 'reddit.com']
         download_section_headers_texts = ['download', 'links', 'files']
         download_elements = bb_wrapper.descendants
         
@@ -303,7 +357,10 @@ def parse_game_page_content(html_content, game_thread_url):
                  is_header_like = True # Treat significant text nodes as potential headers
              elif elem.name in ['h1','h2','h3','h4','strong','b','p','span','div','u','li']:
                  current_element_text_lower = elem.get_text(separator=' ', strip=True).lower()
-                 is_header_like = True
+                 if current_element_text_lower.startswith(('-', '|', '•')):
+                      is_header_like = False
+                 else:
+                      is_header_like = True
              elif elem.name == 'a':
                  # Link processing happens below
                  current_element_text_lower = "" 
@@ -313,37 +370,35 @@ def parse_game_page_content(html_content, game_thread_url):
             
              if is_header_like and len(current_element_text_lower) >= 2:
                  # Check for OS keywords
-                 # We allow checking the START of long text blocks (e.g. div wrappers)
                  text_to_check = current_element_text_lower[:100] 
                  
                  found_os = False
-                 if any(os_kw in text_to_check for os_kw in os_section_keywords):
-                     if any(kw in text_to_check for kw in ['windows', 'pc', 'win ', 'win/']): current_section_os = 'win'
-                     elif 'linux' in text_to_check: current_section_os = 'linux'
-                     elif any(kw in text_to_check for kw in ['mac', 'osx', 'macos']): current_section_os = 'mac'
-                     elif 'android' in text_to_check: current_section_os = 'android'
-                     
-                     # Check if we are inside a restricted spoiler (Split/Update/Patch)
-                     # This overrides the OS detection if found
-                     try:
-                         # Traverse up to find bbCodeSpoiler
-                         parent = elem.parent if isinstance(elem, str) else elem
-                         ancestor_spoilers = parent.find_parents('div', class_='bbCodeSpoiler')
-                         for spoiler_div in ancestor_spoilers:
-                             btn = spoiler_div.find('button', class_='bbCodeSpoiler-button')
-                             if btn:
-                                 btn_text = btn.get_text(strip=True).lower()
-                                 if any(bad in btn_text for bad in ['split', 'update', 'part', 'extra', 'patch']):
-                                     current_section_os = 'extras'
-                                     break
-                     except: pass
-                     
-                     found_os = True
+                 # Only trigger OS detection if the element itself is likely a header (short)
+                 if len(current_element_text_lower) < 100:
+                     if any(os_kw in text_to_check for os_kw in os_section_keywords):
+                         if any(kw in text_to_check for kw in ['windows', 'pc', 'win ', 'win/']): current_section_os = 'win'
+                         elif 'linux' in text_to_check: current_section_os = 'linux'
+                         elif any(kw in text_to_check for kw in ['mac', 'osx', 'macos']): current_section_os = 'mac'
+                         elif 'android' in text_to_check: current_section_os = 'android'
+                         
+                         # Check if we are inside a restricted spoiler (Split/Update/Patch)
+                         try:
+                             parent = elem.parent if isinstance(elem, str) else elem
+                             ancestor_spoilers = parent.find_parents('div', class_='bbCodeSpoiler')
+                             for spoiler_div in ancestor_spoilers:
+                                 btn = spoiler_div.find('button', class_='bbCodeSpoiler-button')
+                                 if btn:
+                                     btn_text = btn.get_text(strip=True).lower()
+                                     if any(bad in btn_text for bad in ['split', 'update', 'part', 'extra', 'patch']):
+                                         current_section_os = 'extras'
+                                         break
+                         except: pass
+                         
+                         found_os = True
                 
                  # If valid OS found, we update. 
                  # If not, check if it's a generic "Download" header which should reset the OS
                  if not found_os:
-                     # Check strict headers
                      if any(hdr_kw in text_to_check for hdr_kw in download_section_headers_texts) and len(text_to_check) < 50:
                          current_section_os = None
                      elif any(kw in text_to_check for kw in ['translation', 'patch', 'mod', 'extra', 'update', 'split', 'part ']):
@@ -353,16 +408,20 @@ def parse_game_page_content(html_content, game_thread_url):
                  href = elem.get('href')
                  text = elem.get_text(strip=True)
                  
-                 if not href or href.startswith(('#', 'mailto:', 'javascript:')) or "f95zone.to/account/" in href or "f95zone.to/members/" in href : continue
-                 if "attachments.f95zone.to" in href.lower(): continue
+                 if not href or href.startswith(('#', 'mailto:', 'javascript:')) or "f95zone.to/account/" in href or "f95zone.to/members/" in href : 
+                     continue
+                 if "attachments.f95zone.to" in href.lower(): 
+                     continue
 
                  try:
                      link_domain = re.match(r"https://?([^/]+)", href).group(1).replace("www.", "")
-                     if any(support_domain in link_domain for support_domain in support_link_domains): continue
+                     if any(support_domain in link_domain for support_domain in support_link_domains): 
+                         continue
                  except: pass
 
                  if "f95zone.to/threads/" in href and not any(ext in href.lower() for ext in ['.zip', '.rar', '.apk', '.7z', '.exe', '.patch', '.mod']):
-                     if not any(kw in text.lower() for kw in ['mod', 'patch', 'translation', 'download', 'fix', 'guide', 'update', 'part']): continue
+                     if not any(kw in text.lower() for kw in ['mod', 'patch', 'translation', 'download', 'fix', 'guide', 'update', 'part', 'unlocker']): 
+                         continue
 
                  link_os = 'unknown'
                  
@@ -371,7 +430,7 @@ def parse_game_page_content(html_content, game_thread_url):
                  lower_text = text.lower()
                  lower_href = href.lower()
                  
-                 if any(kw in lower_text for kw in ['update', 'patch', 'fix', 'mod', 'translation', 'guide', 'walkthrough', 'part ']) or \
+                 if any(kw in lower_text for kw in ['update', 'patch', 'fix', 'mod', 'translation', 'guide', 'walkthrough', 'part ', 'unlocker', 'cheat']) or \
                     any(kw in lower_href for kw in ['.part1', '.part2', '.part3', '.part4', '.part5']):
                      link_os = 'extras'
                      is_extra_content = True
@@ -399,13 +458,193 @@ def parse_game_page_content(html_content, game_thread_url):
 
         if has_win_links or has_linux_links:
             for link in final_raw_links_with_os:
-                if link['os_determined'] in ['win', 'linux', 'extras']:
+                if link['os_determined'] in ['win', 'linux', 'mac', 'android', 'extras']:
                     data['download_links'].append({'text': link['text'], 'url': link['url'], 'os_type': link['os_determined']})
         else:
             for link in final_raw_links_with_os:
                 data['download_links'].append({'text': link['text'], 'url': link['url'], 'os_type': link['os_determined']})
 
-    # --- Tags ---
+    # --- Raw Download Block Extraction (Hybrid HTML) ---
+    if bb_wrapper:  
+        try:
+            # Pre-process: Globally Unwrap Spoilers in the wrapper
+            # This ensures we catch them at any depth before we start linear scanning
+            all_spoilers = bb_wrapper.find_all('div', class_='bbCodeSpoiler')
+            for sp in all_spoilers:
+                content_div = sp.find('div', class_='bbCodeBlock-content')
+                if content_div:
+                    # Unwrap: Replace spoiler with the content div's children or the div itself
+                    # Replacing with the div itself preserves the block structure which is usually good
+                    sp.replace_with(content_div)
+                else:
+                    sp.decompose() # Remove empty/broken spoilers
+
+            download_header_node = None
+            keywords_for_header = ["download"]
+            
+            # 1. Find the "DOWNLOAD" header
+            # It's usually a strong/b tag or h3/h4, sometimes just a text node that stands out.
+            # We look for a node whose text is "DOWNLOAD" (case insensitive)
+            for elem in bb_wrapper.descendants:
+                 if isinstance(elem, str):
+                     clean_text = elem.strip().lower()
+                     if "download" in clean_text and len(clean_text) < 25:
+                         # Ensure it's not just a sentence containing download
+                         # Check if it has potential noise like "download :"
+                         # Refinement: Only promote to parent if parent is plausibly just a header (short text)
+                         if elem.parent and len(elem.parent.get_text(strip=True)) < 100:
+                             download_header_node = elem.parent 
+                         else:
+                             download_header_node = elem # Just the text node
+                         break
+                 elif elem.name in ['strong', 'b', 'h1', 'h2', 'h3', 'div', 'span']:
+                     clean_text = elem.get_text(strip=True).lower()
+                     if "download" in clean_text and len(clean_text) < 25:
+                         download_header_node = elem
+                         break
+            
+            if download_header_node:
+                # 2. Capture siblings until end condition
+                # End condition: Thumbnails (class="lbContainer") or Attachment list
+                # Or end of bbWrapper
+                
+                captured_html = ""
+                # Start capturing FROM the header node itself to ensure we don't miss text inside it (e.g. "Download - Windows")
+                current_node = download_header_node
+                has_stepped_out = False
+                
+                while current_node:
+                    should_stop = False
+                    
+                    if "42173" in game_thread_url:
+                         logger_scraper.info(f"HHG_TRACE: Node: {current_node.name} Type: {type(current_node)}")
+                         
+                    # Check Stop Conditions
+                    if hasattr(current_node, 'name') and current_node.name == 'div':
+                         classes = current_node.get('class', [])
+                         if 'lbContainer' in classes or 'js-lbContainer' in classes:
+                             should_stop = True
+                         # Attachments usually in a div with specific classes or structure
+                         # if 'attachment' in str(classes):
+                         #     should_stop = True
+
+                    # Sometimes thumbnails are just images with specific src pattern if not lazy loaded differently
+                    # But the user mentioned "set of thumbnails (from what I can see these always start with https://attachments.f95zone.to/)"
+                    # Which might be links or imgs
+                    # Relaxed: Do NOT stop on single attachment images (likely banners/buttons).
+                    # Only stop on specific thumbnail containers (handled above with lbContainer)
+                    if not should_stop and hasattr(current_node, 'find_all'):
+                        imgs = current_node.find_all('img')
+                        for img in imgs:
+                            src = img.get('src', '') or img.get('data-url', '')
+                            if "attachments.f95zone.to" in src:
+                                 should_stop = True
+                                 logger_scraper.info("DEBUG: Stopping on F95 attachment thumbnail.")
+                                 break
+                    
+                    if should_stop:
+                        break
+                    
+                    # 3. Process/Append Node
+                    # (Spoilers are already unwrapped globally)
+
+                    if hasattr(current_node, 'descendants'):
+                         # It's a Tag
+                         
+                         # Recursive Text Cleanup (Clean text inside this container)
+                         if hasattr(current_node, 'find_all'):
+                             for text_node in current_node.find_all(string=True):
+                                 # Skip text inside links or specific tags we want to preserve exactly
+                                 if text_node.parent and text_node.parent.name in ['a', 'script', 'style', 'code', 'pre']:
+                                     continue
+                                 
+                                 txt_val = str(text_node)
+                                 # Clean noise
+                                 cleaned_val = re.sub(r'[:*|]', '', txt_val)
+                                 cleaned_val = re.sub(r'\s+-\s+', ' ', cleaned_val) # Remove separator hyphens
+                                 cleaned_val = re.sub(r'\s+', ' ', cleaned_val) # Collapse spaces
+
+                                 if txt_val != cleaned_val:
+                                     text_node.replace_with(cleaned_val)
+
+                         # We need to process links to add class='download-link-btn'
+                         
+                         # Parse the subtree as a new soup to modify safely? 
+                         # Or just modify direct attributes if simple.
+                         if current_node.name == 'a':
+                              # processing single link
+                              href = current_node.get('href', '')
+                              if href and not href.startswith('#') and 'attachments.f95zone.to' not in href:
+                                  if current_node.has_attr('style'): del current_node['style']
+                                  existing_class = current_node.get('class', [])
+                                  if 'download-link-btn' not in existing_class:
+                                      existing_class.append('download-link-btn')
+                                      current_node['class'] = existing_class
+                         
+                         elif hasattr(current_node, 'find_all'):
+                              all_links = current_node.find_all('a')
+                              for lnk in all_links:
+                                   href = lnk.get('href', '')
+                                   if href and not href.startswith('#') and 'attachments.f95zone.to' not in href:
+                                       if lnk.has_attr('style'): del lnk['style']
+                                       existing_class = lnk.get('class', [])
+                                       if 'download-link-btn' not in existing_class:
+                                           existing_class.append('download-link-btn')
+                                           lnk['class'] = existing_class
+                         
+                         # Cleanup Headers
+                         if current_node.name in ['b', 'strong']:
+                             # Flatten and clean header text of trailing noise
+                             txt = current_node.get_text()
+                             cleaned_header = re.sub(r'[:*|]+$', '', txt).strip()
+                             if cleaned_header:
+                                 current_node.string = cleaned_header
+
+                         captured_html += str(current_node)
+                    else:
+                         # NavigableString - Cleanup text
+                         text = str(current_node)
+                         # Remove noise characters: : * |
+                         cleaned = re.sub(r'[:*|]', '', text)
+                         # Remove hyphens that look like separators (surrounded by spaces)
+                         cleaned = re.sub(r'\s+-\s+', ' ', cleaned)
+                         # Collapse multiple spaces
+                         cleaned = re.sub(r'\s+', ' ', cleaned)
+                         
+                         # Only add if there's meaningful content
+                         if cleaned.strip():
+                             captured_html += cleaned
+
+
+                    # Step-Out Logic
+                    next_node = current_node.next_sibling
+                    
+                    if next_node is None and not has_stepped_out:
+                        # Dynamic check: Are we inside a wrapper we should escape?
+                        parent = current_node.parent
+                        # Don't escape if parent is the main bbWrapper or something invalid
+                        if parent and hasattr(parent, 'get') and 'bbWrapper' not in parent.get('class', []):
+                            logger_scraper.info(f"DEBUG: Scraper reached end of container {parent.name}. Stepping out to parent sibling.")
+                            next_node = parent.next_sibling
+                            has_stepped_out = True
+                    
+                    current_node = next_node
+                
+                # Cleanup
+                if captured_html:
+                     # Remove unsafe tags just in case
+                     soup_clean = BeautifulSoup(captured_html, 'html.parser')
+                     for unsafe in soup_clean.find_all(['script', 'iframe', 'object', 'embed', 'form', 'style']):
+                         unsafe.decompose()
+                     
+                     data['download_links_raw_html'] = str(soup_clean)
+                     logger_scraper.info("DEBUG: Successfully extracted raw download HTML block.")
+            else:
+                 logger_scraper.info("DEBUG: 'DOWNLOAD' header not found for raw block extraction.")
+
+        except Exception as e:
+            logger_scraper.error(f"Error extracting raw download html: {e}")
+
     # --- Tags ---
     data['tags'] = []
     
@@ -551,10 +790,27 @@ def parse_game_page_content(html_content, game_thread_url):
         "release_date": data['release_date'],
         "thread_updated_date": data['thread_updated_date'],
         "os_general_list": data['os_general_list'],
+        "os_general_list": data['os_general_list'],
         "image_url": data['image_url'],
+        "download_links_raw_html": data['download_links_raw_html']
     }
     for key, value in result_data.items():
         if value is None: result_data[key] = "Not found"
+
+    # --- Sanitize Status ---
+    valid_statuses = ["Completed", "Ongoing", "On Hold", "Abandoned"]
+    if result_data['status'] not in valid_statuses:
+        # Fuzzy match or cleanup
+        st_lower = result_data['status'].lower()
+        if "complete" in st_lower: result_data['status'] = "Completed"
+        elif "ongoing" in st_lower: result_data['status'] = "Ongoing"
+        elif "on hold" in st_lower or "on-hold" in st_lower or "hiatus" in st_lower: result_data['status'] = "On Hold"
+        elif "abandoned" in st_lower: result_data['status'] = "Abandoned"
+        else:
+            # If "With Emerald." or other garbage, reset to "Unknown" (or "Not found")
+            # Log warning
+            logger_scraper.warning(f"Sanitizing unknown status '{result_data['status']}' to 'Unknown'")
+            result_data['status'] = "Unknown"
 
     return result_data
 
@@ -617,9 +873,10 @@ def extract_game_data(game_thread_url, username=None, password=None, requests_se
                         # e.g. if Tags are missing or Download links are empty, it might be a Guest view issue
                         missing_tags = not result.get('tags') or result['tags'] == ["Not found"]
                         missing_links = not result.get('download_links')
+                        missing_status = result.get('status') in ["Not found", "Unknown"]
                         
-                        if missing_tags or missing_links:
-                             logger_scraper.warning("EXTRACT_GAME_DATA: Lightweight extraction incomplete (missing tags/links). Falling back to Playwright.")
+                        if missing_tags or missing_links or missing_status:
+                             logger_scraper.warning(f"EXTRACT_GAME_DATA: Lightweight extraction incomplete (Status: {result.get('status')}, Tags: {not missing_tags}, Links: {not missing_links}). Falling back to Playwright.")
                         else:
                             logger_scraper.info("EXTRACT_GAME_DATA: Lightweight extraction successful.")
                             return result
@@ -655,7 +912,7 @@ def extract_game_data(game_thread_url, username=None, password=None, requests_se
                     page.wait_for_timeout(500)
             except: pass
 
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(5000) # Increased to 5s to allow JS to populate status
             html_content = page.content()
             browser.close()
 

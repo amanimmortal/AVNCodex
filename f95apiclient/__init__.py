@@ -285,7 +285,7 @@ class F95ApiClient:
             current_proxies_for_request = None # Default to no proxy / direct
 
             # Determine if proxy should be used for this attempt
-            if self.use_proxies and self.available_proxies:
+            if self.use_proxies: # Check if proxies are enabled generally
                 if attempt == 0 and not attempt_with_proxy_activated:
                     # First attempt for a request sequence is direct by default, unless forced
                     self.logger.info(f"Attempt {attempt + 1}: Initial attempt will be direct (no proxy).")
@@ -297,19 +297,19 @@ class F95ApiClient:
                         attempt_with_proxy_activated = True 
                         self.logger.info("Proxy usage activated due to previous failure or settings.")
                     
-                    if self._set_random_proxy(): # This sets self.session.proxies
+                    if self._set_random_proxy(): # This sets self.session.proxies and loads them if needed
                         current_proxies_for_request = self.session.proxies
                         log_proxy_info = f"proxy {self.current_proxy}"
                         self.logger.info(f"Attempt {attempt + 1}: Using new proxy: {self.current_proxy}")
                     else:
                         # No proxies available, or failed to set one, try direct if allowed or last resort
-                        self.logger.warning(f"Attempt {attempt + 1}: No proxy available or failed to set. Attempting direct.")
+                        self.logger.warning(f"Attempt {attempt + 1}: No proxy available or failed to set/load. Attempting direct.")
                         log_proxy_info = "direct connection (fallback)"
                         current_proxies_for_request = {}
             else:
                 # Proxies not enabled or none loaded, always direct
-                self.logger.info(f"Attempt {attempt + 1}: Making request directly (proxies not enabled or none loaded).")
-                log_proxy_info = "direct connection (proxies disabled/unavailable)"
+                self.logger.info(f"Attempt {attempt + 1}: Making request directly (proxies explicitly disabled).")
+                log_proxy_info = "direct connection (proxies disabled)"
                 current_proxies_for_request = {}
 
             try:
@@ -332,7 +332,7 @@ class F95ApiClient:
                 last_exception = e
                 
                 # If this was a direct attempt and it failed with a connection-related error, activate proxy usage for next time.
-                if not attempt_with_proxy_activated and current_proxies_for_request is None and self.use_proxies and self.available_proxies:
+                if not attempt_with_proxy_activated and current_proxies_for_request is None and self.use_proxies:
                     if isinstance(e, requests.exceptions.ConnectionError) and "Max retries exceeded" in str(e):
                         self.logger.info(f"Direct attempt failed with 'Max retries exceeded'. Activating proxy usage for subsequent attempts.")
                         attempt_with_proxy_activated = True
@@ -362,7 +362,7 @@ class F95ApiClient:
 
                 # If this was a direct attempt and it's a 403, activate proxy usage.
                 activated_proxy_on_this_403 = False
-                if not attempt_with_proxy_activated and current_proxies_for_request == {} and e.response.status_code == 403 and self.use_proxies and self.available_proxies:
+                if not attempt_with_proxy_activated and current_proxies_for_request == {} and e.response.status_code == 403 and self.use_proxies:
                     self.logger.info(f"Direct attempt failed with HTTP 403. Activating proxy usage for subsequent attempts.")
                     attempt_with_proxy_activated = True
                     activated_proxy_on_this_403 = True
@@ -374,7 +374,7 @@ class F95ApiClient:
                         self.logger.info(f"HTTPError {e.response.status_code} is retryable or proxy activated. Continuing to attempt {attempt + 2}/{self.max_attempts}.")
                         
                         # If proxies are enabled and available, always try to set a new one for the next attempt after these errors.
-                        if self.use_proxies and self.available_proxies:
+                        if self.use_proxies:
                             self.logger.info(f"Forcing new proxy selection after HTTP {e.response.status_code} on {log_proxy_info}.")
                             if not self._set_random_proxy():
                                 self.logger.warning("Failed to set a new proxy for the next attempt. It might be direct or use a previous proxy if one was already set and not cleared.")
@@ -393,7 +393,7 @@ class F95ApiClient:
                 self.logger.error(f"An unexpected error occurred on attempt {attempt + 1}/{self.max_attempts} for {url} with {log_proxy_info}: {type(e).__name__} - {e}", exc_info=True)
                 last_exception = e
                 # Activate proxies if direct attempt failed with unexpected error.
-                if not attempt_with_proxy_activated and current_proxies_for_request is None and self.use_proxies and self.available_proxies:
+                if not attempt_with_proxy_activated and current_proxies_for_request is None and self.use_proxies:
                     self.logger.info(f"Direct attempt failed with unexpected error. Activating proxy usage for subsequent attempts.")
                     attempt_with_proxy_activated = True
 
@@ -522,10 +522,11 @@ class F95ApiClient:
             return {'success': False, 'status_code': 'REQUEST_EXCEPTION', 'message': f"Login request failed: {e}"}
 
     def get_latest_game_data_from_rss(self, limit=90, search_term: str = None, completion_status_filter: str = None, 
-                                      tags: list = None, notags: list = None, engines: list = None) -> list[dict]:
+                                      tags: list = None, notags: list = None, engines: list = None,
+                                      creator: str = None) -> list[dict]:
         """
         Fetches and parses game data from the F95Zone RSS feed using the new _make_request method.
-        Supports filtering by Tags, Engines, and Status.
+        Supports filtering by Tags, Engines, Status, and Creator.
         """
         base_rss_url = f"{self.base_url}/sam/latest_alpha/latest_data.php"
         url_params_dict = {'cmd': 'rss', 'cat': 'games', 'rows': str(limit)}
@@ -535,6 +536,10 @@ class F95ApiClient:
             self.logger.info(f"Fetching RSS feed with search term: '{search_term}', limit: {limit}")
         else:
             self.logger.info(f"Fetching RSS feed, limit: {limit}")
+
+        if creator:
+            url_params_dict['creator'] = creator
+            self.logger.info(f"Filtering RSS for Creator: {creator}")
 
         prefix_params = []
         

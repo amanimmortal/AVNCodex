@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Read data passed from the template
     const configElement = document.getElementById('app-config');
     const pushoverConfigMissing = configElement ? configElement.dataset.pushoverConfigMissing === 'true' : false;
@@ -17,15 +17,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (toggleViewBtn && playedGamesList) {
         let currentView = localStorage.getItem('gamesView') || 'list-view';
-        
-        playedGamesList.classList.remove('list-view', 'grid-view'); 
+
+        playedGamesList.classList.remove('list-view', 'grid-view');
         playedGamesList.classList.add(currentView);
         updateButtonTextContent(toggleViewBtn, currentView === 'grid-view');
 
-        toggleViewBtn.addEventListener('click', function() {
+        toggleViewBtn.addEventListener('click', function () {
             const isListCurrently = playedGamesList.classList.contains('list-view');
             currentView = isListCurrently ? 'grid-view' : 'list-view';
-            
+
             playedGamesList.classList.remove('list-view', 'grid-view');
             playedGamesList.classList.add(currentView);
             localStorage.setItem('gamesView', currentView);
@@ -33,10 +33,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    document.querySelectorAll('.sync-btn').forEach(function(button) {
+    document.querySelectorAll('.sync-btn').forEach(function (button) {
         const form = button.closest('form');
         if (form) {
-            form.addEventListener('submit', function() {
+            form.addEventListener('submit', function () {
                 const btn = this.querySelector('.sync-btn');
                 if (btn) {
                     const syncText = btn.querySelector('.sync-text');
@@ -58,9 +58,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 // We need to get the URL for settings_route from the template, or hardcode if it's static
                 // For now, assuming it might be available on a global window object or passed via another data attribute if needed.
                 // Simplest for now: use a relative path if your app structure allows, or get it from a data attribute.
-                const settingsUrl = configElement ? configElement.dataset.settingsUrl : '/settings'; 
+                const settingsUrl = configElement ? configElement.dataset.settingsUrl : '/settings';
                 window.location.href = settingsUrl;
             }
         }
     }
+
+    // Convert UTC dates to Local Time
+    const localDateElements = document.querySelectorAll('.local-date');
+    localDateElements.forEach(el => {
+        const utcDateStr = el.getAttribute('data-utc');
+        if (utcDateStr && utcDateStr !== 'None' && utcDateStr !== 'N/A') {
+            const date = new Date(utcDateStr);
+            if (!isNaN(date.getTime())) {
+                const options = {
+                    weekday: 'short',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                };
+                el.textContent = date.toLocaleString(undefined, options);
+            }
+        }
+    });
+
 }); 

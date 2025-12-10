@@ -52,78 +52,105 @@
     </div>
 
     <div id="played-games-list" class="list-view"> {# Default to list-view #}
+        <script>
+            // Anti-FOUC: Immediately restore view mode before rendering content
+            (function () {
+                try {
+                    var saved = localStorage.getItem('gamesView');
+                    if (saved === 'grid-view') {
+                        document.getElementById('played-games-list').className = 'grid-view';
+                    }
+                } catch (e) { }
+            })();
+        </script>
         {% if played_games or current_filters.name_filter or current_filters.min_rating_filter != 'any' %}
         {# Show list if there are games OR if filters are active (to show 'no results' message) #}
         {% if played_games %}
         {% for game in played_games %}
         <article class="card game-card">
             <div class="card-banner-area">
+                {# Status Badge Overlay #}
+                {% set display_status = game.status if game.status and game.status not in ['Not found', 'Not yet
+                scraped'] else game.completed_status %}
+                {% if display_status %}
+                <span class="game-status-tag status-{{ display_status.lower().replace(' ', '_').replace('-', '_') }}">
+                    {{ display_status | replace('_', ' ') | title }}
+                </span>
+                {% endif %}
+
                 {% if game.image_url %}
                 <img src="{{ game.image_url }}" alt="{{ game.name }}" class="card-image-banner">
                 {% else %}
                 <div class="card-image-banner-placeholder">{{ game.name }}</div>
                 {% endif %}
             </div>
+
             <div class="card-body-content">
                 <div class="card-details">
-                    <h3>
-                        <a href="{{ game.f95_url }}" target="_blank">{{ game.name }}</a>
-                        {# Use game.status (scraped) if available, otherwise fall back to game.completed_status (from
-                        RSS/manual) #}
-                        {% set display_status = game.status if game.status and game.status not in ['Not found', 'Not yet
-                        scraped'] else game.completed_status %}
-                        {% if display_status %}
-                        <span
-                            class="game-status-tag status-{{ display_status.lower().replace(' ', '_').replace('-', '_') }}">
-                            {{ display_status | replace('_', ' ') | title }}
-                        </span>
-                        {% endif %}
+                    <h3 class="game-title">
+                        <a href="{{ game.f95_url }}" target="_blank" title="{{ game.name }}" class="game-title-link">{{
+                            game.name }}</a>
                     </h3>
-                    <p><strong>Version:</strong> {{ game.version if game.version else 'N/A' }}</p>
-                    <p><strong>Author:</strong> {{ game.author if game.author else 'N/A' }}</p>
-                    {# Add Engine if available and not 'Not found' #}
-                    {% if game.engine and game.engine not in ['Not found', 'Not yet scraped'] %}
-                    <p><strong>Engine:</strong> {{ game.engine }}</p>
-                    {% endif %}
-                    <p class="text-muted"><strong>Last Updated:</strong> {{ game.rss_pub_date if game.rss_pub_date else
-                        'N/A' }}</p>
+
+                    <div class="game-meta-grid">
+                        <p title="Version"><i class="bi bi-git me-1"></i> {{ game.version if game.version else 'N/A' }}
+                        </p>
+                        <p title="Author"><i class="bi bi-person me-1"></i> {{ game.author if game.author else 'N/A' }}
+                        </p>
+                        {% if game.engine and game.engine not in ['Not found', 'Not yet scraped'] %}
+                        <p title="Engine"><i class="bi bi-gear me-1"></i> {{ game.engine }}</p>
+                        {% endif %}
+                        <p title="Last Updated" class="text-muted"><i class="bi bi-calendar3 me-1"></i> <span
+                                class="local-date" data-utc="{{ game.rss_pub_date }}">{{ game.rss_pub_date if
+                                game.rss_pub_date else 'N/A' }}</span></p>
+                    </div>
                 </div>
-                <div class="card-content">
+
+                <div class="card-extra-content">
                     <p><strong>Added:</strong> {{ game.date_added_to_played_list.split('T')[0] if
                         game.date_added_to_played_list else 'N/A'}}</p>
                     <p><strong>Rating:</strong> {{ '%d'|format(game.user_rating|int) if game.user_rating is not none
                         else 'Not Rated' }} / 5</p>
-                    <p><strong>Notes:</strong> {{ game.user_notes if game.user_notes else 'No notes.' }}</p>
-                    <p class="text-muted"><strong>Notify:</strong> {{ 'Yes' if game.notify_for_updates else 'No' }}</p>
+                    <p class="notes-text"><strong>Notes:</strong> {{ game.user_notes if game.user_notes else 'No notes.'
+                        }}</p>
                 </div>
+
                 <div class="card-actions {% if game.needs_acknowledgement_flag %}acknowledgement-pending{% endif %}">
+                    {% if game.needs_acknowledgement_flag %}
+                    <form method="POST" action="{{ url_for('acknowledge_update', played_game_id=game.played_game_id) }}"
+                        class="acknowledge-form">
+                        <button type="submit" class="btn btn-info btn-sm w-100" title="Acknowledge Update">
+                            <i class="bi bi-check-circle-fill me-1"></i> Acknowledge
+                        </button>
+                    </form>
+                    {% else %}
                     <div class="standard-actions">
                         <div class="left-actions">
                             <a href="{{ url_for('edit_game', played_game_id=game.played_game_id) }}"
-                                class="btn btn-primary btn-sm">Edit Details</a>
+                                class="btn btn-outline-primary btn-sm btn-icon" title="Edit Game Details">
+                                <i class="bi bi-pencil"></i>
+                            </a>
                             <form action="{{ url_for('manual_sync_game', played_game_id=game.played_game_id) }}"
-                                method="POST" style="display: inline-block; margin-left: 5px;">
-                                <button type="submit" class="btn btn-sm btn-secondary sync-btn">
-                                    <span class="sync-text">Sync</span>
+                                method="POST" style="display: inline-block;">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary btn-icon sync-btn"
+                                    title="Sync Game">
+                                    <span class="sync-text"><i class="bi bi-arrow-repeat"></i></span>
                                     <span class="sync-spinner" style="display: none;">
                                         <span class="spinner-border spinner-border-sm" role="status"
                                             aria-hidden="true"></span>
-                                        Syncing...
                                     </span>
                                 </button>
                             </form>
                         </div>
+
                         <form method="POST" action="{{ url_for('delete_game', played_game_id=game.played_game_id) }}"
                             class="delete-form"
                             onsubmit="return confirm('Are you sure you want to remove this game from your list? This action cannot be undone.');">
-                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                            <button type="submit" class="btn btn-outline-danger btn-sm btn-icon" title="Delete Game">
+                                <i class="bi bi-trash"></i>
+                            </button>
                         </form>
                     </div>
-                    {% if game.needs_acknowledgement_flag %}
-                    <form method="POST" action="{{ url_for('acknowledge_update', played_game_id=game.played_game_id) }}"
-                        class="acknowledge-form">
-                        <button type="submit" class="btn btn-info btn-sm">Acknowledge Update</button>
-                    </form>
                     {% endif %}
                 </div>
             </div>

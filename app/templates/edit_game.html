@@ -39,14 +39,85 @@
 
         {# Download Links #}
         <h3 class="text-accent mb-3">Downloads</h3>
+        <style>
+            .download-html-block .download-link-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                background-color: #3f4751 !important;
+                /* Force solid background */
+                background-image: none !important;
+                /* Remove any inherited/scraped images */
+                border: 1px solid #4a545e;
+                color: #dadddf !important;
+                padding: 0 15px;
+                height: 42px;
+                /* Fixed height for uniformity */
+                white-space: nowrap;
+                /* Prevent wrapping */
+                border-radius: 4px;
+                text-decoration: none;
+                margin: 5px 2px;
+                font-weight: 500;
+                transition: all 0.2s;
+                min-width: 140px;
+                /* Ensure uniform size */
+                justify-content: center;
+                /* Center content */
+                vertical-align: middle;
+            }
+
+            .download-html-block .download-link-btn:hover {
+                background-color: #4a545e !important;
+                color: #fff !important;
+                text-decoration: none;
+                transform: translateY(-1px);
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+
+            .download-html-block {
+                background-color: var(--card-bg, #1e1e1e);
+                /* Match typical card */
+                border: 1px solid var(--border-color, #333);
+                padding: 15px;
+                border-radius: 8px;
+                text-align: left;
+                /* Ensure left alignment */
+            }
+
+            /* Make sure lines break correctly if original HTML lacks BRs but implies list */
+            .download-html-block br {
+                display: block;
+                content: "";
+                margin: 5px 0;
+            }
+
+            /* Preserve original text formatting for headers but slightly muted */
+            .download-html-block b,
+            .download-html-block strong {
+                color: #6c757d;
+                font-size: 0.9em;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                display: block;
+                /* Force headers to own line */
+                margin-top: 10px;
+            }
+        </style>
         <div class="download-section">
+            {% if game.download_links_raw_html and game.download_links_raw_html != 'Not found' %}
+            <div class="download-html-block">
+                {{ game.download_links_raw_html | safe }}
+            </div>
+            {% else %}
+            {# Fallback to old structured list #}
             {% if game.download_links and game.download_links is iterable and game.download_links[0].text != 'Error
             decoding download links' and game.download_links[0].text != 'Not found' %}
 
             {% set os_labels = {'win': 'Windows', 'mac': 'Mac', 'linux': 'Linux', 'android': 'Android', 'extras':
             'Extras', 'unknown': 'Other'} %}
-            {% set os_icons = {'win': 'bi-windows', 'mac': 'bi-apple', 'linux': 'bi-ubuntu', 'android':
-            'bi-android', 'extras': 'bi-collection', 'unknown': 'bi-file-earmark'} %}
+            {% set os_icons = {'win': 'bi-windows', 'mac': 'bi-apple', 'linux': 'bi-ubuntu', 'android': 'bi-android',
+            'extras': 'bi-collection', 'unknown': 'bi-file-earmark'} %}
             {% set os_order = ['win', 'mac', 'linux', 'android', 'extras', 'unknown'] %}
 
             {% for os_code in os_order %}
@@ -66,7 +137,9 @@
                 <div class="download-links-container">
                     {% for link in game.download_links %}
                     {% if link.os_type == os_code %}
-                    <a href="{{ link.url }}" target="_blank" class="download-link-btn">
+                    {# Add explicit style to fallback links ensuring they look like buttons #}
+                    <a href="{{ link.url }}" target="_blank" class="download-link-btn"
+                        style="display: inline-flex; align-items: center; gap: 5px; background-color: #3f4751; border: 1px solid #4a545e; color: #dadddf; padding: 6px 12px; border-radius: 4px; text-decoration: none; margin-bottom: 5px; font-weight: 500;">
                         <i class="bi bi-cloud-arrow-down-fill"></i> {{ link.text }}
                     </a>
                     {% endif %}
@@ -77,7 +150,8 @@
             {% endfor %}
 
             {% else %}
-            <div class="alert alert-secondary">No download links available.</div>
+            <div class="alert alert-secondary">No download links available/scraped. (Try "Force Update Data")</div>
+            {% endif %}
             {% endif %}
         </div>
 

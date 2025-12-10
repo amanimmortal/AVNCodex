@@ -69,6 +69,7 @@ def initialize_database(db_path):
                 censorship TEXT DEFAULT NULL,
                 tags_json TEXT DEFAULT NULL, -- For storing tags as a JSON list
                 download_links_json TEXT DEFAULT NULL, -- For storing download links as JSON
+                download_links_raw_html TEXT DEFAULT NULL, -- Raw extracted download block
                 scraper_last_run_at TEXT DEFAULT NULL, -- Timestamp of the last successful scrape
                 os_list TEXT DEFAULT NULL,
                 release_date TEXT DEFAULT NULL,
@@ -88,6 +89,7 @@ def initialize_database(db_path):
             'censorship': "TEXT DEFAULT NULL",
             'tags_json': "TEXT DEFAULT NULL",
             'download_links_json': "TEXT DEFAULT NULL",
+            'download_links_raw_html': "TEXT DEFAULT NULL",
             'scraper_last_run_at': "TEXT DEFAULT NULL",
             'os_list': "TEXT DEFAULT NULL",
             'release_date': "TEXT DEFAULT NULL",

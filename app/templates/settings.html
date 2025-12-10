@@ -82,6 +82,18 @@
         </div>
 
         <hr class="my-4">
+        <h4>Scraping Preferences</h4>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="force_scrape_on_manual_sync"
+                name="force_scrape_on_manual_sync" {% if current_settings.force_scrape_on_manual_sync %}checked{% endif
+                %}>
+            <label class="form-check-label" for="force_scrape_on_manual_sync">Always Force Full Scrape on Manual
+                Sync</label>
+            <div class="form-text">If enabled, "Sync All Monitored" will always rigorously rescrape every game page
+                instead of relying on RSS/version checks. Warning: This is much slower.</div>
+        </div>
+
+        <hr class="my-4">
         <h4>Global Update Schedule (Admin Only)</h4>
         <p class="text-muted">Configure how often the system checks all users' followed games for updates and status
             changes. This is a global setting managed by the primary admin.</p>

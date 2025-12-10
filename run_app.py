@@ -349,13 +349,18 @@ def delete_game(played_game_id):
 @login_required
 def manual_sync_all():
     """Triggers a background sync for the current user."""
+    # Check user setting for force scrape
+    force_scrape = get_setting(DB_PATH, 'force_scrape_on_manual_sync', 'False', user_id=session['user_id']) == 'True'
+    
     # Launch background thread
     thread = threading.Thread(
         target=sync_all_for_user_background_task,
-        args=(flask_app, session['user_id'], DB_PATH, False) # force_scrape=False
+        args=(flask_app, session['user_id'], DB_PATH, force_scrape) 
     )
     thread.start()
-    flash('Manual sync started in background.', 'info')
+    msg = 'Manual sync started in background.'
+    if force_scrape: msg += ' (Force Scrape Enabled)'
+    flash(msg, 'info')
     return redirect(url_for('index'))
 
 @flask_app.route('/manual_sync_game/<int:played_game_id>', methods=['POST'])
@@ -473,7 +478,8 @@ def settings():
         # Checkboxes - missing in form means False
         notify_opts = [
             'notify_on_game_add', 'notify_on_game_delete', 'notify_on_game_update',
-            'notify_on_status_change_completed', 'notify_on_status_change_abandoned', 'notify_on_status_change_on_hold'
+            'notify_on_status_change_completed', 'notify_on_status_change_abandoned', 'notify_on_status_change_on_hold',
+            'force_scrape_on_manual_sync'
         ]
         for opt in notify_opts:
             val = 'True' if request.form.get(opt) == 'on' else 'False'
@@ -516,6 +522,7 @@ def settings():
         'notify_on_status_change_completed': get_bool_setting('notify_on_status_change_completed'),
         'notify_on_status_change_abandoned': get_bool_setting('notify_on_status_change_abandoned'),
         'notify_on_status_change_on_hold': get_bool_setting('notify_on_status_change_on_hold'),
+        'force_scrape_on_manual_sync': get_bool_setting('force_scrape_on_manual_sync'),
     }
     
     # Global / Admin specific
