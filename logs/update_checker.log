@@ -6827,3 +6827,336 @@ UnboundLocalError: local variable 'current_section_os' referenced before assignm
 2025-12-10 14:02:45,476 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
 2025-12-10 14:02:45,479 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
 2025-12-10 14:02:45,479 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 16:42:34,571 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 16:42:34,571 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 16:42:35,319 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 16:42:35,324 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 16:42:35,327 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 16:42:35,327 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 16:43:27,216 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 16:43:27,216 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 16:43:27,973 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 16:43:27,978 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 16:43:27,981 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 16:43:27,982 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 16:43:30,241 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 16:43:30,241 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 16:43:30,895 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 16:43:30,901 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 16:43:30,903 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 16:43:30,903 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 16:43:55,334 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 16:43:55,335 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 16:43:56,404 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 16:43:56,412 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 16:43:56,414 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 16:43:56,414 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 16:43:58,031 - ERROR - AVNCodex - database - Database error getting primary admin user ID: no such table: users
+2025-12-10 16:44:34,768 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 16:44:34,768 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 16:44:35,562 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 16:44:35,570 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 16:44:35,573 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 16:44:35,573 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 16:44:38,000 - ERROR - AVNCodex - database - Database error getting primary admin user ID: no such table: users
+2025-12-10 16:45:58,198 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 16:45:58,198 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 16:45:58,844 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 16:45:58,849 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 16:45:58,851 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 16:45:58,853 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 17:10:29,921 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 17:10:29,921 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 17:10:30,865 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 17:10:30,871 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 17:10:30,873 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 17:10:30,873 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 17:13:50,553 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 17:13:50,554 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 17:13:50,646 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 17:13:50,650 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 17:13:56,311 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/heros-harem-guild-v0-1-6-m-k-production.42173/
+2025-12-10 17:13:56,311 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 17:13:57,124 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 17:14:08,251 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 17:14:22,634 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/heros-harem-guild-v0-1-6-m-k-production.42173/
+2025-12-10 17:14:35,500 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 17:14:35,783 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Ren'Py - Abandoned - Hero's Harem Guild [v0.1.2.3b Public] [Komisari] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 17:14:35,783 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-42173" data-logged-in="
+2025-12-10 17:14:35,859 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 17:14:35,885 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/city-of-broken-dreamers-v1-01-phillygames.13645/
+2025-12-10 17:14:35,886 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 17:14:36,610 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 17:14:52,785 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 17:15:04,273 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/city-of-broken-dreamers-v1-01-phillygames.13645/
+2025-12-10 17:15:11,101 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 17:15:11,179 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Seeking - Need Recommendation For Protective MC game... | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 17:15:11,180 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-104" data-content-key="thread-13645" data-logged-in
+2025-12-10 17:15:11,187 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 17:15:11,189 - INFO - AVNCodex - f95_web_scraper - DEBUG: 'DOWNLOAD' marker not found for raw block extraction.
+2025-12-10 17:15:11,198 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 17:15:11,213 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/long-way-v0-14-ch-9-mrt.58622/
+2025-12-10 17:15:11,213 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 17:15:11,901 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 17:15:25,067 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 17:15:38,737 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/long-way-v0-14-ch-9-mrt.58622/
+2025-12-10 17:15:50,152 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 17:15:50,323 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: VN - Ren'Py - Abandoned - Adventurerotica [v0.2] [Andromax] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 17:15:50,324 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-58622" data-logged-in="
+2025-12-10 17:15:50,331 - INFO - AVNCodex - f95_web_scraper - DEBUG: Stopping download extraction at thumbnails/attachments.
+2025-12-10 17:15:50,334 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 17:21:32,775 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 17:21:32,781 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 17:21:32,784 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 17:21:32,784 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 17:21:34,813 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 17:21:34,821 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 17:21:34,823 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 17:21:34,823 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 17:24:13,001 - INFO - AVNCodex - services - Checking update for -u4ia- using strategy: Query='-u4ia-', Creator='None'
+2025-12-10 17:24:14,542 - INFO - AVNCodex - services - Match found for -u4ia- with strategy Query='-u4ia-', Creator='None'
+2025-12-10 17:24:14,546 - INFO - AVNCodex - services - Sync-driven scraping for: -u4ia- (Force=True, MissingImg=False)
+2025-12-10 17:24:14,546 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/158858
+2025-12-10 17:24:14,546 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 17:24:15,404 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 17:24:26,034 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 17:24:38,978 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/158858
+2025-12-10 17:24:49,554 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 17:24:49,741 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Ren'Py - -u4ia- [Season 1] [DriftyGames] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 17:24:49,742 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-158858" data-logged-in=
+2025-12-10 17:24:49,745 - INFO - AVNCodex - f95_web_scraper - DEBUG: Dumped u4ia_dump.html
+2025-12-10 17:24:49,757 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 17:24:49,766 - INFO - AVNCodex - f95_web_scraper - DEBUG: Stopping download extraction at thumbnails/attachments.
+2025-12-10 17:24:49,769 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 17:24:49,779 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 17:24:49,795 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
+2025-12-10 17:24:50,259 - INFO - AVNCodex - services - Recovered/Corrected status for -u4ia-: 'Unknown' -> 'Ongoing' via RSS.
+2025-12-10 17:24:50,774 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete
+2025-12-10 17:44:28,694 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 17:44:28,695 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 17:44:29,768 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 17:44:29,777 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 17:44:29,780 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 17:44:29,780 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 17:45:02,470 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 17:45:02,471 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 17:45:02,532 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 17:45:02,533 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 17:45:03,566 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 17:45:03,571 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 17:45:03,574 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 17:45:03,574 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 17:45:05,647 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 17:45:05,654 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 17:45:05,657 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 17:45:05,657 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 17:45:09,029 - INFO - AVNCodex - services - Checking update for -u4ia- using strategy: Query='-u4ia-', Creator='None'
+2025-12-10 17:45:09,653 - INFO - AVNCodex - services - Match found for -u4ia- with strategy Query='-u4ia-', Creator='None'
+2025-12-10 17:45:09,655 - INFO - AVNCodex - services - Sync-driven scraping for: -u4ia- (Force=True, MissingImg=False)
+2025-12-10 17:45:09,656 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/158858
+2025-12-10 17:45:09,656 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 17:45:10,394 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 17:45:27,140 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 17:45:41,087 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/158858
+2025-12-10 17:45:48,882 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 17:45:49,046 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Ren'Py - -u4ia- [Season 1] [DriftyGames] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 17:45:49,048 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-158858" data-logged-in=
+2025-12-10 17:45:49,050 - INFO - AVNCodex - f95_web_scraper - DEBUG: Dumped u4ia_dump.html
+2025-12-10 17:45:49,061 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 17:45:49,070 - INFO - AVNCodex - f95_web_scraper - DEBUG: Stopping download extraction at thumbnails/attachments.
+2025-12-10 17:45:49,071 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 17:45:49,078 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 17:45:49,093 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
+2025-12-10 17:45:51,663 - INFO - AVNCodex - services - Recovered/Corrected status for -u4ia-: 'Unknown' -> 'Ongoing' via RSS.
+2025-12-10 17:45:52,139 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete
+2025-12-10 20:02:40,219 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 20:02:40,219 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 20:02:41,223 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 20:02:41,231 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 20:02:41,234 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 20:02:41,235 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 20:03:20,762 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 20:03:20,763 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 20:03:20,816 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 20:03:20,816 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 20:03:21,845 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 20:03:21,856 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 20:03:21,858 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 20:03:21,860 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 20:03:23,835 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 20:03:23,838 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 20:03:23,841 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 20:03:23,842 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 20:03:26,616 - INFO - AVNCodex - services - Checking update for -u4ia- using strategy: Query='-u4ia-', Creator='None'
+2025-12-10 20:03:28,202 - INFO - AVNCodex - services - Match found for -u4ia- with strategy Query='-u4ia-', Creator='None'
+2025-12-10 20:03:28,205 - INFO - AVNCodex - services - Sync-driven scraping for: -u4ia- (Force=True, MissingImg=False)
+2025-12-10 20:03:28,206 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/158858
+2025-12-10 20:03:28,206 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 20:03:29,048 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 20:03:34,624 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 20:03:39,647 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/158858
+2025-12-10 20:03:43,493 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 20:03:43,678 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Ren'Py - -u4ia- [Season 1] [DriftyGames] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 20:03:43,678 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-158858" data-logged-in=
+2025-12-10 20:03:43,682 - INFO - AVNCodex - f95_web_scraper - DEBUG: Dumped u4ia_dump.html
+2025-12-10 20:03:43,695 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 20:03:43,705 - INFO - AVNCodex - f95_web_scraper - DEBUG: Stopping download extraction at thumbnails/attachments.
+2025-12-10 20:03:43,709 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 20:03:43,716 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 20:03:43,733 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
+2025-12-10 20:03:44,136 - INFO - AVNCodex - services - Recovered/Corrected status for -u4ia-: 'Unknown' -> 'Ongoing' via RSS.
+2025-12-10 20:03:44,619 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete
+2025-12-10 20:07:03,133 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 20:07:03,135 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 20:07:04,046 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 20:07:04,051 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 20:07:04,053 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 20:07:04,054 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 20:07:31,496 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 20:07:31,497 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 20:07:31,555 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 20:07:31,555 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 20:07:32,654 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 20:07:32,659 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 20:07:32,662 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 20:07:32,663 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 20:07:34,605 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 20:07:34,611 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 20:07:34,614 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 20:07:34,615 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 20:07:56,792 - INFO - AVNCodex - services - Checking update for -u4ia- using strategy: Query='-u4ia-', Creator='None'
+2025-12-10 20:07:58,354 - INFO - AVNCodex - services - Match found for -u4ia- with strategy Query='-u4ia-', Creator='None'
+2025-12-10 20:07:58,355 - INFO - AVNCodex - services - Sync-driven scraping for: -u4ia- (Force=True, MissingImg=False)
+2025-12-10 20:07:58,357 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/158858
+2025-12-10 20:07:58,357 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 20:07:59,038 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 20:08:03,147 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 20:08:10,564 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/158858
+2025-12-10 20:08:13,945 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 20:08:14,110 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Ren'Py - -u4ia- [Season 1] [DriftyGames] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 20:08:14,110 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-158858" data-logged-in=
+2025-12-10 20:08:14,113 - INFO - AVNCodex - f95_web_scraper - DEBUG: Dumped u4ia_dump.html
+2025-12-10 20:08:14,124 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 20:08:14,133 - INFO - AVNCodex - f95_web_scraper - DEBUG: Stopping download extraction at thumbnails/attachments.
+2025-12-10 20:08:14,135 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 20:08:14,143 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 20:08:14,159 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
+2025-12-10 20:08:14,566 - INFO - AVNCodex - services - Recovered/Corrected status for -u4ia-: 'Unknown' -> 'Ongoing' via RSS.
+2025-12-10 20:08:15,016 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete
+2025-12-10 20:18:22,652 - INFO - AVNCodex - services - Checking update for -u4ia- using strategy: Query='-u4ia-', Creator='None'
+2025-12-10 20:18:23,175 - INFO - AVNCodex - services - Match found for -u4ia- with strategy Query='-u4ia-', Creator='None'
+2025-12-10 20:18:23,179 - INFO - AVNCodex - services - Sync-driven scraping for: -u4ia- (Force=True, MissingImg=False)
+2025-12-10 20:18:23,179 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/158858
+2025-12-10 20:18:23,180 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 20:18:23,908 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 20:18:29,416 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 20:18:35,237 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/158858
+2025-12-10 20:18:38,232 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 20:18:38,457 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Ren'Py - -u4ia- [Season 1] [DriftyGames] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 20:18:38,458 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-158858" data-logged-in=
+2025-12-10 20:18:38,460 - INFO - AVNCodex - f95_web_scraper - DEBUG: Dumped u4ia_dump.html
+2025-12-10 20:18:38,468 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 20:18:38,475 - INFO - AVNCodex - f95_web_scraper - DEBUG: Stopping download extraction at thumbnails/attachments.
+2025-12-10 20:18:38,479 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 20:18:38,487 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 20:18:38,503 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
+2025-12-10 20:18:38,909 - INFO - AVNCodex - services - Recovered/Corrected status for -u4ia-: 'Unknown' -> 'Ongoing' via RSS.
+2025-12-10 20:18:39,390 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete
+2025-12-10 20:24:09,622 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 20:24:09,623 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 20:24:10,411 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 20:24:10,412 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 20:33:37,679 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 20:33:37,685 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 20:33:37,687 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 20:33:37,687 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 20:33:39,620 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 20:33:39,626 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 20:33:39,628 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 20:33:39,629 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 20:33:56,147 - INFO - AVNCodex - services - Checking update for -u4ia- using strategy: Query='-u4ia-', Creator='None'
+2025-12-10 20:33:56,777 - INFO - AVNCodex - services - Match found for -u4ia- with strategy Query='-u4ia-', Creator='None'
+2025-12-10 20:33:56,780 - INFO - AVNCodex - services - Sync-driven scraping for: -u4ia- (Force=True, MissingImg=False)
+2025-12-10 20:33:56,781 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/158858
+2025-12-10 20:33:56,781 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 20:33:57,601 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 20:34:03,160 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 20:34:10,085 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/158858
+2025-12-10 20:34:13,418 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 20:34:13,596 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Ren'Py - -u4ia- [Season 1] [DriftyGames] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 20:34:13,597 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-158858" data-logged-in=
+2025-12-10 20:34:13,599 - INFO - AVNCodex - f95_web_scraper - DEBUG: Dumped u4ia_dump.html
+2025-12-10 20:34:13,611 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 20:34:13,625 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 20:34:13,636 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 20:34:13,653 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
+2025-12-10 20:34:14,064 - INFO - AVNCodex - services - Recovered/Corrected status for -u4ia-: 'Unknown' -> 'Ongoing' via RSS.
+2025-12-10 20:34:14,599 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete
+2025-12-10 20:42:28,534 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 20:42:28,535 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 20:42:28,616 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 20:42:28,617 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 20:42:29,759 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 20:42:29,765 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 20:42:29,769 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 20:42:29,769 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 20:42:31,681 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 20:42:31,687 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 20:42:31,691 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 20:42:31,691 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 20:43:26,605 - INFO - AVNCodex - services - Checking update for -u4ia- using strategy: Query='-u4ia-', Creator='None'
+2025-12-10 20:43:27,230 - INFO - AVNCodex - services - Match found for -u4ia- with strategy Query='-u4ia-', Creator='None'
+2025-12-10 20:43:27,233 - INFO - AVNCodex - services - Sync-driven scraping for: -u4ia- (Force=True, MissingImg=False)
+2025-12-10 20:43:27,233 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/158858
+2025-12-10 20:43:27,234 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 20:43:28,034 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 20:43:33,974 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 20:43:40,001 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/158858
+2025-12-10 20:43:43,243 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 20:43:43,418 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Ren'Py - -u4ia- [Season 1] [DriftyGames] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 20:43:43,418 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-158858" data-logged-in=
+2025-12-10 20:43:43,420 - INFO - AVNCodex - f95_web_scraper - DEBUG: Dumped u4ia_dump.html
+2025-12-10 20:43:43,430 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 20:43:43,442 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 20:43:43,451 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 20:43:43,468 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
+2025-12-10 20:43:43,864 - INFO - AVNCodex - services - Recovered/Corrected status for -u4ia-: 'Unknown' -> 'Ongoing' via RSS.
+2025-12-10 20:43:44,344 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete
+2025-12-10 20:44:35,336 - INFO - AVNCodex - services - Checking update for A Foreign World using strategy: Query='A Foreign World', Creator='None'
+2025-12-10 20:44:35,843 - INFO - AVNCodex - services - Checking update for A Foreign World using strategy: Query='HighbornTiger Foreign', Creator='None'
+2025-12-10 20:44:36,245 - INFO - AVNCodex - services - Checking update for A Foreign World using strategy: Query='Foreign World', Creator='None'
+2025-12-10 20:44:36,651 - INFO - AVNCodex - services - Match found for A Foreign World with strategy Query='Foreign World', Creator='None'
+2025-12-10 20:44:36,653 - INFO - AVNCodex - services - Sync-driven scraping for: A Foreign World (Force=True, MissingImg=False)
+2025-12-10 20:44:36,654 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/135123
+2025-12-10 20:44:36,655 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 20:44:37,426 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 20:44:39,237 - INFO - AVNCodex - services - Checking update for A House in the Rift using strategy: Query='A House in the Rift', Creator='None'
+2025-12-10 20:44:39,765 - INFO - AVNCodex - services - Checking update for A House in the Rift using strategy: Query='Zanith House', Creator='None'
+2025-12-10 20:44:40,178 - INFO - AVNCodex - services - Checking update for A House in the Rift using strategy: Query='House Rift', Creator='None'
+2025-12-10 20:44:41,099 - INFO - AVNCodex - services - Match found for A House in the Rift with strategy Query='House Rift', Creator='None'
+2025-12-10 20:44:41,102 - INFO - AVNCodex - services - Sync-driven scraping for: A House in the Rift (Force=True, MissingImg=False)
+2025-12-10 20:44:41,102 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/29627
+2025-12-10 20:44:41,102 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 20:44:41,301 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 20:44:41,843 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 20:44:44,409 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 20:44:46,598 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/135123
+2025-12-10 20:44:49,833 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 20:44:50,053 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: VN - Ren'Py - A Foreign World [Ep.7.5] [HighbornTiger] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 20:44:50,054 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-135123" data-logged-in=
+2025-12-10 20:44:50,063 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 20:44:50,069 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 20:44:50,077 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 20:44:50,093 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
+2025-12-10 20:44:50,623 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/29627
+2025-12-10 20:44:51,299 - INFO - AVNCodex - services - Recovered/Corrected status for A Foreign World: 'Unknown' -> 'Ongoing' via RSS.
+2025-12-10 20:44:51,791 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete
+2025-12-10 20:44:54,145 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 20:44:54,384 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Ren'Py - A House in the Rift [v0.8.05b1] [Zanith] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 20:44:54,384 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-29627" data-logged-in="
+2025-12-10 20:44:54,399 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 20:44:54,440 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 20:44:54,449 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 20:44:54,466 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
+2025-12-10 20:44:55,676 - INFO - AVNCodex - services - Recovered/Corrected status for A House in the Rift: 'Unknown' -> 'Ongoing' via RSS.
+2025-12-10 20:44:56,129 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete

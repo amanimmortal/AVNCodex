@@ -43,28 +43,35 @@
             .download-html-block .download-link-btn {
                 display: inline-flex;
                 align-items: center;
-                gap: 5px;
+                gap: 8px;
                 background-color: #3f4751 !important;
-                /* Force solid background */
                 background-image: none !important;
-                /* Remove any inherited/scraped images */
                 border: 1px solid #4a545e;
                 color: #dadddf !important;
-                padding: 0 15px;
-                height: 42px;
-                /* Fixed height for uniformity */
-                white-space: nowrap;
-                /* Prevent wrapping */
+                padding: 0 12px;
+                height: 48px;
+                /* Slightly taller for better touch targets */
+
+                /* Fixed Size & Alignment Rules */
+                width: 190px;
+                flex: 0 0 auto;
+                /* Prevent growing/shrinking */
+
                 border-radius: 4px;
                 text-decoration: none;
-                margin: 5px 2px;
+                margin: 4px;
                 font-weight: 500;
                 transition: all 0.2s;
-                min-width: 140px;
-                /* Ensure uniform size */
+
+                /* Centering & Text Handling */
                 justify-content: center;
-                /* Center content */
-                vertical-align: middle;
+                text-align: center;
+                overflow: hidden;
+            }
+
+            /* Ensure text truncates if too long */
+            .download-html-block .download-link-btn>i {
+                flex-shrink: 0;
             }
 
             .download-html-block .download-link-btn:hover {
@@ -77,31 +84,63 @@
 
             .download-html-block {
                 background-color: var(--card-bg, #1e1e1e);
-                /* Match typical card */
                 border: 1px solid var(--border-color, #333);
                 padding: 15px;
                 border-radius: 8px;
                 text-align: left;
-                /* Ensure left alignment */
+
+                /* Layout Reset */
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 5px;
+                /* Consistent gap */
             }
 
-            /* Make sure lines break correctly if original HTML lacks BRs but implies list */
-            .download-html-block br {
-                display: block;
-                content: "";
-                margin: 5px 0;
+            /* Hide any images that slipped through scraper (Double safety) */
+            .download-html-block img {
+                display: none !important;
             }
 
-            /* Preserve original text formatting for headers but slightly muted */
+            /* Headers should break to new line */
+            /* Headers should break to new line and look like separators, NOT buttons */
             .download-html-block b,
-            .download-html-block strong {
+            .download-html-block strong,
+            .download-html-block h1,
+            .download-html-block h2,
+            .download-html-block h3,
+            .download-html-block h4,
+            .download-group-header {
+                width: 100%;
+                flex-basis: 100%;
+                display: block;
+
                 color: #6c757d;
                 font-size: 0.9em;
+                font-weight: bold;
                 text-transform: uppercase;
-                letter-spacing: 0.5px;
-                display: block;
-                /* Force headers to own line */
-                margin-top: 10px;
+                letter-spacing: 1px;
+
+                margin-top: 15px;
+                margin-bottom: 8px;
+                padding-bottom: 4px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+                /* Reset any potential button styles */
+                background: transparent !important;
+                border: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 0;
+            }
+
+            /* First header shouldn't have huge top margin */
+            .download-html-block> :first-child {
+                margin-top: 0;
+            }
+
+            /* Br tags should be hidden in flex layout usually, or forced to break */
+            .download-html-block br {
+                display: none;
             }
         </style>
         <div class="download-section">

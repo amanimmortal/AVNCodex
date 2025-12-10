@@ -25,7 +25,7 @@ from app.f95_web_scraper import extract_game_data
 
 # Constants
 MAX_COMPLETED_GAMES_TO_FETCH_FOR_STATUS_CHECK = 50
-NUM_GAMES_TO_PROCESS_FROM_RSS = 35
+NUM_GAMES_TO_PROCESS_FROM_RSS = 60
 SCRAPER_DEBOUNCE_DAYS = 3
 IMAGE_CACHE_DIR_FS = os.getenv("IMAGE_CACHE_DIR_FS", "/data/image_cache")
 
@@ -151,6 +151,17 @@ def generate_search_strategies(name: str, author: str) -> list[tuple[str, Option
     if kw_parts:
         strategies.append((" ".join(kw_parts), None))
 
+    # 6. Ultra-Strict Alphanumeric (User Requested Robustness)
+    # Strip EVERYTHING except letters/numbers, no spaces even? Or just spaces?
+    # User said: "game name with special characters and generic words removed" - effectively strategy 5.
+    # But let's add a variant that keeps it very simple if 5 fails? 
+    # Actually, let's try a version that RETAINS spaces but kills specific noise chars more aggressively?
+    # Strategy 5 covers most "Hero's" -> "Hero" cases.
+    
+    # Add strategy for "Strip all non-alphanumeric" as a single block? 
+    # e.g. "Hero's Harem Guild" -> "HerosHaremGuild"? No, RSS fuzzy match usually needs spaces.
+    pass
+
     # Add original name as fallback or first try? 
     # Actually, original name often fails if it has 's. 
     # Let's add it if it's diff from others.
@@ -212,14 +223,20 @@ def _extract_thread_id(url: str) -> Optional[str]:
     """Extracts the thread ID from an F95Zone URL."""
     if not url: return None
     # Matches /threads/slug.12345/ or /threads/12345/
+    # Strict anchor to end or slash to avoid matching random numbers in slug
     match = re.search(r"\.(\d+)/?$", url)
     if match: return match.group(1)
+    
     # Matches /threads/12345/ or /threads/12345 (no slug, just ID)
+    # Ensure it starts immediately after threads/
     match = re.search(r"threads/(\d+)(?:/|$)", url)
     if match: return match.group(1)
-    # Fallback for lazy match inside string but risky if multiple numbers
-    match = re.search(r"threads/.*?\.(\d+)", url)
+    
+    # Fallback: URL might be like threads/slug.123/page-2
+    # Look for .digits/ or .digits
+    match = re.search(r"threads/.*?\.(\d+)(?:/|$)", url)
     if match: return match.group(1)
+    
     return None
 
 def get_user_played_game_urls(db_path: str, user_id: int) -> Set[str]:

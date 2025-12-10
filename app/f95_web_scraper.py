@@ -480,167 +480,239 @@ def parse_game_page_content(html_content, game_thread_url):
                     sp.decompose() # Remove empty/broken spoilers
 
             download_header_node = None
-            keywords_for_header = ["download"]
             
-            # 1. Find the "DOWNLOAD" header
-            # It's usually a strong/b tag or h3/h4, sometimes just a text node that stands out.
-            # We look for a node whose text is "DOWNLOAD" (case insensitive)
+            # 1. Find the "DOWNLOAD" start marker
+            # Strategy: Look for "DOWNLOAD" string in case-insensitive way.
+            # We want the *highest* logical node that represents just the header.
+            # Iterate descendants once?
+            
+            # Helper to check if text is predominantly "DOWNLOAD"
+            def is_download_header_text(txt):
+                if not txt: return False
+                t = txt.strip().lower()
+                return "download" in t and len(t) < 30 and "below" not in t and "click" not in t # "Click download below" vs "DOWNLOAD"
+
             for elem in bb_wrapper.descendants:
-                 if isinstance(elem, str):
-                     clean_text = elem.strip().lower()
-                     if "download" in clean_text and len(clean_text) < 25:
-                         # Ensure it's not just a sentence containing download
-                         # Check if it has potential noise like "download :"
-                         # Refinement: Only promote to parent if parent is plausibly just a header (short text)
-                         if elem.parent and len(elem.parent.get_text(strip=True)) < 100:
-                             download_header_node = elem.parent 
-                         else:
-                             download_header_node = elem # Just the text node
-                         break
-                 elif elem.name in ['strong', 'b', 'h1', 'h2', 'h3', 'div', 'span']:
-                     clean_text = elem.get_text(strip=True).lower()
-                     if "download" in clean_text and len(clean_text) < 25:
+                 # Check Headers/Strong tags directly
+                 if elem.name in ['h1','h2','h3','h4','strong','b','u','span']:
+                     if is_download_header_text(elem.get_text(strip=True)):
                          download_header_node = elem
+                         break
+                 
+                 # Check isolated Text Nodes
+                 if isinstance(elem, str):
+                     if is_download_header_text(elem) and elem.parent.name not in ['script', 'style', 'a']:
+                         # Promote to parent if parent is just a wrapper for this text
+                         if len(elem.parent.get_text(strip=True)) < 40:
+                             download_header_node = elem.parent
+                         else:
+                             download_header_node = elem # Just the text
                          break
             
             if download_header_node:
-                # 2. Capture siblings until end condition
-                # End condition: Thumbnails (class="lbContainer") or Attachment list
-                # Or end of bbWrapper
-                
                 captured_html = ""
-                # Start capturing FROM the header node itself to ensure we don't miss text inside it (e.g. "Download - Windows")
                 current_node = download_header_node
-                has_stepped_out = False
                 
-                while current_node:
-                    should_stop = False
-                    
-                    if "42173" in game_thread_url:
-                         logger_scraper.info(f"HHG_TRACE: Node: {current_node.name} Type: {type(current_node)}")
+                # We start capturing from the node *after* the header, or include the header?
+                # Usually we want the buttons, so maybe include header is fine for context.
+                # Let's include the header.
+                
+                # Linear Walk Strategy
+                # We need to walk 'next elements' until we hit the thumbnails.
+                # 'next_element' walks the tree in document order.
+                
+                # Limit safety
+                steps = 0
+                max_steps = 2000 
+                
+                # Stop Condition Check
+                def should_stop(node):
+                     if not node: return False
+                     if isinstance(node, str): return False
+                     
+                     # 1. Thumbnails Container (lbContainer)
+                     classes = node.get('class', [])
+                     if 'lbContainer' in classes or 'js-lbContainer' in classes:
+                         return True
+                     
+                     # 2. Attachments Image or Link
+                     # Check if it's an image/link pointing to attachments.f95zone.to
+                     # (Users said: "always BEFORE the thumbnails... which start with attachments.f95zone.to")
+                     if node.name == 'img':
+                         src = node.get('src', '') or node.get('data-url', '')
+                         if "attachments.f95zone.to" in src: return True
+                     if node.name == 'a':
+                         href = node.get('href', '')
+                         if "attachments.f95zone.to" in href: return True
                          
-                    # Check Stop Conditions
-                    if hasattr(current_node, 'name') and current_node.name == 'div':
-                         classes = current_node.get('class', [])
-                         if 'lbContainer' in classes or 'js-lbContainer' in classes:
-                             should_stop = True
-                         # Attachments usually in a div with specific classes or structure
-                         # if 'attachment' in str(classes):
-                         #     should_stop = True
+                     return False
 
-                    # Sometimes thumbnails are just images with specific src pattern if not lazy loaded differently
-                    # But the user mentioned "set of thumbnails (from what I can see these always start with https://attachments.f95zone.to/)"
-                    # Which might be links or imgs
-                    # Relaxed: Do NOT stop on single attachment images (likely banners/buttons).
-                    # Only stop on specific thumbnail containers (handled above with lbContainer)
-                    if not should_stop and hasattr(current_node, 'find_all'):
-                        imgs = current_node.find_all('img')
-                        for img in imgs:
-                            src = img.get('src', '') or img.get('data-url', '')
-                            if "attachments.f95zone.to" in src:
-                                 should_stop = True
-                                 logger_scraper.info("DEBUG: Stopping on F95 attachment thumbnail.")
-                                 break
+                # We iterate utilizing next_sibling if possible to skip walking *into* the thumbnails
+                # But we need to capture deep content of the downloads.
+                
+                # Better Strategy: Walk siblings of the header's parent, or the header itself.
+                # If header is deep inside a structure, we might miss siblings effectively.
+                # Usually "DOWNLOAD" is a root-level or near-root level element in the post.
+                
+                iter_node = current_node
+                
+                while iter_node and steps < max_steps:
+                    steps += 1
                     
-                    if should_stop:
+                    # Check stop logic on the *current* node before processing
+                    if should_stop(iter_node):
+                        logger_scraper.info("DEBUG: Stopping download extraction at thumbnails/attachments.")
                         break
                     
-                    # 3. Process/Append Node
-                    # (Spoilers are already unwrapped globally)
-
-                    if hasattr(current_node, 'descendants'):
-                         # It's a Tag
-                         
-                         # Recursive Text Cleanup (Clean text inside this container)
-                         if hasattr(current_node, 'find_all'):
-                             for text_node in current_node.find_all(string=True):
-                                 # Skip text inside links or specific tags we want to preserve exactly
-                                 if text_node.parent and text_node.parent.name in ['a', 'script', 'style', 'code', 'pre']:
-                                     continue
+                    # Append Content
+                    # If it's a Tag, we clean it and check if it *contains* the stop condition (nested thumbnails)
+                    # If it contains thumbnails, we might want to salvage the part before them? 
+                    # For simplicity, if a block contains the stop condition, we stop *at* that block?
+                    # Or we walk into it?
+                    # Given the user says thumbnails are "at the bottom", they are likely a sibling block or the last block.
+                    
+                    if not isinstance(iter_node, str):
+                        # Tag Processing
+                        
+                        # 1. Remove all Images (User requested "imageless")
+                        # We do this on the node *before* converting to string
+                        if hasattr(iter_node, 'find_all'):
+                             for img in iter_node.find_all('img'):
+                                 img.decompose()
+                             if iter_node.name == 'img':
+                                 # If the node itself is an image, skip it
+                                 iter_node = iter_node.next_sibling # Step over? 
+                                 # We need to handle step logic if we skip the current node logic
+                                 # Easier to just not append it
                                  
-                                 txt_val = str(text_node)
-                                 # Clean noise
-                                 cleaned_val = re.sub(r'[:*|]', '', txt_val)
-                                 cleaned_val = re.sub(r'\s+-\s+', ' ', cleaned_val) # Remove separator hyphens
-                                 cleaned_val = re.sub(r'\s+', ' ', cleaned_val) # Collapse spaces
+                                 # Update iter_node loop logic
+                                 next_node = iter_node.next_sibling
+                                 if not next_node:
+                                      parent = iter_node.parent
+                                      if parent and 'bbWrapper' not in parent.get('class', []):
+                                           next_node = parent.next_sibling
+                                 iter_node = next_node
+                                 continue
 
-                                 if txt_val != cleaned_val:
-                                     text_node.replace_with(cleaned_val)
-
-                         # We need to process links to add class='download-link-btn'
-                         
-                         # Parse the subtree as a new soup to modify safely? 
-                         # Or just modify direct attributes if simple.
-                         if current_node.name == 'a':
-                              # processing single link
-                              href = current_node.get('href', '')
-                              if href and not href.startswith('#') and 'attachments.f95zone.to' not in href:
-                                  if current_node.has_attr('style'): del current_node['style']
-                                  existing_class = current_node.get('class', [])
-                                  if 'download-link-btn' not in existing_class:
-                                      existing_class.append('download-link-btn')
-                                      current_node['class'] = existing_class
-                         
-                         elif hasattr(current_node, 'find_all'):
-                              all_links = current_node.find_all('a')
-                              for lnk in all_links:
-                                   href = lnk.get('href', '')
-                                   if href and not href.startswith('#') and 'attachments.f95zone.to' not in href:
+                        # 2. Force Button Classes on Links
+                        if iter_node.name == 'a':
+                             href = iter_node.get('href', '')
+                             if href and not href.startswith('#') and 'attachments.f95zone.to' not in href:
+                                  classes = iter_node.get('class', [])
+                                  if 'download-link-btn' not in classes:
+                                      classes.append('download-link-btn')
+                                      iter_node['class'] = classes
+                                  # Remove inline styles that might mess up buttons
+                                  if iter_node.has_attr('style'): del iter_node['style']
+                                      
+                        elif hasattr(iter_node, 'find_all'):
+                             all_links = iter_node.find_all('a')
+                             for lnk in all_links:
+                                  href = lnk.get('href', '')
+                                  if href and not href.startswith('#') and 'attachments.f95zone.to' not in href:
+                                       classes = lnk.get('class', [])
+                                       if 'download-link-btn' not in classes:
+                                           classes.append('download-link-btn')
+                                           lnk['class'] = classes
                                        if lnk.has_attr('style'): del lnk['style']
-                                       existing_class = lnk.get('class', [])
-                                       if 'download-link-btn' not in existing_class:
-                                           existing_class.append('download-link-btn')
-                                           lnk['class'] = existing_class
-                         
-                         # Cleanup Headers
-                         if current_node.name in ['b', 'strong']:
-                             # Flatten and clean header text of trailing noise
-                             txt = current_node.get_text()
-                             cleaned_header = re.sub(r'[:*|]+$', '', txt).strip()
-                             if cleaned_header:
-                                 current_node.string = cleaned_header
 
-                         captured_html += str(current_node)
+                        # 3. Clean Text Inside Tags (e.g. " - [Win]" -> "[Win]")
+                        # 4. Check if the Tag itself is a Layout Header
+                        # If a tag is NOT a link (and not containing links), check its text.
+                        # If it matches our header logic, we convert it to a header block.
+                        
+                        is_link = (iter_node.name == 'a') or (iter_node.find('a') is not None)
+                        
+                        if not is_link and iter_node.name not in ['script', 'style', 'img']:
+                             # Get direct text or full text
+                             tag_text = iter_node.get_text(strip=True)
+                             
+                             # Noise check (e.g. isolated "*")
+                             if re.match(r'^[\s\-\:|*]+$', tag_text):
+                                  iter_node.decompose() # It's just noise
+                                  captured_html += "" # Don't append anything
+                                  # Continue loop logic handled by next_sibling below
+                                  # But we need to skip the captured_html += link below
+                                  # Easier to set a flag or just continue
+                             else:
+                                  # Header Logic
+                                  upper_clean = re.sub(r'^\s*[\-\:|*]\s*', '', tag_text).replace(':', '').strip().upper()
+                                  known_headers = ["WIN/LINUX", "MAC", "LINUX", "ANDROID", "EXTRAS", "WALKTHROUGH", "OTHERS", "PC", "APK", "PATCH", "DOWNLOAD", "DOWNLOADS", "WIN", "WINDOWS"]
+                                  
+                                  is_header = False
+                                  if upper_clean in known_headers:
+                                      is_header = True
+                                  elif len(upper_clean) > 2 and len(upper_clean) < 30 and upper_clean.isupper() and re.match(r'^[A-Z0-9\/\s\(\)]+$', upper_clean):
+                                      if tag_text.strip().endswith(':'): is_header = True
+                                      
+                                  if is_header:
+                                       # Convert to Div Header
+                                       iter_node.name = 'div'
+                                       iter_node['class'] = ['download-group-header']
+                                       # Remove inline styles
+                                       if iter_node.has_attr('style'): del iter_node['style']
+                                  
+                                  captured_html += str(iter_node)
+                        else:
+                             captured_html += str(iter_node)
+                    
                     else:
-                         # NavigableString - Cleanup text
-                         text = str(current_node)
-                         # Remove noise characters: : * |
-                         cleaned = re.sub(r'[:*|]', '', text)
-                         # Remove hyphens that look like separators (surrounded by spaces)
-                         cleaned = re.sub(r'\s+-\s+', ' ', cleaned)
-                         # Collapse multiple spaces
-                         cleaned = re.sub(r'\s+', ' ', cleaned)
+                         # NavigableString Logic (Top Level Text Nodes)
+                         text = str(iter_node)
                          
-                         # Only add if there's meaningful content
-                         if cleaned.strip():
-                             captured_html += cleaned
+                         # Aggressive Cleaning of "Noise" Nodes
+                         # Check if the node is JUST separators/whitespace/stars
+                         is_noise = re.match(r'^[\s\-\:|*]+$', text)
+                         
+                         if not is_noise:
+                             # It has content, but might have leading/trailing separators
+                             # e.g. " - Download Here"
+                             cleaned = re.sub(r'^\s*[\-\:|*]\s*', '', text) 
+                             cleaned = re.sub(r'\s*[\-\:|*]\s*$', '', cleaned)
+                             
+                             if cleaned.strip():
+                                 # Detect Headers
+                                 upper_clean = cleaned.strip().upper()
+                                 known_headers = ["WIN/LINUX", "MAC", "LINUX", "ANDROID", "EXTRAS", "WALKTHROUGH", "OTHERS", "PC", "APK", "PATCH", "DOWNLOAD", "DOWNLOADS", "WIN", "WINDOWS"]
+                                 is_header = False
+                                 
+                                 if upper_clean in known_headers:
+                                     is_header = True
+                                 elif len(upper_clean) > 2 and len(upper_clean) < 30 and upper_clean.isupper() and re.match(r'^[A-Z0-9\/\s\(\)]+$', upper_clean):
+                                     # If the original text ended with a colon, it's likely a header
+                                     if text.strip().endswith(':'): is_header = True
+                                 
+                                 if is_header:
+                                      captured_html += f'<div class="download-group-header">{cleaned.strip()}</div>'
+                                 else:
+                                      captured_html += cleaned
+                         else:
+                             # It is noise, Skip appending
+                             pass
 
+                    # Step Logic
+                    next_node = iter_node.next_sibling
+                    if not next_node:
+                        parent = iter_node.parent
+                        if parent and 'bbWrapper' not in parent.get('class', []):
+                             next_node = parent.next_sibling
+                    
+                    iter_node = next_node
 
-                    # Step-Out Logic
-                    next_node = current_node.next_sibling
-                    
-                    if next_node is None and not has_stepped_out:
-                        # Dynamic check: Are we inside a wrapper we should escape?
-                        parent = current_node.parent
-                        # Don't escape if parent is the main bbWrapper or something invalid
-                        if parent and hasattr(parent, 'get') and 'bbWrapper' not in parent.get('class', []):
-                            logger_scraper.info(f"DEBUG: Scraper reached end of container {parent.name}. Stepping out to parent sibling.")
-                            next_node = parent.next_sibling
-                            has_stepped_out = True
-                    
-                    current_node = next_node
-                
-                # Cleanup
                 if captured_html:
-                     # Remove unsafe tags just in case
+                     # Clean unsafe tags
                      soup_clean = BeautifulSoup(captured_html, 'html.parser')
-                     for unsafe in soup_clean.find_all(['script', 'iframe', 'object', 'embed', 'form', 'style']):
+                     for unsafe in soup_clean.find_all(['script', 'iframe', 'form', 'style']):
                          unsafe.decompose()
                      
+                     # Final pass: Remove empty text nodes or empty spans?
+                     # Also remove images again just in case (soup_clean ensures deep clean)
+                     for img in soup_clean.find_all('img'): img.decompose()
+
                      data['download_links_raw_html'] = str(soup_clean)
-                     logger_scraper.info("DEBUG: Successfully extracted raw download HTML block.")
+                     logger_scraper.info("DEBUG: Successfully extracted raw download HTML block (Robust Method).")
             else:
-                 logger_scraper.info("DEBUG: 'DOWNLOAD' header not found for raw block extraction.")
+                 logger_scraper.info("DEBUG: 'DOWNLOAD' marker not found for raw block extraction.")
 
         except Exception as e:
             logger_scraper.error(f"Error extracting raw download html: {e}")
@@ -790,7 +862,6 @@ def parse_game_page_content(html_content, game_thread_url):
         "release_date": data['release_date'],
         "thread_updated_date": data['thread_updated_date'],
         "os_general_list": data['os_general_list'],
-        "os_general_list": data['os_general_list'],
         "image_url": data['image_url'],
         "download_links_raw_html": data['download_links_raw_html']
     }
@@ -846,73 +917,73 @@ def login_to_f95zone(page, username, password, target_url_after_login=None):
         logger_scraper.error(f"LOGIN ERROR: {e}")
         return False
 
-# --- Hybrid Extraction Function ---
 def extract_game_data(game_thread_url, username=None, password=None, requests_session=None):
     """
     Extracts detailed information from an F95zone game thread page.
-    Attempts lightweight requests-based scrape first, then falls back to Playwright.
+    Uses authenticated Playwright scraping ONLY (Requests fallback removed for robustness).
     """
     logger_scraper.info(f"EXTRACT_GAME_DATA: Starting extraction for: {game_thread_url}")
+    
+    # NOTE: requests_session argument is kept for signature compatibility but ignored.
 
-    # --- Attempt 1: Lightweight Requests ---
-    if requests_session:
-        logger_scraper.info("EXTRACT_GAME_DATA: Attempting lightweight scrape using provided requests session.")
-        try:
-            response = requests_session.get(game_thread_url, timeout=20)
-            if response.status_code == 200:
-                # Check for Cloudflare or Block
-                if "Just a moment..." in response.text or "Enable JavaScript and cookies to continue" in response.text:
-                    logger_scraper.warning("EXTRACT_GAME_DATA: Requests fetch hit Cloudflare detection. Falling back to Playwright.")
-                elif "You don't have permission to view the spoiler content" in response.text or "Log in or register now" in response.text:
-                    logger_scraper.warning("EXTRACT_GAME_DATA: Requests fetch returned Guest view (spoiler blocked). detailed data missing. Falling back to Playwright for authenticated scrape.")
-                else:
-                    logger_scraper.info("EXTRACT_GAME_DATA: Requests fetch successful. Parsing content...")
-                    result = parse_game_page_content(response.content, game_thread_url)
-                    if result and result.get('title') != "Not found":
-                        # Check if data qualifies as "Complete" - if not, we might want to fall back to Playwright
-                        # e.g. if Tags are missing or Download links are empty, it might be a Guest view issue
-                        missing_tags = not result.get('tags') or result['tags'] == ["Not found"]
-                        missing_links = not result.get('download_links')
-                        missing_status = result.get('status') in ["Not found", "Unknown"]
-                        
-                        if missing_tags or missing_links or missing_status:
-                             logger_scraper.warning(f"EXTRACT_GAME_DATA: Lightweight extraction incomplete (Status: {result.get('status')}, Tags: {not missing_tags}, Links: {not missing_links}). Falling back to Playwright.")
-                        else:
-                            logger_scraper.info("EXTRACT_GAME_DATA: Lightweight extraction successful.")
-                            return result
-                    else:
-                        logger_scraper.warning("EXTRACT_GAME_DATA: Lightweight extraction yielded empty data. Falling back.")
-            else:
-                logger_scraper.warning(f"EXTRACT_GAME_DATA: Requests fetch failed with status {response.status_code}. Falling back.")
-        except Exception as e:
-            logger_scraper.error(f"EXTRACT_GAME_DATA: Lightweight scrape error: {e}. Falling back.")
-
-    # --- Attempt 2: Playwright Fallback ---
-    logger_scraper.info("EXTRACT_GAME_DATA: Initiating Playwright fallback.")
+    logger_scraper.info("EXTRACT_GAME_DATA: Initiating Playwright session.")
     try:
         with sync_playwright() as p:
+            # Launch options - headless but can be toggled for debugging
             browser = p.chromium.launch(headless=True)
+            
+            # Browser Context with standard User Agent
             context = browser.new_context(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
             page = context.new_page()
             
+            # 1. Login Logic
             logged_in = False
             if username and password:
-                page.goto("https://f95zone.to/login/login", wait_until="domcontentloaded", timeout=30000)
+                # Go to login page first
+                logger_scraper.info("EXTRACT_GAME_DATA: Navigating to login page...")
+                page.goto("https://f95zone.to/login/login", wait_until="domcontentloaded", timeout=45000)
+                
+                # Perform login
                 logged_in = login_to_f95zone(page, username, password, target_url_after_login=game_thread_url)
+                if not logged_in:
+                     logger_scraper.warning("EXTRACT_GAME_DATA: Login failed or not verified. Will attempt to scrape as Guest (likely to fail for some content).")
+            else:
+                 logger_scraper.warning("EXTRACT_GAME_DATA: No credentials provided. Scraping as Guest.")
             
-            if not logged_in:
-                 page.goto(game_thread_url, wait_until="domcontentloaded", timeout=45000)
+            # 2. Navigate to Game Thread (if not already there from login redirect)
+            if not logged_in or page.url != game_thread_url:
+                 logger_scraper.info(f"EXTRACT_GAME_DATA: Navigating to game thread: {game_thread_url}")
+                 page.goto(game_thread_url, wait_until="domcontentloaded", timeout=60000)
 
-            # Click Spoilers (legacy logic preserved)
+            # 3. Smart Waits & Interaction
+            # Wait for the main post content to be visible - this is the signal the useful part has loaded.
             try:
-                page.wait_for_selector("button.bbCodeSpoiler-button", timeout=5000)
-                buttons = page.query_selector_all("button.bbCodeSpoiler-button")
-                for btn in buttons:
-                    if btn.is_visible(): btn.click(timeout=2000)
-                    page.wait_for_timeout(500)
+                page.wait_for_selector("article.message--post", timeout=15000)
+            except Exception:
+                logger_scraper.warning("EXTRACT_GAME_DATA: Timeout waiting for article.message--post. Page might be broken or Cloudflare blocked.")
+            
+            # Expand Spoilers (Legacy logic, helpful for full text)
+            try:
+                # We only click spoilers that might look like "Tags" or "Genre" or generic triggers
+                # But typically we unwrap them in the soup parser anyway. 
+                # Clicking them in JS ensures the DOM is fully hydrated if they are lazy loaded.
+                
+                # Check if we have any spoilers
+                if page.locator("button.bbCodeSpoiler-button").count() > 0:
+                    # Click all visible ones? Risks clicking 'download' spoilers that we want to parse structure of.
+                    # Actually, we want to click them so the HTML snapshot contains the expanded content.
+                    # LIMIT: Only click first 10 to avoid stalling on massive Changelogs?
+                    # The soup parser handles unwrapping global spoilers now, so this might be redundant 
+                    # UNLESS content isn't in DOM until clicked (unlikely for XF2).
+                    # We'll skip massive clicking to speed things up, trusting the Soup 'Global Unwrap' logic.
+                    pass 
             except: pass
 
-            page.wait_for_timeout(5000) # Increased to 5s to allow JS to populate status
+            # Safety Buffer - minimal wait to allow any final JS (like status field) to settle
+            # Reduced from 5000 to 1500
+            page.wait_for_timeout(1500) 
+            
+            # 4. Capture Content
             html_content = page.content()
             browser.close()
 
@@ -920,5 +991,5 @@ def extract_game_data(game_thread_url, username=None, password=None, requests_se
             return parse_game_page_content(html_content, game_thread_url)
 
     except Exception as e:
-        logger_scraper.error(f"EXTRACT_GAME_DATA: Playwright fallback failed: {e}", exc_info=True)
+        logger_scraper.error(f"EXTRACT_GAME_DATA: Playwright session failed: {e}", exc_info=True)
         return None
