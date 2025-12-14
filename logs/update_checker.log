@@ -7160,3 +7160,33 @@ UnboundLocalError: local variable 'current_section_os' referenced before assignm
 2025-12-10 20:44:54,466 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
 2025-12-10 20:44:55,676 - INFO - AVNCodex - services - Recovered/Corrected status for A House in the Rift: 'Unknown' -> 'Ongoing' via RSS.
 2025-12-10 20:44:56,129 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete
+2025-12-10 21:13:37,721 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 21:13:37,723 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 21:13:37,838 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Shutting down scheduler...
+2025-12-10 21:13:37,839 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler shutdown complete.
+2025-12-10 21:13:40,048 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 21:13:40,055 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 21:13:40,057 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 21:13:40,058 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 21:13:42,082 - INFO - AVNCodex - database - Database initialized successfully at /data/f95_games.db
+2025-12-10 21:13:42,088 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Configuring scheduler with raw setting: 12
+2025-12-10 21:13:42,089 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Scheduler started.
+2025-12-10 21:13:42,090 - INFO - AVNCodex - scheduler - INFO_SCHEDULER: Schedule set to Every 12 Hours.
+2025-12-10 21:14:42,040 - INFO - AVNCodex - services - Checking update for -u4ia- using strategy: Query='-u4ia-', Creator='None'
+2025-12-10 21:14:42,641 - INFO - AVNCodex - services - Match found for -u4ia- with strategy Query='-u4ia-', Creator='None'
+2025-12-10 21:14:42,644 - INFO - AVNCodex - services - Sync-driven scraping for: -u4ia- (Force=True, MissingImg=False)
+2025-12-10 21:14:42,644 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Starting extraction for: https://f95zone.to/threads/158858
+2025-12-10 21:14:42,645 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Initiating Playwright session.
+2025-12-10 21:14:50,535 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to login page...
+2025-12-10 21:14:55,656 - INFO - AVNCodex - f95_web_scraper - Login Attempt: Initiated.
+2025-12-10 21:15:00,081 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Navigating to game thread: https://f95zone.to/threads/158858
+2025-12-10 21:15:03,230 - INFO - AVNCodex - f95_web_scraper - EXTRACT_GAME_DATA: Playwright fetch complete. Parsing content...
+2025-12-10 21:15:03,421 - INFO - AVNCodex - f95_web_scraper - DEBUG: Parsed HTML Title: Ren'Py - -u4ia- [Season 1] [DriftyGames] | F95zone | Adult Games | Comics | Mods | Cheats
+2025-12-10 21:15:03,421 - INFO - AVNCodex - f95_web_scraper - DEBUG: HTML Start: <!DOCTYPE html><html id="XF" lang="en-US" dir="LTR" style="font-size: 62.5%;" data-app="public" data-template="thread_view" data-container-key="node-2" data-content-key="thread-158858" data-logged-in=
+2025-12-10 21:15:03,425 - INFO - AVNCodex - f95_web_scraper - DEBUG: Dumped u4ia_dump.html
+2025-12-10 21:15:03,437 - WARNING - AVNCodex - f95_web_scraper - DEBUG: Found .js-threadStatusField. Raw content: ''
+2025-12-10 21:15:03,448 - INFO - AVNCodex - f95_web_scraper - DEBUG: Successfully extracted raw download HTML block (Robust Method).
+2025-12-10 21:15:03,460 - WARNING - AVNCodex - f95_web_scraper - Sanitizing unknown status 'Not found' to 'Unknown'
+2025-12-10 21:15:03,479 - INFO - AVNCodex - services - Status check: Scraper returned 'Unknown'. Verifying with RSS prefixes.
+2025-12-10 21:15:03,881 - INFO - AVNCodex - services - Recovered/Corrected status for -u4ia-: 'Unknown' -> 'Ongoing' via RSS.
+2025-12-10 21:15:04,492 - INFO - AVNCodex - services - Pushover notification sent to user_id 1: Game Sync Complete

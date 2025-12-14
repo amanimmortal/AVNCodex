@@ -21,10 +21,7 @@ def parse_game_page_content(html_content, game_thread_url):
 
     soup = BeautifulSoup(html_content, 'html.parser')
     
-    # DEBUG: Log title to diagnose page load issues
-    page_title = soup.title.string if soup.title else "No Title"
-    logger_scraper.info(f"DEBUG: Parsed HTML Title: {page_title}")
-    logger_scraper.info(f"DEBUG: HTML Start: {html_content[:200]}")
+
 
     # --- Initialize Data Dictionary ---
     data = {
@@ -56,23 +53,7 @@ def parse_game_page_content(html_content, game_thread_url):
         "image_url": None
     }
     
-    # Debug dump for U4IA
-    if "158858" in game_thread_url or "u4ia" in game_thread_url.lower():
-        try:
-            mode = 'wb'
-            content_to_write = html_content
-            if isinstance(html_content, str):
-                mode = 'w'
-                # Ensure utf-8 encoding if writing as text
-                with open('u4ia_dump.html', 'w', encoding='utf-8') as f:
-                    f.write(html_content)
-            else:
-                with open('u4ia_dump.html', 'wb') as f:
-                    f.write(html_content)
-                    
-            logger_scraper.info("DEBUG: Dumped u4ia_dump.html")
-        except Exception as e:
-            logger_scraper.error(f"DEBUG: Failed to dump html: {e}")
+
     raw_title_h1 = soup.find('h1', class_='p-title-value')
     if raw_title_h1:
         data['title_full_raw'] = raw_title_h1.get_text(strip=True)
@@ -293,15 +274,15 @@ def parse_game_page_content(html_content, game_thread_url):
             status_div = soup.select_one(".js-threadStatusField")
             if status_div:
                 raw_val = status_div.get_text(strip=True)
-                logger_scraper.warning(f"DEBUG: Found .js-threadStatusField. Raw content: '{raw_val}'")
+                logger_scraper.warning(f"Found .js-threadStatusField. Raw content: '{raw_val}'")
                 val = status_div.get_text(strip=True)
                 # Cleanup "Status: Abandoned" -> "Abandoned"
                 val = re.sub(r"^(?:Status)?\s*[:\-]?\s*", "", val, flags=re.IGNORECASE).strip()
                 if val and len(val) < 50:
                      data['status'] = val
-                     logger_scraper.warning(f"DEBUG: Extracted status '{val}' from js-threadStatusField")
+                     logger_scraper.warning(f"Extracted status '{val}' from js-threadStatusField")
             else:
-                logger_scraper.warning("DEBUG: .js-threadStatusField NOT found in parsed HTML.")
+                logger_scraper.warning(".js-threadStatusField NOT found in parsed HTML.")
 
         status_patterns = [r"(?:Status)\s*[:\-]?\s*([^\n]+)", r"<strong>(?:Status)\s*[:\-]?\s*</strong>\s*([^\n]+)"]
         if data['status'] == "Not found":
@@ -710,9 +691,9 @@ def parse_game_page_content(html_content, game_thread_url):
                      for img in soup_clean.find_all('img'): img.decompose()
 
                      data['download_links_raw_html'] = str(soup_clean)
-                     logger_scraper.info("DEBUG: Successfully extracted raw download HTML block (Robust Method).")
+                     logger_scraper.info("Successfully extracted raw download HTML block (Robust Method).")
             else:
-                 logger_scraper.info("DEBUG: 'DOWNLOAD' marker not found for raw block extraction.")
+                 logger_scraper.info("'DOWNLOAD' marker not found for raw block extraction.")
 
         except Exception as e:
             logger_scraper.error(f"Error extracting raw download html: {e}")

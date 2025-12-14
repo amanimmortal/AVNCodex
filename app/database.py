@@ -19,9 +19,9 @@ def initialize_database(db_path):
     if db_dir and not os.path.exists(db_dir): 
         try:
             os.makedirs(db_dir, exist_ok=True)
-            print(f"Database directory created: {db_dir}") 
+            logger.info(f"Database directory created: {db_dir}") 
         except OSError as e:
-            print(f"Critical error: Could not create database directory {db_dir}. Error: {e}")
+            logger.error(f"Critical error: Could not create database directory {db_dir}. Error: {e}")
             return
     
     conn = None
